@@ -2,6 +2,7 @@
 #include <dlfcn.h>
 #include "gl_wrappers.h"
 #include "shadow_state.h"
+#include "frame_capture.h"
 
 /* Declared in gl_shim.c */
 extern GlaShadowState gla_shadow;
@@ -245,7 +246,7 @@ void glGetIntegerv(GLenum pname, GLint* data) {
 
 void glXSwapBuffers(Display* dpy, GLXDrawable drawable) {
     gla_init();
-    // TODO(Task 7): gla_frame_on_swap(dpy, drawable) — frame capture + IPC
+    gla_frame_on_swap();   /* capture before swap */
     gla_shadow_new_frame(&gla_shadow);
     gla_real_gl.glXSwapBuffers(dpy, drawable);
 }
