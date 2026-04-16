@@ -2,13 +2,12 @@
 #include "src/core/normalize/normalized_types.h"
 #include "src/core/store/raw_frame.h"
 
-namespace gla::normalize {
+namespace gla {
 
 class Normalizer {
 public:
-    Normalizer() = default;
-    ~Normalizer() = default;
-    NormalizedDrawCall normalize(const gla::store::RawFrame &f);
+    // Convert a raw frame to normalized representation
+    NormalizedFrame normalize(const gla::store::RawFrame& raw) const;
 };
 
-} // namespace gla::normalize
+}  // namespace gla
