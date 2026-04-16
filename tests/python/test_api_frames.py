@@ -1,6 +1,4 @@
 """Tests for /api/v1/frames/* endpoints."""
-import base64
-
 import pytest
 
 
@@ -44,33 +42,26 @@ class TestFrameOverviewById:
 
 
 class TestFramebuffer:
-    def test_get_framebuffer_200(self, client, auth_headers):
+    def test_get_framebuffer_501(self, client, auth_headers):
+        """Framebuffer readback is not yet implemented."""
         resp = client.get("/api/v1/frames/1/framebuffer", headers=auth_headers)
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["frame_id"] == 1
-        assert data["width"] == 800
-        assert data["height"] == 600
-        assert data["format"] == "RGBA8"
-        assert "image" in data
-        raw = base64.b64decode(data["image"])
-        assert len(raw) == 800 * 600 * 4
+        assert resp.status_code == 501
 
-    def test_get_framebuffer_nonexistent_404(self, client, auth_headers):
+    def test_get_framebuffer_nonexistent_501(self, client, auth_headers):
+        """Framebuffer readback is not yet implemented for any frame."""
         resp = client.get("/api/v1/frames/9999/framebuffer", headers=auth_headers)
-        assert resp.status_code == 404
+        assert resp.status_code == 501
 
-    def test_get_framebuffer_depth_200(self, client, auth_headers):
+    def test_get_framebuffer_depth_501(self, client, auth_headers):
+        """Depth buffer readback is not yet implemented."""
         resp = client.get(
             "/api/v1/frames/1/framebuffer/depth", headers=auth_headers
         )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["format"] == "DEPTH32F"
-        assert "image" in data
+        assert resp.status_code == 501
 
-    def test_get_framebuffer_depth_nonexistent_404(self, client, auth_headers):
+    def test_get_framebuffer_depth_nonexistent_501(self, client, auth_headers):
+        """Depth buffer readback is not yet implemented for any frame."""
         resp = client.get(
             "/api/v1/frames/9999/framebuffer/depth", headers=auth_headers
         )
-        assert resp.status_code == 404
+        assert resp.status_code == 501

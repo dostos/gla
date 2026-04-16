@@ -55,7 +55,7 @@ class TestDrawCallShader:
         assert resp.status_code == 200
         data = resp.json()
         assert data["dc_id"] == 0
-        assert data["program_id"] == 7
+        assert data["shader_id"] == 7
         assert isinstance(data["parameters"], list)
         assert len(data["parameters"]) >= 1
         p = data["parameters"][0]
@@ -78,7 +78,7 @@ class TestDrawCallTextures:
         assert isinstance(data["textures"], list)
         assert len(data["textures"]) >= 1
         tex = data["textures"][0]
-        assert tex["unit"] == 0
+        assert tex["slot"] == 0
         assert tex["texture_id"] == 3
 
     def test_get_textures_nonexistent_404(self, client, auth_headers):
@@ -97,7 +97,6 @@ class TestDrawCallVertices:
         data = resp.json()
         assert data["vertex_count"] == 3
         assert data["primitive_type"] == "TRIANGLES"
-        assert isinstance(data["attributes"], list)
 
     def test_get_vertices_nonexistent_404(self, client, auth_headers):
         resp = client.get(

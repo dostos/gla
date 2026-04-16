@@ -29,8 +29,8 @@ def _make_overview(frame_id: int = 1) -> MagicMock:
     ov = MagicMock()
     ov.frame_id = frame_id
     ov.draw_call_count = 42
-    ov.framebuffer_width = 800
-    ov.framebuffer_height = 600
+    ov.fb_width = 800
+    ov.fb_height = 600
     ov.timestamp = 1234.5
     return ov
 
@@ -38,24 +38,36 @@ def _make_overview(frame_id: int = 1) -> MagicMock:
 def _make_drawcall(dc_id: int = 0, frame_id: int = 1) -> MagicMock:
     dc = MagicMock()
     dc.id = dc_id
-    dc.draw_call_index = dc_id
     dc.primitive_type = "TRIANGLES"
     dc.vertex_count = 3
     dc.instance_count = 1
     dc.index_count = 0
-    dc.base_vertex = 0
-    dc.program_id = 7
+    dc.shader_id = 7
     ps = MagicMock()
     ps.blend_enabled = False
-    ps.depth_test_enabled = True
-    ps.depth_write_enabled = True
-    ps.stencil_test_enabled = False
-    ps.cull_face_enabled = True
-    ps.cull_face_mode = "BACK"
-    ps.blend_src_rgb = "ONE"
-    ps.blend_dst_rgb = "ZERO"
+    ps.blend_src = "ONE"
+    ps.blend_dst = "ZERO"
+    ps.depth_test = True
+    ps.depth_write = True
     ps.depth_func = "LESS"
-    dc.pipeline_state = ps
+    ps.cull_enabled = True
+    ps.cull_mode = "BACK"
+    ps.front_face = "CCW"
+    dc.pipeline = ps
+    # Shader params attached directly to the draw call
+    param = MagicMock()
+    param.name = "uColor"
+    param.type = "vec4"
+    param.data = [1.0, 0.0, 0.0, 1.0]
+    dc.params = [param]
+    # Texture bindings attached directly to the draw call
+    tex = MagicMock()
+    tex.slot = 0
+    tex.texture_id = 3
+    tex.width = 512
+    tex.height = 512
+    tex.format = "RGBA8"
+    dc.textures = [tex]
     return dc
 
 
@@ -70,43 +82,6 @@ def _make_pixel_result() -> MagicMock:
     return pr
 
 
-def _make_shader() -> MagicMock:
-    shader = MagicMock()
-    shader.vertex_source = "void main(){}"
-    shader.fragment_source = "void main(){}"
-    param = MagicMock()
-    param.name = "uColor"
-    param.type = "vec4"
-    param.value = [1.0, 0.0, 0.0, 1.0]
-    shader.parameters = [param]
-    return shader
-
-
-def _make_texture() -> MagicMock:
-    tex = MagicMock()
-    tex.unit = 0
-    tex.texture_id = 3
-    tex.target = "TEXTURE_2D"
-    tex.width = 512
-    tex.height = 512
-    tex.internal_format = "RGBA8"
-    return tex
-
-
-def _make_vertices() -> MagicMock:
-    verts = MagicMock()
-    verts.vao_id = 1
-    attr = MagicMock()
-    attr.index = 0
-    attr.size = 3
-    attr.type = "FLOAT"
-    attr.normalized = False
-    attr.stride = 12
-    attr.offset = 0
-    verts.attributes = [attr]
-    return verts
-
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -117,42 +92,23 @@ def mock_query_engine() -> MagicMock:
     """QueryEngine mock with preset return values covering the happy path."""
     qe = MagicMock()
 
-    # Frame overview
-    qe.get_current_frame_overview.return_value = _make_overview(frame_id=1)
-    qe.get_frame_overview.side_effect = lambda fid: (
+    # Frame overview — routes call latest_frame_overview() and frame_overview()
+    qe.latest_frame_overview.return_value = _make_overview(frame_id=1)
+    qe.frame_overview.side_effect = lambda fid: (
         _make_overview(frame_id=fid) if fid == 1 else None
     )
 
-    # Framebuffer
-    fb = MagicMock()
-    fb.width = 800
-    fb.height = 600
-    fb.rgba_bytes = bytes(800 * 600 * 4)
-    qe.get_framebuffer.side_effect = lambda fid: fb if fid == 1 else None
-
-    depth_fb = MagicMock()
-    depth_fb.width = 800
-    depth_fb.height = 600
-    depth_fb.depth_bytes = bytes(800 * 600 * 4)  # float32 per pixel
-    qe.get_framebuffer_depth.side_effect = lambda fid: depth_fb if fid == 1 else None
-
-    # Draw calls
+    # Draw calls — routes call list_draw_calls() and get_draw_call()
     dc = _make_drawcall(dc_id=0)
-    qe.get_drawcalls.side_effect = lambda fid, limit=50, offset=0: (
-        [dc] if fid == 1 else None
+    qe.list_draw_calls.side_effect = lambda fid, limit=50, offset=0: (
+        [dc] if fid == 1 else []
     )
-    qe.get_drawcall_count.side_effect = lambda fid: 1 if fid == 1 else 0
-    qe.get_drawcall.side_effect = lambda fid, dcid: (
+    qe.get_draw_call.side_effect = lambda fid, dcid: (
         dc if (fid == 1 and dcid == 0) else None
     )
 
-    # Shader / textures / vertices
-    qe.get_shader.return_value = _make_shader()
-    qe.get_textures.return_value = [_make_texture()]
-    qe.get_vertices.return_value = _make_vertices()
-
-    # Pixel
-    qe.query_pixel.side_effect = lambda fid, x, y: (
+    # Pixel — routes call get_pixel()
+    qe.get_pixel.side_effect = lambda fid, x, y: (
         _make_pixel_result()
         if (fid == 1 and 0 <= x < 800 and 0 <= y < 600)
         else None
