@@ -508,8 +508,7 @@ Pixel-level queries ("which draw call produced the color at pixel (x,y)?") requi
 
 ## 5. Build System
 
-- CMake for C/C++ components (shims + core engine).
-- pybind11/nanobind integrated via CMake for Python bindings.
+- Bazel (bzlmod) for C/C++ components (shims + core engine) and pybind11 bindings.
 - npm/pnpm for TypeScript components (WebGL shim + Node.js bridge).
 - pip/uv for Python components (REST API + MCP server).
 

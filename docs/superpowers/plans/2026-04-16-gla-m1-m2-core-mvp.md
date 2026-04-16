@@ -6,7 +6,7 @@
 
 **Architecture:** Per-API shim (C, LD_PRELOAD) communicates with a C++ core engine via shared memory (bulk data) + Unix socket (control). The engine stores per-frame snapshots, normalizes raw GL calls into an API-agnostic representation, and serves queries. A Python layer (FastAPI via pybind11) exposes the REST API.
 
-**Tech Stack:** C (shim), C++17 (core engine), Python 3.11+ (REST API), CMake (build), FlatBuffers (serialization), pybind11 (bindings), FastAPI (HTTP), GLM (math), Google Test (C++ tests), pytest (Python tests)
+**Tech Stack:** C (shim), C++17 (core engine), Python 3.11+ (REST API), Bazel (build), FlatBuffers (serialization), pybind11 (bindings), FastAPI (HTTP), GLM (math), Google Test (C++ tests), pytest (Python tests)
 
 **Spec:** `docs/superpowers/specs/2026-04-16-gla-design.md`
 
@@ -18,14 +18,17 @@
 
 ```
 gla/
-  CMakeLists.txt                          # Top-level CMake
-  pyproject.toml                          # Python package config
+  MODULE.bazel                            # Bazel module (bzlmod) — declares deps
+  BUILD.bazel                             # Top-level build (may be empty)
+  .bazelrc                                # Default build flags (C++17, etc.)
+  pyproject.toml                          # Python package config (for pip install)
   schemas/
+    BUILD.bazel
     frame_capture.fbs                     # FlatBuffers schema for IPC metadata
   src/
     shims/
       gl/
-        CMakeLists.txt                    # Builds libgla_gl.so
+        BUILD.bazel                       # cc_shared_library for libgla_gl.so
         gl_shim.c                         # LD_PRELOAD entry: dlsym, function dispatch
         gl_wrappers.c                     # Intercepted GL function wrappers
         gl_wrappers.h
@@ -36,7 +39,7 @@ gla/
         ipc_client.c                      # Shm + socket client to engine
         ipc_client.h
     core/
-      CMakeLists.txt                      # Builds libgla_core.a + gla_engine binary
+      BUILD.bazel                         # cc_library for gla_core
       engine.cpp                          # Main engine process entry point
       engine.h
       ipc/
@@ -57,7 +60,7 @@ gla/
         query_engine.cpp                # Filtering, pixel lookup
         query_engine.h
     bindings/
-      CMakeLists.txt                    # Builds _gla_core Python module
+      BUILD.bazel                       # pybind_extension for _gla_core.so
       py_gla.cpp                        # pybind11 bindings
     python/
       gla/
@@ -73,24 +76,25 @@ gla/
           routes_control.py             # /api/v1/control/* endpoints
   tests/
     core/
+      BUILD.bazel                       # cc_test targets
       test_shm_ring_buffer.cpp          # Ring buffer unit tests
       test_control_socket.cpp           # Socket + handshake tests
       test_frame_store.cpp              # Frame storage tests
       test_normalizer.cpp               # GL normalization tests
       test_query_engine.cpp             # Query engine tests
-      CMakeLists.txt
     shims/
+      BUILD.bazel
       test_shadow_state.c               # Shadow state unit tests
-      test_gl_shim_integration.c        # Integration: preload against mini GL app
-      mini_gl_app.c                     # Minimal GL app for testing
-      CMakeLists.txt
     python/
+      BUILD.bazel                       # py_test targets
       test_api_frames.py                # REST API frame endpoint tests
       test_api_drawcalls.py             # REST API draw call endpoint tests
       test_api_pixel.py                 # REST API pixel endpoint tests
       test_api_control.py               # REST API control endpoint tests
       conftest.py                       # Shared fixtures (mock engine, test client)
     integration/
+      BUILD.bazel
+      mini_gl_app.c                     # Minimal GL app for testing
       test_end_to_end.py                # Full pipeline: GL app → shim → engine → REST
 ```
 
@@ -99,140 +103,214 @@ gla/
 ## Task 1: Project Scaffolding + Build System
 
 **Files:**
-- Create: `CMakeLists.txt`
-- Create: `src/shims/gl/CMakeLists.txt`
-- Create: `src/core/CMakeLists.txt`
-- Create: `src/bindings/CMakeLists.txt`
-- Create: `tests/core/CMakeLists.txt`
-- Create: `tests/shims/CMakeLists.txt`
+- Create: `MODULE.bazel`
+- Create: `.bazelrc`
+- Create: `BUILD.bazel`
+- Create: `src/shims/gl/BUILD.bazel`
+- Create: `src/core/BUILD.bazel`
+- Create: `src/bindings/BUILD.bazel`
+- Create: `schemas/BUILD.bazel`
+- Create: `tests/core/BUILD.bazel`
+- Create: `tests/shims/BUILD.bazel`
 - Create: `pyproject.toml`
 - Create: `src/python/gla/__init__.py`
 
-- [ ] **Step 1: Create top-level CMakeLists.txt**
+- [ ] **Step 1: Create MODULE.bazel**
 
-```cmake
-cmake_minimum_required(VERSION 3.20)
-project(gla VERSION 0.1.0 LANGUAGES C CXX)
+```starlark
+module(name = "gla", version = "0.1.0")
 
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+# C/C++ dependencies
+bazel_dep(name = "flatbuffers", version = "24.3.25")
+bazel_dep(name = "glm", version = "1.0.1")
+bazel_dep(name = "googletest", version = "1.15.2")
+bazel_dep(name = "pybind11_bazel", version = "2.13.6")
+bazel_dep(name = "rules_python", version = "1.0.0")
+bazel_dep(name = "rules_cc", version = "0.1.0")
+bazel_dep(name = "rules_flatbuffers", version = "24.3.25")
 
-# Dependencies
-find_package(Threads REQUIRED)
-
-# FlatBuffers
-include(FetchContent)
-FetchContent_Declare(flatbuffers
-  GIT_REPOSITORY https://github.com/google/flatbuffers.git
-  GIT_TAG v24.3.25
-)
-FetchContent_MakeAvailable(flatbuffers)
-
-# GLM (header-only math)
-FetchContent_Declare(glm
-  GIT_REPOSITORY https://github.com/g-truc/glm.git
-  GIT_TAG 1.0.1
-)
-FetchContent_MakeAvailable(glm)
-
-# Google Test
-FetchContent_Declare(googletest
-  GIT_REPOSITORY https://github.com/google/googletest.git
-  GIT_TAG v1.15.2
-)
-FetchContent_MakeAvailable(googletest)
-
-# pybind11
-FetchContent_Declare(pybind11
-  GIT_REPOSITORY https://github.com/pybind/pybind11.git
-  GIT_TAG v2.13.6
-)
-FetchContent_MakeAvailable(pybind11)
-
-add_subdirectory(src/shims/gl)
-add_subdirectory(src/core)
-add_subdirectory(src/bindings)
-
-enable_testing()
-add_subdirectory(tests/core)
-add_subdirectory(tests/shims)
+# Python toolchain
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(python_version = "3.11")
 ```
 
-- [ ] **Step 2: Create shim CMakeLists.txt**
+- [ ] **Step 2: Create .bazelrc**
 
-```cmake
-# src/shims/gl/CMakeLists.txt
-add_library(gla_gl SHARED
-  gl_shim.c
-  gl_wrappers.c
-  shadow_state.c
-  frame_capture.c
-  ipc_client.c
-)
-target_link_libraries(gla_gl PRIVATE dl rt pthread)
-target_include_directories(gla_gl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-set_target_properties(gla_gl PROPERTIES OUTPUT_NAME "gla_gl")
+```
+# C/C++ settings
+build --cxxopt=-std=c++17
+build --copt=-std=c11
+build --copt=-Wall
+build --copt=-Wextra
+build --copt=-fPIC
+
+# Test output
+test --test_output=errors
 ```
 
-- [ ] **Step 3: Create core CMakeLists.txt**
+- [ ] **Step 3: Create src/shims/gl/BUILD.bazel**
 
-```cmake
-# src/core/CMakeLists.txt
-add_library(gla_core STATIC
-  ipc/shm_ring_buffer.cpp
-  ipc/control_socket.cpp
-  store/frame_store.cpp
-  normalize/normalizer.cpp
-  query/query_engine.cpp
-)
-target_include_directories(gla_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(gla_core PUBLIC
-  flatbuffers
-  glm::glm
-  Threads::Threads
-  rt
+```starlark
+# Shadow state as a separate library (testable without LD_PRELOAD side effects)
+cc_library(
+    name = "shadow_state",
+    srcs = ["shadow_state.c"],
+    hdrs = ["shadow_state.h"],
+    visibility = ["//tests/shims:__pkg__"],
 )
 
-add_executable(gla_engine engine.cpp)
-target_link_libraries(gla_engine PRIVATE gla_core)
+# The full LD_PRELOAD shared library
+cc_shared_library(
+    name = "gla_gl",
+    deps = [":gla_gl_impl"],
+)
+
+cc_library(
+    name = "gla_gl_impl",
+    srcs = [
+        "gl_shim.c",
+        "gl_wrappers.c",
+        "frame_capture.c",
+        "ipc_client.c",
+    ],
+    hdrs = [
+        "gl_wrappers.h",
+        "frame_capture.h",
+        "ipc_client.h",
+    ],
+    deps = [":shadow_state"],
+    linkopts = ["-ldl", "-lrt", "-lpthread"],
+)
 ```
 
-- [ ] **Step 4: Create test CMakeLists files**
+- [ ] **Step 4: Create src/core/BUILD.bazel**
 
-```cmake
-# tests/core/CMakeLists.txt
-add_executable(gla_core_tests
-  test_shm_ring_buffer.cpp
-  test_frame_store.cpp
-  test_normalizer.cpp
-  test_query_engine.cpp
-  test_control_socket.cpp
+```starlark
+cc_library(
+    name = "gla_core",
+    srcs = [
+        "ipc/shm_ring_buffer.cpp",
+        "ipc/control_socket.cpp",
+        "store/frame_store.cpp",
+        "normalize/normalizer.cpp",
+        "query/query_engine.cpp",
+    ],
+    hdrs = [
+        "engine.h",
+        "ipc/shm_ring_buffer.h",
+        "ipc/control_socket.h",
+        "ipc/protocol.h",
+        "store/frame_store.h",
+        "store/raw_frame.h",
+        "normalize/normalizer.h",
+        "normalize/normalized_types.h",
+        "query/query_engine.h",
+    ],
+    deps = [
+        "//schemas:frame_capture_fbs",
+        "@glm",
+    ],
+    linkopts = ["-lrt", "-lpthread"],
+    visibility = [
+        "//src/bindings:__pkg__",
+        "//tests:__subpackages__",
+    ],
 )
-target_link_libraries(gla_core_tests PRIVATE gla_core GTest::gtest_main)
-include(GoogleTest)
-gtest_discover_tests(gla_core_tests)
+
+cc_binary(
+    name = "gla_engine",
+    srcs = ["engine.cpp"],
+    deps = [":gla_core"],
+)
 ```
 
-```cmake
-# tests/shims/CMakeLists.txt
-# Compile shadow_state separately for unit testing (avoids LD_PRELOAD
-# constructor firing and IPC connection attempts)
-add_executable(gla_shim_tests
-  test_shadow_state.c
-  ${CMAKE_SOURCE_DIR}/src/shims/gl/shadow_state.c
+- [ ] **Step 5: Create schemas/BUILD.bazel**
+
+```starlark
+load("@rules_flatbuffers//flatbuffers:flatbuffers.bzl", "flatbuffer_cc_library")
+
+flatbuffer_cc_library(
+    name = "frame_capture_fbs",
+    srcs = ["frame_capture.fbs"],
+    visibility = ["//visibility:public"],
 )
-target_include_directories(gla_shim_tests PRIVATE ${CMAKE_SOURCE_DIR}/src/shims/gl)
 ```
 
-- [ ] **Step 5: Create pyproject.toml**
+- [ ] **Step 6: Create tests/core/BUILD.bazel**
+
+```starlark
+cc_test(
+    name = "test_shm_ring_buffer",
+    srcs = ["test_shm_ring_buffer.cpp"],
+    deps = [
+        "//src/core:gla_core",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "test_control_socket",
+    srcs = ["test_control_socket.cpp"],
+    deps = [
+        "//src/core:gla_core",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "test_frame_store",
+    srcs = ["test_frame_store.cpp"],
+    deps = [
+        "//src/core:gla_core",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "test_normalizer",
+    srcs = ["test_normalizer.cpp"],
+    deps = [
+        "//src/core:gla_core",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "test_query_engine",
+    srcs = ["test_query_engine.cpp"],
+    deps = [
+        "//src/core:gla_core",
+        "@googletest//:gtest_main",
+    ],
+)
+```
+
+- [ ] **Step 7: Create tests/shims/BUILD.bazel**
+
+```starlark
+cc_test(
+    name = "test_shadow_state",
+    srcs = ["test_shadow_state.c"],
+    deps = ["//src/shims/gl:shadow_state"],
+)
+```
+
+- [ ] **Step 8: Create src/bindings/BUILD.bazel**
+
+```starlark
+load("@pybind11_bazel//:build_defs.bzl", "pybind_extension")
+
+pybind_extension(
+    name = "_gla_core",
+    srcs = ["py_gla.cpp"],
+    deps = ["//src/core:gla_core"],
+    visibility = ["//visibility:public"],
+)
+```
+
+- [ ] **Step 9: Create pyproject.toml**
 
 ```toml
-[build-system]
-requires = ["scikit-build-core>=0.10", "pybind11>=2.13"]
-build-backend = "scikit_build_core.build"
-
 [project]
 name = "gla"
 version = "0.1.0"
@@ -249,10 +327,13 @@ dev = [
 ]
 ```
 
-- [ ] **Step 6: Create .gitignore**
+- [ ] **Step 10: Create .gitignore**
 
 ```
-build/
+bazel-bin/
+bazel-out/
+bazel-gla/
+bazel-testlogs/
 __pycache__/
 *.egg-info/
 *.so
@@ -260,7 +341,7 @@ __pycache__/
 .cache/
 ```
 
-- [ ] **Step 7: Create placeholder source files and __init__.py**
+- [ ] **Step 11: Create placeholder source files and __init__.py**
 
 Create empty/stub files for all source files so the build system can be validated:
 - `src/shims/gl/gl_shim.c` (empty)
@@ -281,16 +362,16 @@ Create empty/stub files for all source files so the build system can be validate
 - `src/python/gla/__init__.py` (empty)
 - Test stubs for all test files
 
-- [ ] **Step 8: Verify build system compiles**
+- [ ] **Step 12: Verify build system compiles**
 
-Run: `mkdir -p build && cd build && cmake .. && make -j$(nproc)`
-Expected: Builds successfully with stub files (may have linker warnings for empty objects, that's fine)
+Run: `bazel build //...`
+Expected: Builds successfully with stub files (may have warnings for empty objects, that's fine)
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 13: Commit**
 
 ```bash
 git add -A
-git commit -m "feat: project scaffolding with CMake, FlatBuffers, pybind11, pytest"
+git commit -m "feat: project scaffolding with Bazel, FlatBuffers, pybind11, pytest"
 ```
 
 ---
@@ -299,7 +380,7 @@ git commit -m "feat: project scaffolding with CMake, FlatBuffers, pybind11, pyte
 
 **Files:**
 - Create: `schemas/frame_capture.fbs`
-- Modify: `src/core/CMakeLists.txt` (add flatc codegen)
+- Already handled: `schemas/BUILD.bazel` (flatbuffer_cc_library rule from Task 1)
 
 - [ ] **Step 1: Write FlatBuffers schema**
 
@@ -402,36 +483,17 @@ table ControlCommand {
 root_type FrameCapture;
 ```
 
-- [ ] **Step 2: Add flatc code generation to CMake**
+- [ ] **Step 2: Verify schema compiles via Bazel**
 
-Add to `src/core/CMakeLists.txt`:
-```cmake
-# Generate FlatBuffers headers
-set(FBS_SCHEMA ${CMAKE_SOURCE_DIR}/schemas/frame_capture.fbs)
-set(FBS_GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
-file(MAKE_DIRECTORY ${FBS_GEN_DIR})
+The `flatbuffer_cc_library` rule in `schemas/BUILD.bazel` (created in Task 1) handles codegen automatically. The `//src/core:gla_core` target depends on `//schemas:frame_capture_fbs`.
 
-add_custom_command(
-  OUTPUT ${FBS_GEN_DIR}/frame_capture_generated.h
-  COMMAND flatc --cpp -o ${FBS_GEN_DIR} ${FBS_SCHEMA}
-  DEPENDS ${FBS_SCHEMA}
-  COMMENT "Generating FlatBuffers C++ headers"
-)
-add_custom_target(gla_fbs_gen DEPENDS ${FBS_GEN_DIR}/frame_capture_generated.h)
+Run: `bazel build //schemas:frame_capture_fbs`
+Expected: Generates `frame_capture_generated.h` in bazel-bin
 
-add_dependencies(gla_core gla_fbs_gen)
-target_include_directories(gla_core PUBLIC ${FBS_GEN_DIR})
-```
-
-- [ ] **Step 3: Verify schema compiles**
-
-Run: `cd build && cmake .. && make gla_fbs_gen`
-Expected: `frame_capture_generated.h` generated in build dir
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add schemas/frame_capture.fbs src/core/CMakeLists.txt
+git add schemas/frame_capture.fbs
 git commit -m "feat: add FlatBuffers schema for frame capture IPC"
 ```
 
@@ -506,7 +568,7 @@ TEST(ShmRingBuffer, FullRingReturnsNull) {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd build && cmake .. && make gla_core_tests && ./tests/core/gla_core_tests --gtest_filter="ShmRingBuffer*"`
+Run: `bazel test //tests/core:test_shm_ring_buffer`
 Expected: FAIL (functions not defined)
 
 - [ ] **Step 3: Implement ShmRingBuffer**
@@ -576,7 +638,7 @@ Implement in `shm_ring_buffer.cpp`: shm_open/ftruncate/mmap for create, shm_open
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd build && make gla_core_tests && ./tests/core/gla_core_tests --gtest_filter="ShmRingBuffer*"`
+Run: `bazel test //tests/core:test_shm_ring_buffer`
 Expected: All PASS
 
 - [ ] **Step 5: Commit**
@@ -771,7 +833,7 @@ void glXSwapBuffers(Display *dpy, GLXDrawable drawable) {
 
 - [ ] **Step 3: Verify shim compiles as shared library**
 
-Run: `cd build && make gla_gl`
+Run: `bazel build //src/shims/gl:gla_gl`
 Expected: `libgla_gl.so` produced
 
 - [ ] **Step 4: Commit**
@@ -841,7 +903,7 @@ void gla_frame_on_swap(void) {
 
 - [ ] **Step 3: Verify shim builds with IPC**
 
-Run: `cd build && make gla_gl`
+Run: `bazel build //src/shims/gl:gla_gl`
 Expected: Builds successfully
 
 - [ ] **Step 4: Commit**
@@ -1163,7 +1225,7 @@ target_link_libraries(_gla_core PRIVATE gla_core)
 
 - [ ] **Step 3: Verify Python module builds and imports**
 
-Run: `cd build && make _gla_core && python -c "import _gla_core; print('OK')"`
+Run: `bazel build //src/bindings:_gla_core && python -c "import sys; sys.path.insert(0, 'bazel-bin/src/bindings'); import _gla_core; print('OK')"`
 Expected: "OK"
 
 - [ ] **Step 4: Commit**
@@ -1410,7 +1472,16 @@ This is the test fixture for integration testing. It must be simple enough that 
 
 - [ ] **Step 2: Verify it compiles and runs**
 
-Run: `gcc tests/integration/mini_gl_app.c -o mini_gl_app -lGL -lX11 && ./mini_gl_app`
+Run: `bazel build //tests/integration:mini_gl_app && bazel-bin/tests/integration/mini_gl_app`
+
+Note: `tests/integration/BUILD.bazel` needs:
+```starlark
+cc_binary(
+    name = "mini_gl_app",
+    srcs = ["mini_gl_app.c"],
+    linkopts = ["-lGL", "-lX11"],
+)
+```
 Expected: Window flashes briefly, exits cleanly
 
 - [ ] **Step 3: Commit**
@@ -1439,8 +1510,8 @@ Run with: pytest tests/integration/ -v --timeout=30
 """
 import subprocess, time, os, signal, requests, sys
 
-SHIM_LIB = "build/src/shims/gl/libgla_gl.so"
-GL_APP = "build/tests/integration/mini_gl_app"
+SHIM_LIB = "bazel-bin/src/shims/gl/libgla_gl.so"
+GL_APP = "bazel-bin/tests/integration/mini_gl_app"
 SOCKET_PATH = "/tmp/gla_test.sock"
 SHM_NAME = "/gla_test_e2e"
 API_PORT = 18090
