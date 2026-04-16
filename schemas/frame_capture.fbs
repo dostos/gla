@@ -1,8 +1,96 @@
-// GLA frame capture schema — stub, will be filled in Task 2
-namespace gla;
+// GLA frame capture schema — IPC metadata between GL shim and core engine.
+namespace gla.schema;
+
+enum ApiType : byte { OpenGL = 0, Vulkan = 1, WebGL = 2 }
+enum PrimitiveType : byte { Triangles = 0, Lines = 1, Points = 2, TriangleStrip = 3, TriangleFan = 4, LineStrip = 5 }
+enum ParamType : byte { Float = 0, Vec2 = 1, Vec3 = 2, Vec4 = 3, Mat3 = 4, Mat4 = 5, Int = 6, Sampler2D = 7 }
+
+table ShaderParam {
+  name: string;
+  param_type: ParamType;
+  data: [ubyte];
+}
+
+table TextureBinding {
+  slot: uint32;
+  texture_id: uint32;
+  width: uint32;
+  height: uint32;
+  format: uint32;
+}
+
+table PipelineState {
+  viewport_x: int32;
+  viewport_y: int32;
+  viewport_w: uint32;
+  viewport_h: uint32;
+  scissor_enabled: bool;
+  scissor_x: int32;
+  scissor_y: int32;
+  scissor_w: uint32;
+  scissor_h: uint32;
+  depth_test: bool;
+  depth_write: bool;
+  depth_func: uint32;
+  blend_enabled: bool;
+  blend_src: uint32;
+  blend_dst: uint32;
+  cull_enabled: bool;
+  cull_mode: uint32;
+  front_face: uint32;
+}
+
+table BulkDataRef {
+  shm_offset: uint64;
+  size: uint64;
+}
+
+table VertexAttribute {
+  location: uint32;
+  format: uint32;
+  components: uint32;
+  stride: uint32;
+  offset: uint32;
+}
+
+table DrawCallCapture {
+  id: uint32;
+  primitive_type: PrimitiveType;
+  vertex_count: uint32;
+  index_count: uint32;
+  instance_count: uint32;
+  shader_program_id: uint32;
+  params: [ShaderParam];
+  textures: [TextureBinding];
+  pipeline: PipelineState;
+  vertex_data: BulkDataRef;
+  index_data: BulkDataRef;
+  attributes: [VertexAttribute];
+}
 
 table FrameCapture {
   frame_id: uint64;
+  timestamp: double;
+  api: ApiType;
+  draw_calls: [DrawCallCapture];
+  framebuffer_color: BulkDataRef;
+  framebuffer_depth: BulkDataRef;
+  framebuffer_stencil: BulkDataRef;
+  framebuffer_width: uint32;
+  framebuffer_height: uint32;
+}
+
+table Handshake {
+  protocol_version: uint32;
+  schema_hash: uint64;
+  api_type: ApiType;
+  process_id: uint32;
+}
+
+table ControlCommand {
+  pause: bool;
+  resume: bool;
+  step_frames: uint32;
 }
 
 root_type FrameCapture;

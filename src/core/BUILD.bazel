@@ -54,6 +54,7 @@ cc_library(
         ":normalize",
         ":query",
         ":store",
+        "//schemas:frame_capture_fbs",
     ],
     visibility = ["//visibility:public"],
 )

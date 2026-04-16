@@ -9,7 +9,7 @@ def _non_module_deps_impl(mctx):
             "https://github.com/google/flatbuffers/archive/refs/tags/v25.2.10.tar.gz",
         ],
         strip_prefix = "flatbuffers-25.2.10",
-        sha256 = "a193b5d4e811b5a857d4a61b27cb8c04bdc0c07c39f94a79b7b7c70e2c9aba94",
+        sha256 = "b9c2df49707c57a48fc0923d52b8c73beb72d675f9d44b2211e4569be40a7421",
     )
     return mctx.extension_metadata(reproducible = True)
 
