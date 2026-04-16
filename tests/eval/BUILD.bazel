@@ -1,0 +1,25 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+[cc_binary(
+    name = name,
+    srcs = [name + ".c"],
+    linkopts = ["-lGL", "-lX11", "-lm"],
+) for name in [
+    "e1_state_leak",
+    "e2_nan_propagation",
+    "e3_index_buffer_obo",
+    "e4_double_negation_cull",
+    "e5_uniform_collision",
+]]
+
+[cc_binary(
+    name = name,
+    srcs = [name + ".c"],
+    linkopts = ["-lGL", "-lX11", "-lm"],
+) for name in [
+    "e6_depth_precision",
+    "e7_shader_include_order",
+    "e8_race_texture_upload",
+    "e9_scissor_not_reset",
+    "e10_compensating_vp",
+]]
