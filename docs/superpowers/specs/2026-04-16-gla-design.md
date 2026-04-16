@@ -684,28 +684,130 @@ With GLA:
 | C: Regression/QA | 5,000-10,000 | 500-2,000 | 5-10x |
 | D: Complex 3D tasks | 20,000-100,000 | 2,000-10,000 | 10-50x |
 
-### 9.4 Evaluation Test Suite
+### 9.4 Adversarial Scenarios (Category E)
+
+These scenarios are intentionally designed to be **hard to debug from code alone**. The bugs are subtle, misleading, or involve interactions that require runtime observation to untangle. The code looks plausible — an LLM reading it would likely either miss the bug entirely or chase the wrong hypothesis.
+
+#### E1: State Leak Between Draw Calls
+- **Setup**: Object B renders with Object A's texture. Cause: `glBindTexture` is called for object A but not re-bound before object B's draw call. The code for object B *looks* correct in isolation — it sets up its shader, its vertex buffer, its uniforms — but never re-binds its texture because it assumes the "default" binding.
+- **Why it's hard**: The bug is in the *absence* of a call, not a wrong call. The code for object B looks complete. An LLM reading B's rendering code sees nothing wrong. The bug only appears when you understand the *ordering* of A then B and that GL state persists.
+- **With GLA**: `inspect_drawcall(B, include=["textures"])` → shows A's texture is bound. Immediate diagnosis.
+- **Difficulty rating**: High (requires understanding implicit state machine semantics across draw calls).
+
+#### E2: NaN Propagation Through Transforms
+- **Setup**: One object's normal matrix is computed as `transpose(inverse(modelMatrix))`. The model matrix has a zero-scale axis (flatten to 2D for a shadow pass). `inverse()` produces Inf, `transpose()` of Inf stays Inf, then the shader normalizes a normal vector with Inf components → NaN. The NaN propagates through lighting → object renders as black.
+- **Why it's hard**: The code `transpose(inverse(model))` is the *textbook-correct* way to compute normal matrices. The zero-scale axis is set 200 lines earlier in a different function. An LLM would have to trace the value through multiple function calls and recognize that a zero scale makes the matrix singular.
+- **With GLA**: `inspect_drawcall(dc_id, include=["shader"])` → normal matrix parameter contains Inf/NaN values. Immediate root cause.
+- **Difficulty rating**: Very high (requires numerical reasoning across distant code).
+
+#### E3: Off-By-One Index Buffer Corruption
+- **Setup**: A mesh renders with subtle triangle artifacts (some faces twisted or missing). Cause: index buffer upload uses `sizeof(indices)` instead of `indices.size() * sizeof(uint16_t)` — on some compilers/platforms this gives the size of the vector object (24 bytes) instead of the data. The first few triangles render fine (coincidence), but later triangles read garbage indices.
+- **Why it's hard**: The first few triangles look correct, so a quick visual check might not catch it. The `sizeof` vs `.size() * sizeof()` pattern is a classic C++ trap that looks correct at a glance. The mesh partially renders, which suggests the setup is "mostly right."
+- **With GLA**: `inspect_drawcall(dc_id, include=["vertices"])` → index buffer shows data truncated after N bytes. Vertex count vs index count mismatch. Or `query_pixel` at a corrupted triangle → trace to the draw call → see that index values exceed vertex count.
+- **Difficulty rating**: High (subtle C++ trap, partial success masks the bug).
+
+#### E4: Double-Negation Culling Bug
+- **Setup**: An object renders its interior instead of its exterior. Cause: the model matrix has a negative scale (mirror transform) which flips winding order, AND the code sets `glFrontFace(GL_CW)` when it should be `GL_CCW` (or vice versa). The two errors partially cancel — some faces appear correct, others don't. The code has a comment: `// GL_CW because we're using a right-handed coordinate system` which misdirects.
+- **Why it's hard**: Two compensating errors. Fixing either one alone makes things *worse* (now nothing renders, or everything is inverted). The misleading comment in the code would lead an LLM to trust the `GL_CW` choice. An LLM must reason about the interaction of negative scale + winding order + front face convention simultaneously.
+- **With GLA**: `inspect_drawcall(dc_id, include=["pipeline", "shader"])` → see `cull_mode`, `front_face`, and the model matrix with negative determinant. The combination makes the bug obvious.
+- **Difficulty rating**: Very high (compensating errors, misleading comments).
+
+#### E5: Uniform Location Collision
+- **Setup**: Two different shader programs use `glGetUniformLocation` and the results are cached in an array indexed by a material enum. After a refactor, material enum values were reordered but the uniform cache wasn't cleared. Now material A's uniforms are uploaded to material B's shader.
+- **Why it's hard**: The uniform upload code looks correct — it uses the cached location, which was valid before the refactor. The refactored enum file is in a different directory. The bug only manifests for specific material combinations that happen to have colliding enum values.
+- **With GLA**: `inspect_drawcall(dc_id, include=["shader"])` → uniform values don't match what the code *thinks* it's setting. Compare the shader parameter values across draw calls with different materials → see that two materials have swapped uniforms.
+- **Difficulty rating**: Very high (requires understanding stale cache + enum reorder interaction).
+
+#### E6: Depth Buffer Precision Trap
+- **Setup**: A large outdoor scene with near=0.001, far=100000. Distant objects have severe z-fighting. The projection matrix code uses the "standard" perspective formula, which is technically correct but concentrates depth precision near the near plane.
+- **Why it's hard**: The projection matrix code is textbook-correct. The near/far values are set in a config file loaded at runtime. An LLM would need to (a) find the config values, (b) compute the depth buffer precision distribution, (c) realize that the ratio far/near = 10^8 leaves essentially zero precision beyond ~100 units.
+- **With GLA**: `query_scene(camera)` → near=0.001, far=100000. `query_pixel(x,y)` at a z-fighting location → depth values of two objects differ by < depth buffer epsilon. The numerical evidence makes the diagnosis trivial.
+- **Difficulty rating**: High (requires numerical reasoning about depth buffer precision).
+
+#### E7: Shader Include Order Bug
+- **Setup**: A shader uses `#include` directives (via a custom preprocessor). Two included files both define a helper function `saturate()` but with different implementations (one clamps to [0,1], the other returns `max(0, x)`). Due to include order, the wrong `saturate()` is used in the lighting calculation, causing subtle over-brightening only for HDR values > 1.
+- **Why it's hard**: The shader code itself calls `saturate()` which seems straightforward. The duplicate definition is in two different include files. The visual difference is subtle (over-bright highlights). An LLM would need to resolve the include chain and notice the shadowed definition.
+- **With GLA**: `query_pixel(x,y)` at a highlight → color channel > 1.0 (should be clamped). `inspect_drawcall(include=["shader"])` → see the actual shader source after preprocessing. Compare pixel values in highlight vs. non-highlight regions.
+- **Difficulty rating**: Medium-high (requires include resolution, subtle visual artifact).
+
+#### E8: Race Condition in Multi-Threaded Resource Upload
+- **Setup**: Textures are loaded asynchronously in a worker thread and uploaded to GL in the main thread. A missing mutex allows the render loop to use a texture that's only partially uploaded (some mip levels missing or buffer partially filled). The result: objects intermittently render with corrupted or black textures.
+- **Why it's hard**: The bug is non-deterministic. The code structure (async load + main thread upload) is a common pattern. The mutex is missing from one of several upload paths — the others are correctly synchronized. Reading the code, each path looks similar, and the LLM might assume they're all correct.
+- **With GLA**: `compare_frames(N, N+1)` → texture data changes between frames for the same object (should be static). `inspect_drawcall(include=["textures"])` → texture shows partial data or wrong dimensions in some frames. The non-deterministic nature becomes visible as frame-to-frame differences.
+- **Difficulty rating**: Very high (non-deterministic, requires understanding threading + GL resource lifecycle).
+
+#### E9: Scissor Rect Not Reset
+- **Setup**: A UI overlay pass sets a scissor rect for clipping. The 3D scene pass afterward doesn't disable scissor test. Result: 3D objects outside the UI rect's bounds are clipped. The scene looks correct in the center of the screen but objects near the edges are cut off.
+- **Why it's hard**: The 3D rendering code is entirely correct on its own. The bug is a missing `glDisable(GL_SCISSOR_TEST)` between the UI pass and the 3D pass. The UI code is in a different module. The visual symptom (objects clipped at edges) might be mistaken for a frustum culling bug.
+- **With GLA**: `inspect_drawcall(dc_id, include=["pipeline"])` for a clipped 3D object → shows scissor rect is enabled and set to the UI region. Immediate diagnosis: scissor state leaked from UI pass.
+- **Difficulty rating**: Medium-high (cross-module state leak, misleading symptom).
+
+#### E10: Compensating Bugs in View/Projection Setup
+- **Setup**: The view matrix is constructed with the wrong handedness (left-handed instead of right-handed), AND the projection matrix uses the wrong NDC range ([-1,1] instead of [0,1] or vice versa). For simple scenes viewed from certain angles, these errors compensate and the output looks correct. But when the camera rotates past a certain angle, objects mirror or clip unexpectedly.
+- **Why it's hard**: The scene looks correct for the default camera position (which is how it was tested). Both the view and projection code individually look wrong to an expert, but together they produce correct-looking output for the common case. An LLM might even "fix" one and make the problem worse.
+- **With GLA**: `query_scene(camera)` → camera forward/right vectors are mirrored. `inspect_drawcall(include=["shader"])` → compare raw view/projection matrices against expected values for the given camera position. The numerical values reveal both errors.
+- **Difficulty rating**: Extremely high (compensating bugs, angle-dependent symptoms).
+
+### 9.5 Adversarial Design Principles
+
+The adversarial scenarios above are constructed using these principles that make bugs hard for LLMs to diagnose from code alone:
+
+| Principle | Description | Examples |
+|-----------|-------------|----------|
+| **Absent code** | The bug is a missing call, not a wrong call | E1, E9 |
+| **Distant cause** | Root cause is far from the symptom in code distance | E2, E5, E6 |
+| **Compensating errors** | Two bugs partially cancel, fixing one makes things worse | E4, E10 |
+| **Stale state** | Cached/global state from a previous operation corrupts a later one | E1, E5, E9 |
+| **Subtle numerics** | Requires floating-point reasoning (Inf, NaN, precision) | E2, E6 |
+| **Looks correct** | Code follows textbook patterns but preconditions are violated | E2, E3, E6 |
+| **Non-deterministic** | Bug depends on timing/ordering, not present in every frame | E8 |
+| **Misleading comments** | Code comments direct the reader toward wrong conclusions | E4 |
+| **Partial success** | Output is mostly correct, making the bug easy to overlook | E3, E7, E10 |
+
+**Key insight for evaluation**: These bugs are specifically designed so that **code inspection alone scales poorly** (the LLM must read and correlate code across multiple files, reason about implicit state, and simulate numerical computation) while **runtime state inspection via GLA scales well** (1-3 targeted queries expose the root cause directly).
+
+### 9.6 Evaluation Test Suite
 
 To validate these claims, GLA should ship with a test suite of intentionally broken 3D scenes:
 
 ```
 tests/eval/
+  # Category A: Visual correctness
   a1_missing_object/       # object translated off-screen
   a2_wrong_color/          # wrong texture bound
   a3_z_fighting/           # overlapping coplanar surfaces
   a4_wrong_transform/      # matrix multiplication order bug
+
+  # Category B: Performance
   b1_redundant_draws/      # same object drawn 3x
+
+  # Category C: Regression/QA
   c1_visual_regression/    # before/after scene pair
+
+  # Category D: Complex 3D tasks
   d1_scene_modification/   # "add a red cube at (5,0,0)" task
   d2_multi_object_debug/   # 50-object scene with 5 broken objects
   d3_deferred_pipeline/    # broken lighting in deferred renderer
+
+  # Category E: Adversarial (hard to debug from code)
+  e1_state_leak/           # GL state leaks between draw calls
+  e2_nan_propagation/      # singular matrix -> NaN in normals
+  e3_index_buffer_obo/     # sizeof vs size()*sizeof trap
+  e4_double_negation_cull/ # negative scale + wrong winding cancel
+  e5_uniform_collision/    # stale uniform cache after enum reorder
+  e6_depth_precision/      # near/far ratio destroys z-buffer precision
+  e7_shader_include_order/ # shadowed function definition in includes
+  e8_race_texture_upload/  # missing mutex on async texture upload
+  e9_scissor_not_reset/    # UI pass scissor leaks into 3D pass
+  e10_compensating_vp/     # wrong handedness + wrong NDC cancel out
 ```
 
 Each scenario includes:
 1. A minimal OpenGL application with the bug.
 2. A description of the expected correct output.
 3. A ground-truth diagnosis (what the bug is and how to fix it).
-4. A script that runs an LLM agent (with and without GLA) and measures tokens consumed, tool calls, and whether the correct diagnosis was reached.
+4. A difficulty rating and which adversarial principles it uses.
+5. A script that runs an LLM agent (with and without GLA) and measures tokens consumed, tool calls, and whether the correct diagnosis was reached.
 
 This test suite serves dual purposes: validating GLA's usefulness and benchmarking LLM capability on graphics debugging tasks.
 
