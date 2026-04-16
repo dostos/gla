@@ -51,6 +51,24 @@ cc_library(
 )
 
 cc_library(
+    name = "semantic",
+    srcs = [
+        "semantic/matrix_classifier.cpp",
+        "semantic/camera_extractor.cpp",
+        "semantic/object_grouper.cpp",
+        "semantic/scene_reconstructor.cpp",
+    ],
+    hdrs = [
+        "semantic/matrix_classifier.h",
+        "semantic/camera_extractor.h",
+        "semantic/object_grouper.h",
+        "semantic/scene_reconstructor.h",
+    ],
+    deps = [":normalize"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
     name = "gla_core",
     srcs = ["engine.cpp"],
     hdrs = ["engine.h"],

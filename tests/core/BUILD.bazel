@@ -59,3 +59,32 @@ cc_test(
     ],
     linkopts = ["-lrt"],
 )
+
+cc_test(
+    name = "test_matrix_classifier",
+    srcs = ["test_matrix_classifier.cpp"],
+    deps = [
+        "//src/core:semantic",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "test_camera_extractor",
+    srcs = ["test_camera_extractor.cpp"],
+    deps = [
+        "//src/core:semantic",
+        "//src/core:normalize",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "test_object_grouper",
+    srcs = ["test_object_grouper.cpp"],
+    deps = [
+        "//src/core:semantic",
+        "//src/core:normalize",
+        "@googletest//:gtest_main",
+    ],
+)
