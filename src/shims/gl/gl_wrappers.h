@@ -1,0 +1,4 @@
+#ifndef GLA_GL_WRAPPERS_H
+#define GLA_GL_WRAPPERS_H
+
+#endif // GLA_GL_WRAPPERS_H

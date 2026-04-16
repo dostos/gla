@@ -1,0 +1,8 @@
+// GLA frame capture schema — stub, will be filled in Task 2
+namespace gla;
+
+table FrameCapture {
+  frame_id: uint64;
+}
+
+root_type FrameCapture;

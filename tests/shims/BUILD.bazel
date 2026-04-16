@@ -1,0 +1,7 @@
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+cc_test(
+    name = "test_shadow_state",
+    srcs = ["test_shadow_state.c"],
+    deps = ["//src/shims/gl:shadow_state"],
+)

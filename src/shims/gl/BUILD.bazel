@@ -1,0 +1,31 @@
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+
+cc_library(
+    name = "shadow_state",
+    srcs = ["shadow_state.c"],
+    hdrs = ["shadow_state.h"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "gla_gl_impl",
+    srcs = [
+        "frame_capture.c",
+        "gl_shim.c",
+        "gl_wrappers.c",
+        "ipc_client.c",
+    ],
+    hdrs = [
+        "frame_capture.h",
+        "gl_wrappers.h",
+        "ipc_client.h",
+    ],
+    deps = [":shadow_state"],
+    visibility = ["//visibility:public"],
+)
+
+cc_shared_library(
+    name = "gla_gl",
+    deps = [":gla_gl_impl"],
+    visibility = ["//visibility:public"],
+)

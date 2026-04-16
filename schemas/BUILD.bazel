@@ -1,0 +1,3 @@
+# FlatBuffers schema BUILD — stub until Task 2 fills in real flatc rules.
+# The schema file is here; codegen will be wired up in Task 2.
+exports_files(["frame_capture.fbs"])

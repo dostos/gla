@@ -1,0 +1,7 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+cc_binary(
+    name = "mini_gl_app",
+    srcs = ["mini_gl_app.c"],
+    visibility = ["//visibility:public"],
+)

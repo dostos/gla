@@ -1,0 +1,47 @@
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+cc_test(
+    name = "test_shm_ring_buffer",
+    srcs = ["test_shm_ring_buffer.cpp"],
+    deps = [
+        "//src/core:ipc",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "test_control_socket",
+    srcs = ["test_control_socket.cpp"],
+    deps = [
+        "//src/core:ipc",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "test_frame_store",
+    srcs = ["test_frame_store.cpp"],
+    deps = [
+        "//src/core:store",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "test_normalizer",
+    srcs = ["test_normalizer.cpp"],
+    deps = [
+        "//src/core:normalize",
+        "//src/core:store",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "test_query_engine",
+    srcs = ["test_query_engine.cpp"],
+    deps = [
+        "//src/core:query",
+        "@googletest//:gtest_main",
+    ],
+)

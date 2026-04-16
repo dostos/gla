@@ -1,0 +1,5 @@
+build --cxxopt=-std=c++17
+build --conlyopt=-std=c11
+build --copt=-Wall
+build --copt=-fPIC
+test --test_output=errors

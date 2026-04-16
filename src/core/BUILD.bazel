@@ -1,0 +1,66 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+# Bazel adds workspace root to include path, so headers are accessible as
+# "src/core/ipc/foo.h" etc. The copts below also add the src root.
+
+cc_library(
+    name = "ipc",
+    srcs = [
+        "ipc/control_socket.cpp",
+        "ipc/shm_ring_buffer.cpp",
+    ],
+    hdrs = [
+        "ipc/control_socket.h",
+        "ipc/protocol.h",
+        "ipc/shm_ring_buffer.h",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "store",
+    srcs = ["store/frame_store.cpp"],
+    hdrs = [
+        "store/frame_store.h",
+        "store/raw_frame.h",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "normalize",
+    srcs = ["normalize/normalizer.cpp"],
+    hdrs = [
+        "normalize/normalized_types.h",
+        "normalize/normalizer.h",
+    ],
+    deps = [":store"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "query",
+    srcs = ["query/query_engine.cpp"],
+    hdrs = ["query/query_engine.h"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "gla_core",
+    srcs = ["engine.cpp"],
+    hdrs = ["engine.h"],
+    deps = [
+        ":ipc",
+        ":normalize",
+        ":query",
+        ":store",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_binary(
+    name = "gla_engine",
+    srcs = ["engine_main.cpp"],
+    deps = [":gla_core"],
+    visibility = ["//visibility:public"],
+)

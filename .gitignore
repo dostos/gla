@@ -1,0 +1,9 @@
+bazel-bin/
+bazel-out/
+bazel-gla/
+bazel-testlogs/
+__pycache__/
+*.egg-info/
+*.so
+*.o
+.cache/
