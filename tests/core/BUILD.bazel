@@ -45,3 +45,15 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "test_engine",
+    srcs = ["test_engine.cpp"],
+    deps = [
+        "//src/core:gla_core",
+        "//src/core:ipc",
+        "//src/core:store",
+        "@googletest//:gtest_main",
+    ],
+    linkopts = ["-lrt"],
+)
