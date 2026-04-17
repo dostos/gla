@@ -1,4 +1,5 @@
 from __future__ import annotations
+import subprocess
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -57,3 +58,71 @@ class LLMClient:
     def from_env(cls, model: str = "claude-opus-4-7") -> "LLMClient":
         import anthropic
         return cls(sdk=anthropic.Anthropic(), model=model)
+
+
+class ClaudeCodeLLMClient:
+    """LLM client that shells out to the `claude` CLI (Claude Code headless mode).
+
+    Duck-typed to match LLMClient.complete(). Token counts are always 0 since
+    we can't retrieve them from the CLI output; cache behavior is managed by
+    Claude Code itself (not us).
+    """
+
+    def __init__(self, claude_bin: str = "claude", timeout: int = 300,
+                 extra_args: Optional[list[str]] = None):
+        self._bin = claude_bin
+        self._timeout = timeout
+        # Default extra args: --bare for minimal mode (no hooks, no CLAUDE.md auto-discovery).
+        # This keeps the subagent focused on just answering the prompt.
+        self._extra = extra_args if extra_args is not None else ["--bare"]
+
+    def complete(
+        self,
+        system: str,
+        messages: list[dict],
+        cache_system: bool = True,
+        max_tokens: Optional[int] = None,
+    ) -> LLMResponse:
+        # Claude Code's -p mode accepts a single prompt; combine system + user content.
+        user_parts: list[str] = []
+        for msg in messages:
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                user_parts.append(content)
+            elif isinstance(content, list):
+                # Multi-modal: extract text blocks only (images skipped at this layer)
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        user_parts.append(block.get("text", ""))
+        user_text = "\n\n".join(user_parts)
+
+        combined = f"{system}\n\n---\n\n{user_text}" if system else user_text
+
+        argv = [self._bin, "-p", "--output-format", "text"] + self._extra
+        try:
+            result = subprocess.run(
+                argv,
+                input=combined,
+                capture_output=True,
+                text=True,
+                timeout=self._timeout,
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(
+                f"claude CLI failed (exit {e.returncode}): {e.stderr[:500]}"
+            ) from e
+
+        return LLMResponse(
+            text=result.stdout.strip(),
+            input_tokens=0,
+            output_tokens=0,
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=0,
+            stop_reason="end_turn",
+        )
+
+    @classmethod
+    def from_env(cls, model: str = "claude-opus-4-7") -> "ClaudeCodeLLMClient":
+        # model arg is ignored — claude CLI picks its own model.
+        return cls()

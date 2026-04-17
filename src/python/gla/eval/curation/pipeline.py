@@ -345,6 +345,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Run discovery + triage only; do not draft/validate/commit",
     )
+    parser.add_argument("--backend", default="auto",
+                        choices=["auto", "anthropic", "claude-code"],
+                        help="LLM backend: 'anthropic' uses the SDK (requires ANTHROPIC_API_KEY); "
+                             "'claude-code' shells to the `claude` CLI; 'auto' picks claude-code "
+                             "if ANTHROPIC_API_KEY is unset.")
     return parser.parse_args(argv)
 
 
@@ -356,7 +361,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Imports kept inside main() so `--help` / module import does not need
     # network-capable deps (e.g. anthropic) to load.
-    from gla.eval.curation.llm_client import LLMClient
+    from gla.eval.curation.llm_client import LLMClient, ClaudeCodeLLMClient
     from gla.eval.curation.discover import (
         GitHubSearch,
         Discoverer,
@@ -373,7 +378,13 @@ def main(argv: list[str] | None = None) -> int:
 
     queries = cfg.get("queries", DEFAULT_QUERIES)
 
-    llm = LLMClient.from_env()
+    backend = args.backend
+    if backend == "auto":
+        backend = "claude-code" if not os.environ.get("ANTHROPIC_API_KEY") else "anthropic"
+    if backend == "claude-code":
+        llm = ClaudeCodeLLMClient()
+    else:
+        llm = LLMClient.from_env()
     log = CoverageLog(args.log)
     disc = Discoverer(
         search=GitHubSearch(),

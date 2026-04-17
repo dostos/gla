@@ -32,6 +32,16 @@ def test_parse_args_defaults():
     assert args.eval_dir == "tests/eval"
 
 
+def test_parse_args_backend_default_is_auto():
+    args = parse_args([])
+    assert args.backend == "auto"
+
+
+def test_parse_args_backend_claude_code():
+    args = parse_args(["--backend", "claude-code"])
+    assert args.backend == "claude-code"
+
+
 def test_parse_args_custom_paths():
     args = parse_args(["--eval-dir", "/tmp/eval", "--log",
                        "/tmp/log.jsonl", "--batch-quota", "5"])
