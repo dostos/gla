@@ -39,3 +39,39 @@ def test_contains_url(tmp_path):
                               predicted_helps=None, observed_helps=None,
                               failure_mode=None, eval_summary=None))
     assert log.contains_url("https://x") is True
+
+
+def test_regenerate_coverage_gaps(tmp_path):
+    log = CoverageLog(tmp_path / "log.jsonl")
+    # 1 committed (predicted/observed both yes), 1 committed (observed no),
+    # 1 rejected as duplicate
+    log.append(CoverageEntry(
+        issue_url="https://x/1", reviewed_at="2026-04-17T10:00:00Z",
+        source_type="issue", triage_verdict="in_scope",
+        root_cause_fingerprint="state_leak:x", outcome="scenario_committed",
+        scenario_id="r1_a", tier="core", rejection_reason=None,
+        predicted_helps="yes", observed_helps="yes", failure_mode=None,
+        eval_summary=None))
+    log.append(CoverageEntry(
+        issue_url="https://x/2", reviewed_at="2026-04-17T10:00:00Z",
+        source_type="issue", triage_verdict="in_scope",
+        root_cause_fingerprint="shader_compile:x", outcome="scenario_committed",
+        scenario_id="r2_b", tier="core", rejection_reason=None,
+        predicted_helps="yes", observed_helps="no",
+        failure_mode="shader_compile_not_exposed", eval_summary=None))
+    log.append(CoverageEntry(
+        issue_url="https://x/3", reviewed_at="2026-04-17T10:00:00Z",
+        source_type="issue", triage_verdict="in_scope",
+        root_cause_fingerprint="state_leak:x", outcome="rejected",
+        scenario_id=None, tier=None, rejection_reason="duplicate_of_existing_scenario",
+        predicted_helps=None, observed_helps=None, failure_mode=None,
+        eval_summary=None))
+
+    md_path = tmp_path / "coverage-gaps.md"
+    log.regenerate_summary(md_path)
+
+    text = md_path.read_text()
+    assert "Issues reviewed: 3" in text
+    assert "Scenarios committed: 2" in text
+    assert "shader_compile_not_exposed" in text
+    assert "duplicate_of_existing_scenario" in text
