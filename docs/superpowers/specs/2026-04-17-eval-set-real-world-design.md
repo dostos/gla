@@ -97,7 +97,7 @@ Each stage is a specialized subagent invocation with a narrow remit. Artifacts a
 - `out_of_scope` — compile error, build bug, documentation issue, non-visual logic bug, or insufficient information.
 - `ambiguous` — queued for drafting but tagged; if drafting fails or validation fails, the ambiguous tag flags the issue for manual review.
 
-Dedupes by `root_cause_fingerprint` (LLM-generated short key representing the bug pattern, e.g., `state_leak:texture_binding_between_draws`). Matching fingerprints against already-committed scenarios skips drafting.
+Dedupes by `root_cause_fingerprint` (LLM-generated short key representing the bug pattern, e.g., `state_leak:texture_binding_between_draws`). Fingerprint comparison is exact-string on the `<category>:<specifics>` form; the LLM is prompted to normalize vocabulary (the categories are a closed set seeded with `state_leak`, `uniform_lifecycle`, `matrix_math`, `numeric_precision`, `depth_precision`, `winding_culling`, `sync`, `shader_compile`, `bind_point_collision`, `other`; new categories may be added but not silently renamed). A match against an already-committed scenario still produces a coverage-log entry with `rejection_reason: duplicate_of_existing_scenario` and `scenario_id` set to the matching committed scenario; drafting is skipped.
 
 **Draft** — Produces the scenario artifacts:
 - **Core tier**: minimal OpenGL C file (target: <250 LOC, single `main()`, uses GLX or EGL for context creation, no external dependencies beyond GL/X11/m) + structured `.md` following the schema in §3.4. The bug pattern is ported; framework code from the source is not copied.
@@ -111,11 +111,13 @@ Drafting prompts require citing the upstream thread or commit for every diagnost
 
 **Classify** — Emits three fields to the scenario `.md` and coverage log:
 - `predicted_helps` — already set by the drafting agent.
-- `observed_helps` — derived from eval scores:
-  - `yes` if `correct_with_gla AND NOT correct_code_only`.
-  - `yes` if `both_correct AND with_gla_total_tokens ≤ 0.5 × code_only_total_tokens`.
-  - `no` if `both_wrong` OR (`both_correct AND token_ratio > 0.8`).
-  - `ambiguous` otherwise.
+- `observed_helps` — derived from eval scores. Let `ratio = with_gla_total_tokens / code_only_total_tokens`. Rules evaluated in order; first match wins:
+  1. `correct_with_gla AND NOT correct_code_only` → `yes`.
+  2. `NOT correct_with_gla AND correct_code_only` → `no` (GLA caused regression).
+  3. `both_wrong` → `no`.
+  4. `both_correct AND ratio < 0.5` → `yes`.
+  5. `both_correct AND ratio > 0.8` → `no`.
+  6. Everything else (e.g., `both_correct AND 0.5 ≤ ratio ≤ 0.8`) → `ambiguous`.
 - `failure_mode` — when `observed_helps=no`, a post-hoc subagent categorizes why. Categories are open-ended but clustered: new failure modes appear over time as coverage gaps are discovered. Initial seed list: `shader_compile_not_exposed`, `framework_internal_state`, `needs_temporal_diff`, `driver_specific`, `scorer_ambiguous`, `bug_requires_multi_frame_capture`.
 
 **Commit** — Writes scenario files to `tests/eval/` (core) or `tests/eval/showcase/<id>/` (showcase). Appends a row to `docs/superpowers/eval/coverage-log.jsonl`. Regenerates `docs/superpowers/eval/coverage-gaps.md` from the updated log.
@@ -191,8 +193,13 @@ none  # (the core-tier port uses raw OpenGL to exhibit the same pattern)
 [existing format]
 
 ## Bug Signature
-- **Type**: color_histogram_in_region
-- **Spec**: dominant_color in region (0.4, 0.4, 0.6, 0.6) matches [0.8, 0.2, 0.2, 1.0] ± 0.1
+```yaml
+type: color_histogram_in_region
+spec:
+  region: [0.4, 0.4, 0.6, 0.6]      # normalized (x0, y0, x1, y1)
+  dominant_color: [0.8, 0.2, 0.2, 1.0]
+  tolerance: 0.1
+```
 
 ## Predicted GLA Helpfulness
 - **Verdict**: yes
@@ -316,13 +323,17 @@ New components:
 - `tests/eval/showcase/_harness/run.js` — reusable Puppeteer boilerplate: `chromium.launch({ args: ['--load-extension=<gla-webgl-ext-path>'] })` → loads the showcase app from a local file:// URL → waits for `window.__GLA_READY__` (set by the shim after first frame capture) → signals pipeline over stdout → keeps Chromium alive for the duration of the eval session.
 - `tests/eval/showcase/_harness/package.json` — shared Puppeteer dependency; each showcase scenario directory has its own `package.json` for the framework dependency.
 
-**Code-only mode for showcase** — important asymmetry: the agent sees `app.js` (user code) but **not** the framework's source. This mirrors the real developer experience where three.js is consumed as a library. With GLA enabled, the agent can query actual GL calls the framework generated, which is exactly where GLA's value proposition lives for framework users.
+**Code-only mode for showcase** — important asymmetry: the agent sees `app.js` (user code) but **not** the framework's source. This mirrors the real developer experience where three.js is consumed as a library.
+
+Enforcement mechanism: the `code_only` mode's `read_source` tool (in `EvalHarness._build_tools`) is scoped to the showcase scenario's own directory (`tests/eval/showcase/<id>/`), excluding `node_modules/`. The agent may read `app.js`, `index.html`, `package.json`, and `scenario.md`, but `read_source` rejects any path under `node_modules/`. The agent is informed of this restriction in its system prompt ("You may not read the framework's source. Treat the framework as a black-box library."). No filesystem sandboxing is required beyond the tool-level check.
+
+With GLA enabled, the agent can query actual GL calls the framework generated — exactly where GLA's value proposition lives for framework users.
 
 ### 3.8 Symptom-match validation
 
 The weakest link in the pipeline. Concrete approach:
 
-**Declared signatures** — the scenario `.md` includes a `## Bug Signature` section with a type and spec. Signature types (initial set):
+**Declared signatures** — the scenario `.md` includes a `## Bug Signature` section containing a fenced YAML block. The block parses to `{type: str, spec: dict}`; `signature_matchers.py` dispatches on `type` to a per-type comparator that validates `spec` against a declared schema. Drafting prompts are constrained to emit exactly one fenced YAML block in this section. Signature types (initial set):
 
 | Type | Spec | Example |
 |---|---|---|
@@ -452,7 +463,9 @@ Per-scenario total: ~$1.00-2.50 (core), ~$1.50-3.00 (showcase).
 Assuming a ~3× review-to-admission ratio (rejections cost triage but not drafting for early rejects, or triage+draft+validate for late rejects):
 
 - Full batch of 40 core + 8 showcase with ~100 reviewed issues: **~$250-400**.
-- Wall-clock: ~2-3 days (most of it is eval harness time, which is serial per-scenario).
+- Wall-clock: ~2-3 days.
+
+Parallelism: the pipeline processes up to `N_WORKERS` issues concurrently (default 4). Discovery is serial (API rate limits). Triage, draft, and validate parallelize freely across issues. Eval (Run Eval stage) parallelizes up to the number of eval-harness instances that can coexist on the host — for core-tier, bounded by available Xvfb displays (default 4); for showcase-tier, bounded by Chromium RAM (default 2). Within a single issue, stages remain serial.
 
 A human-authored equivalent is ~60-80 hours of skilled graphics-developer work. The pipeline is cost-competitive and reproducible.
 
@@ -461,7 +474,7 @@ A human-authored equivalent is ~60-80 hours of skilled graphics-developer work. 
 1. **M-EV1**: Pipeline scaffolding (stages as stubs, scenario schema extension, coverage log format). Hand-run one issue end-to-end to validate the pipeline contracts.
 2. **M-EV2**: Discovery + triage stages implemented; produce a queue of 50 candidate issues and triage results for manual spot-check.
 3. **M-EV3**: Drafting stage for core tier (OpenGL C ports). Produce 5 scenarios end-to-end through validate.
-4. **M-EV4**: Eval-in-the-loop and classify stages. First batch of 10 committed scenarios with helpfulness classification.
+4. **M-EV4**: Eval-in-the-loop and classify stages. Using the 5 scenarios from M-EV3 plus a fresh discovery batch, produce a first cohort of 10 committed scenarios with helpfulness classification.
 5. **M-EV5**: Full core-tier batch (target 30-40 scenarios committed).
 6. **M-EV6**: Showcase runtime (Puppeteer + WebGL extension integration).
 7. **M-EV7**: Drafting stage for showcase tier. First 2 showcase scenarios end-to-end.
