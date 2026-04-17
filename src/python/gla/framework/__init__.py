@@ -14,6 +14,9 @@ from .types import (
     RenderPassInfo,
 )
 from .metadata_store import MetadataStore
+from .debug_groups import DebugGroupNode, build_debug_group_tree
+from . import correlation
+from .query_engine import FrameworkQueryEngine
 
 __all__ = [
     "FrameMetadata",
@@ -25,4 +28,8 @@ __all__ = [
     "ObjectInfo",
     "PixelExplanation",
     "RenderPassInfo",
+    "DebugGroupNode",
+    "build_debug_group_tree",
+    "correlation",
+    "FrameworkQueryEngine",
 ]
