@@ -72,9 +72,10 @@ class ClaudeCodeLLMClient:
                  extra_args: Optional[list[str]] = None):
         self._bin = claude_bin
         self._timeout = timeout
-        # Default extra args: --bare for minimal mode (no hooks, no CLAUDE.md auto-discovery).
-        # This keeps the subagent focused on just answering the prompt.
-        self._extra = extra_args if extra_args is not None else ["--bare"]
+        # Default extra args: empty. Don't use --bare by default — it disables
+        # OAuth/keychain auth and would force ANTHROPIC_API_KEY, which is exactly
+        # what this backend is designed to avoid.
+        self._extra = extra_args if extra_args is not None else []
 
     def complete(
         self,

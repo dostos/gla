@@ -15,4 +15,6 @@ load("@rules_cc//cc:defs.bzl", "cc_binary")
     "e8_race_texture_upload",
     "e9_scissor_not_reset",
     "e10_compensating_vp",
+    "r1_webgl_backend_instancenode_ubo_exceeds_g",
+    "r5_feedback_loop_error_with_transmission_an",
 ]]
