@@ -32,6 +32,12 @@ class EvalResult:
     model: str
     timestamp: str             # ISO-8601
 
+    # Observed-helpfulness (optional, filled by curation pipeline)
+    observed_helps: Optional[str] = None
+    observed_helps_evidence: Optional[str] = None
+    failure_mode: Optional[str] = None
+    failure_mode_details: Optional[str] = None
+
     def to_dict(self) -> dict:
         return asdict(self)
 

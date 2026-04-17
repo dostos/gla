@@ -214,3 +214,17 @@ class TestReportGenerator:
         md = gen.generate_markdown([])
         assert "# GLA Evaluation Report" in md
         assert isinstance(md, str)
+
+
+# ---------------------------------------------------------------------------
+# EvalResult optional fields tests
+# ---------------------------------------------------------------------------
+
+def test_eval_result_has_observed_helps_field():
+    r = _make_result()
+    r.observed_helps = "yes"
+    r.failure_mode = None
+    d = r.to_dict()
+    r2 = EvalResult.from_dict(d)
+    assert r2.observed_helps == "yes"
+    assert r2.failure_mode is None
