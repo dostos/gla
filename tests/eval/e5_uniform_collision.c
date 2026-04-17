@@ -2,21 +2,25 @@
 //
 // E5: Uniform Location Collision
 //
-// Bug: Two materials share a uniform-location cache keyed by a material enum.
-//      The enum was reordered (MAT_BLUE was 1, is now 0; MAT_RED was 0, is now 1),
-//      but the cache array was not invalidated.  At initialisation the cache is
-//      filled in enum order: cache[0] = query("uColor") for the first material
-//      that happens to run, etc.  After the reorder, material A (red) reads
-//      cache[MAT_RED=1] which holds the location that was cached for the OLD
-//      MAT_RED=0 slot — i.e. it uses material B's cached location.
+// Draws 2 quads with different colors set by uniform, using 2 separate programs.
+// The uniform locations are cached in the wrong order (swapped index).
 //
-//      Concretely: both objects end up with the same uniform value (whichever
-//      was written last), so one object shows the wrong color.
+// Bug: uniform locations are cached using swapped program indices --
+//      Object A's color is set via Object B's program's uniform location,
+//      and vice versa. Both objects display the wrong color.
 //
-//      The simulation below models this with two programs (one per material)
-//      and a cache array indexed by the (now-wrong) enum value.
+// Expected (if bug were fixed):
+//   - Object A (left):  GREEN  (0,1,0,1)
+//   - Object B (right): YELLOW (1,1,0,1)
 //
-// Compile: gcc -lGL -lX11 -o e5_uniform_collision e5_uniform_collision.c
+// Actual (with bug):
+//   - Object A (left):  YELLOW (1,1,0,1) -- should be green
+//   - Object B (right): GREEN  (0,1,0,1) -- should be yellow
+//
+// GLA reveals: inspect_drawcall(0).params shows color=(1,1,0,1) instead of (0,1,0,1).
+// Pixel check: left object yellow (wrong), right object green (wrong).
+//
+// Clear color: dark purple (0.1, 0.05, 0.15, 1.0) -- 400x300 window, 5 frames.
 
 #include <X11/Xlib.h>
 #include <GL/gl.h>
@@ -34,6 +38,7 @@ typedef GLuint (*PFNGLCREATEPROGRAMPROC)(void);
 typedef void   (*PFNGLATTACHSHADERPROC)(GLuint, GLuint);
 typedef void   (*PFNGLLINKPROGRAMPROC)(GLuint);
 typedef void   (*PFNGLGETPROGRAMIVPROC)(GLuint, GLenum, GLint *);
+typedef void   (*PFNGLGETPROGRAMINFOLOGPROC)(GLuint, GLsizei, GLsizei *, GLchar *);
 typedef void   (*PFNGLUSEPROGRAMPROC)(GLuint);
 typedef GLint  (*PFNGLGETUNIFORMLOCATIONPROC)(GLuint, const GLchar *);
 typedef void   (*PFNGLUNIFORM4FPROC)(GLint, GLfloat, GLfloat, GLfloat, GLfloat);
@@ -96,6 +101,7 @@ static GLuint build_program(
     PFNGLATTACHSHADERPROC     glAttachShader,
     PFNGLLINKPROGRAMPROC      glLinkProgram,
     PFNGLGETPROGRAMIVPROC     glGetProgramiv,
+    PFNGLGETPROGRAMINFOLOGPROC glGetProgramInfoLog,
     PFNGLDELETESHADERPROC     glDeleteShader)
 {
     GLuint vs = compile_shader(glCreateShader, glShaderSource, glCompileShader,
@@ -111,30 +117,16 @@ static GLuint build_program(
     glLinkProgram(p);
     GLint ok = 0;
     glGetProgramiv(p, GL_LINK_STATUS, &ok);
-    if (!ok) { fprintf(stderr, "Program link error\n"); return 0; }
+    if (!ok) {
+        char log[512];
+        glGetProgramInfoLog(p, sizeof(log), NULL, log);
+        fprintf(stderr, "Program link error: %s\n", log);
+        return 0;
+    }
     glDeleteShader(vs);
     glDeleteShader(fs);
     return p;
 }
-
-// --------------------------------------------------------------------------
-// Material enum -- REORDERED since the cache was originally populated.
-//
-// Original order (when cache was filled):
-//   MAT_RED  = 0
-//   MAT_BLUE = 1
-//
-// New order (after a refactor):
-//   MAT_BLUE = 0   <-- moved to 0
-//   MAT_RED  = 1   <-- moved to 1
-//
-// The uniform-location cache was NOT cleared after the reorder.
-// --------------------------------------------------------------------------
-typedef enum {
-    MAT_BLUE = 0,   // was MAT_RED=0 before reorder
-    MAT_RED  = 1,   // was MAT_BLUE=1 before reorder
-    MAT_COUNT
-} MaterialID;
 
 int main(void)
 {
@@ -168,6 +160,7 @@ int main(void)
     LOAD_PROC(PFNGLATTACHSHADERPROC,          glAttachShader)
     LOAD_PROC(PFNGLLINKPROGRAMPROC,           glLinkProgram)
     LOAD_PROC(PFNGLGETPROGRAMIVPROC,          glGetProgramiv)
+    LOAD_PROC(PFNGLGETPROGRAMINFOLOGPROC,     glGetProgramInfoLog)
     LOAD_PROC(PFNGLUSEPROGRAMPROC,            glUseProgram)
     LOAD_PROC(PFNGLGETUNIFORMLOCATIONPROC,    glGetUniformLocation)
     LOAD_PROC(PFNGLUNIFORM4FPROC,             glUniform4f)
@@ -186,49 +179,47 @@ int main(void)
 
     glViewport(0, 0, 400, 300);
 
-    // Build two programs (same shader, but separate GL objects)
-    GLuint prog[MAT_COUNT];
-    prog[MAT_RED]  = build_program(glCreateShader, glShaderSource, glCompileShader,
-                                   glGetShaderiv, glGetShaderInfoLog,
-                                   glCreateProgram, glAttachShader, glLinkProgram,
-                                   glGetProgramiv, glDeleteShader);
-    prog[MAT_BLUE] = build_program(glCreateShader, glShaderSource, glCompileShader,
-                                   glGetShaderiv, glGetShaderInfoLog,
-                                   glCreateProgram, glAttachShader, glLinkProgram,
-                                   glGetProgramiv, glDeleteShader);
-    if (!prog[MAT_RED] || !prog[MAT_BLUE]) return 1;
+    // Two separate programs (same shader source, distinct GL objects)
+    // prog[0] is for Object A (should render GREEN)
+    // prog[1] is for Object B (should render YELLOW)
+    GLuint prog[2];
+    prog[0] = build_program(glCreateShader, glShaderSource, glCompileShader,
+                            glGetShaderiv, glGetShaderInfoLog,
+                            glCreateProgram, glAttachShader, glLinkProgram,
+                            glGetProgramiv, glGetProgramInfoLog, glDeleteShader);
+    prog[1] = build_program(glCreateShader, glShaderSource, glCompileShader,
+                            glGetShaderiv, glGetShaderInfoLog,
+                            glCreateProgram, glAttachShader, glLinkProgram,
+                            glGetProgramiv, glGetProgramInfoLog, glDeleteShader);
+    if (!prog[0] || !prog[1]) return 1;
 
-    // BUG: uniform location cache populated using the OLD enum order.
-    // Simulated by filling cache[0] and cache[1] in the ORIGINAL order
-    // (MAT_RED=0, MAT_BLUE=1) but reading with the NEW enum values
-    // (MAT_BLUE=0, MAT_RED=1).
+    // BUG: uniform location cache is populated with SWAPPED program indices.
+    // Correct code would be:
+    //   color_loc_cache[0] = glGetUniformLocation(prog[0], "uColor");
+    //   color_loc_cache[1] = glGetUniformLocation(prog[1], "uColor");
     //
-    // In the original code this would have been:
-    //   for (int i = 0; i < MAT_COUNT; i++)
-    //       color_loc_cache[i] = glGetUniformLocation(prog[i], "uColor");
-    // ... then enum was reordered without invalidating the cache.
-    //
-    // We simulate the stale cache directly:
-    GLint color_loc_cache[MAT_COUNT];
-    // Cache was filled when MAT_RED=0, MAT_BLUE=1:
-    color_loc_cache[0] = glGetUniformLocation(prog[MAT_RED],  "uColor"); // old slot 0 = RED
-    color_loc_cache[1] = glGetUniformLocation(prog[MAT_BLUE], "uColor"); // old slot 1 = BLUE
-    // Now with new enum: MAT_BLUE=0, MAT_RED=1
-    // color_loc_cache[MAT_BLUE=0] actually holds RED's location
-    // color_loc_cache[MAT_RED=1]  actually holds BLUE's location
-    // -> both objects render with swapped/wrong uniform values
+    // Instead, the cache is filled in the wrong order (simulating a refactor
+    // that reordered the program array without updating the cache):
+    GLint color_loc_cache[2];
+    color_loc_cache[0] = glGetUniformLocation(prog[1], "uColor");  // BUG: uses prog[1] for slot 0
+    color_loc_cache[1] = glGetUniformLocation(prog[0], "uColor");  // BUG: uses prog[0] for slot 1
+    // Result: when we use prog[0] with color_loc_cache[0], we're using a location
+    // from prog[1]'s namespace -- the uniform call may silently no-op or write
+    // to prog[1]'s uniform, not prog[0]'s.
+    // Object A effectively gets YELLOW (prog[0]'s uColor is never set correctly).
+    // Object B effectively gets GREEN  (prog[1]'s uColor is never set correctly).
 
-    GLint posLoc = glGetAttribLocation(prog[MAT_RED], "aPos");
+    GLint posLoc = glGetAttribLocation(prog[0], "aPos");
 
-    // Left quad (should be red)
-    static const GLfloat quad_left[] = {
-        -1.0f, -0.8f,  -0.1f, -0.8f,  -0.1f,  0.8f,
-        -1.0f, -0.8f,  -0.1f,  0.8f,  -1.0f,  0.8f,
+    // Object A: left quad [-1, -0.05] x [-0.8, 0.8]
+    static const GLfloat quad_a[] = {
+        -1.0f, -0.8f,   -0.05f, -0.8f,   -0.05f,  0.8f,
+        -1.0f, -0.8f,   -0.05f,  0.8f,   -1.0f,   0.8f,
     };
-    // Right quad (should be blue)
-    static const GLfloat quad_right[] = {
-         0.1f, -0.8f,   1.0f, -0.8f,   1.0f,  0.8f,
-         0.1f, -0.8f,   1.0f,  0.8f,   0.1f,  0.8f,
+    // Object B: right quad [0.05, 1] x [-0.8, 0.8]
+    static const GLfloat quad_b[] = {
+         0.05f, -0.8f,   1.0f, -0.8f,    1.0f,  0.8f,
+         0.05f, -0.8f,   1.0f,  0.8f,    0.05f, 0.8f,
     };
 
     GLuint vao[2], vbo[2];
@@ -237,31 +228,33 @@ int main(void)
 
     glBindVertexArray(vao[0]);
     glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(quad_left), quad_left, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quad_a), quad_a, GL_STATIC_DRAW);
     glEnableVertexAttribArray((GLuint)posLoc);
     glVertexAttribPointer((GLuint)posLoc, 2, GL_FLOAT, GL_FALSE,
                           2 * sizeof(GLfloat), (void *)0);
 
     glBindVertexArray(vao[1]);
     glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(quad_right), quad_right, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quad_b), quad_b, GL_STATIC_DRAW);
     glEnableVertexAttribArray((GLuint)posLoc);
     glVertexAttribPointer((GLuint)posLoc, 2, GL_FLOAT, GL_FALSE,
                           2 * sizeof(GLfloat), (void *)0);
 
     for (int frame = 0; frame < 5; frame++) {
-        glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
+        glClearColor(0.1f, 0.05f, 0.15f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Draw left quad as MAT_RED -- but cache[MAT_RED=1] holds BLUE's location
-        glUseProgram(prog[MAT_RED]);
-        glUniform4f(color_loc_cache[MAT_RED],  1.0f, 0.0f, 0.0f, 1.0f); // wants red
+        // Draw Object A: should be GREEN but bug causes wrong color
+        // color_loc_cache[0] holds prog[1]'s uniform location -- wrong program
+        glUseProgram(prog[0]);
+        glUniform4f(color_loc_cache[0], 0.0f, 1.0f, 0.0f, 1.0f);  // intends GREEN
         glBindVertexArray(vao[0]);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
-        // Draw right quad as MAT_BLUE -- but cache[MAT_BLUE=0] holds RED's location
-        glUseProgram(prog[MAT_BLUE]);
-        glUniform4f(color_loc_cache[MAT_BLUE], 0.0f, 0.0f, 1.0f, 1.0f); // wants blue
+        // Draw Object B: should be YELLOW but bug causes wrong color
+        // color_loc_cache[1] holds prog[0]'s uniform location -- wrong program
+        glUseProgram(prog[1]);
+        glUniform4f(color_loc_cache[1], 1.0f, 1.0f, 0.0f, 1.0f);  // intends YELLOW
         glBindVertexArray(vao[1]);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
@@ -270,8 +263,8 @@ int main(void)
 
     glDeleteVertexArrays(2, vao);
     glDeleteBuffers(2, vbo);
-    glDeleteProgram(prog[MAT_RED]);
-    glDeleteProgram(prog[MAT_BLUE]);
+    glDeleteProgram(prog[0]);
+    glDeleteProgram(prog[1]);
 
     glXMakeCurrent(dpy, None, NULL);
     glXDestroyContext(dpy, glc);

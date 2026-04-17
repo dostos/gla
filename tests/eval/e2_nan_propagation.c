@@ -2,13 +2,23 @@
 //
 // E2: NaN Propagation
 //
-// Bug: Model matrix has scale(1, 1, 0) — zero Z scale — making it singular.
-//      The fragment shader computes the normal matrix as transpose(inverse(model)).
-//      inverse() of a singular matrix produces Inf values; multiplying Inf by
-//      zero produces NaN. The dot product with the light direction becomes NaN,
-//      and the clamp(NaN, 0, 1) evaluates to 0, so the lit face appears black.
+// Draws 1 lit quad with a normal matrix uniform.
 //
-// Compile: gcc -lGL -lX11 -lm -o e2_nan_propagation e2_nan_propagation.c
+// Bug: Model matrix has scale(1, 1, 0) -- zero Z scale -- making it singular.
+//      The normal matrix = transpose(inverse(model)) produces Inf/NaN.
+//      The fragment shader computes diffuse lighting using the corrupted normal,
+//      and max(NaN, 0.0) evaluates to 0, making the lit object appear black.
+//
+// Expected (if bug were fixed):
+//   - Object area shows a lit color ~(0.7, 0.5, 0.2) (warm orange-ish lit by baseColor)
+//
+// Actual (with bug):
+//   - Object area is black (0,0,0) -- lighting produces zero due to NaN
+//
+// GLA reveals: inspect_drawcall(0).params shows normalMatrix with Inf values.
+// Pixel check: object center is black instead of a lit warm color.
+//
+// Clear color: dark blue (0.1, 0.1, 0.3, 1.0) -- 400x300 window, 5 frames.
 
 #include <X11/Xlib.h>
 #include <GL/gl.h>
@@ -27,9 +37,10 @@ typedef GLuint (*PFNGLCREATEPROGRAMPROC)(void);
 typedef void   (*PFNGLATTACHSHADERPROC)(GLuint, GLuint);
 typedef void   (*PFNGLLINKPROGRAMPROC)(GLuint);
 typedef void   (*PFNGLGETPROGRAMIVPROC)(GLuint, GLenum, GLint *);
+typedef void   (*PFNGLGETPROGRAMINFOLOGPROC)(GLuint, GLsizei, GLsizei *, GLchar *);
 typedef void   (*PFNGLUSEPROGRAMPROC)(GLuint);
 typedef GLint  (*PFNGLGETUNIFORMLOCATIONPROC)(GLuint, const GLchar *);
-typedef void   (*PFNGLUNIFORMMATRIX4FVPROC)(GLint, GLsizei, GLboolean, const GLfloat *);
+typedef void   (*PFNGLUNIFORM3FPROC)(GLint, GLfloat, GLfloat, GLfloat);
 typedef void   (*PFNGLUNIFORMMATRIX3FVPROC)(GLint, GLsizei, GLboolean, const GLfloat *);
 typedef void   (*PFNGLGENBUFFERSPROC)(GLsizei, GLuint *);
 typedef void   (*PFNGLBINDBUFFERPROC)(GLenum, GLuint);
@@ -48,32 +59,31 @@ typedef void   (*PFNGLDELETEVERTEXARRAYSPROC)(GLsizei, const GLuint *);
     type name = (type)glXGetProcAddress((const GLubyte *)#name); \
     if (!name) { fprintf(stderr, "Cannot resolve " #name "\n"); return 1; }
 
-// Vertex shader: transforms positions and normals, passes to fragment shader
+// Vertex shader: pass-through with normal transform
 static const char *vert_src =
     "#version 120\n"
     "attribute vec3 aPos;\n"
     "attribute vec3 aNormal;\n"
-    "uniform mat4 uModel;\n"
-    "uniform mat4 uMVP;\n"
-    "uniform mat3 uNormalMatrix;\n"  // transpose(inverse(model)) -- contains Inf/NaN
+    "uniform mat3 uNormalMatrix;\n"
     "varying vec3 vNormal;\n"
-    "varying vec3 vPos;\n"
     "void main() {\n"
-    "    gl_Position = uMVP * vec4(aPos, 1.0);\n"
+    "    gl_Position = vec4(aPos, 1.0);\n"
     "    vNormal = uNormalMatrix * aNormal;\n"  // NaN propagates here
-    "    vPos    = vec3(uModel * vec4(aPos, 1.0));\n"
     "}\n";
 
-// Fragment shader: simple diffuse lighting
+// Fragment shader: diffuse lighting with base color
+// color = max(dot(normal, lightDir), 0.0) * baseColor
+// When normalMatrix has Inf/NaN, the normal becomes NaN,
+// dot(NaN, lightDir) = NaN, max(NaN, 0.0) = 0.0 -> black
 static const char *frag_src =
     "#version 120\n"
+    "uniform vec3 uBaseColor;\n"
     "varying vec3 vNormal;\n"
-    "varying vec3 vPos;\n"
     "void main() {\n"
-    "    vec3 lightDir = normalize(vec3(1.0, 1.0, 2.0));\n"
+    "    vec3 lightDir = normalize(vec3(0.5, 0.7, 1.0));\n"
     "    vec3 n = normalize(vNormal);\n"
     "    float diff = max(dot(n, lightDir), 0.0);\n"  // NaN -> 0 -> black
-    "    gl_FragColor = vec4(vec3(0.8) * diff + vec3(0.05), 1.0);\n"
+    "    gl_FragColor = vec4(uBaseColor * diff, 1.0);\n"
     "}\n";
 
 static GLuint compile_shader(
@@ -98,28 +108,19 @@ static GLuint compile_shader(
     return id;
 }
 
-// Column-major 4x4 identity
-static void mat4_identity(GLfloat m[16])
-{
-    memset(m, 0, 16 * sizeof(GLfloat));
-    m[0] = m[5] = m[10] = m[15] = 1.0f;
-}
-
-// Build mat3 normal matrix from mat4 model (transpose-inverse, computed on CPU).
-// With scale(1,1,0), det=0, inverse is ill-defined -> entries become Inf.
+// Compute normal matrix (transpose of inverse of upper-left 3x3 of model).
+// Model is stored column-major. With scale Z=0, det=0, inv_det=Inf -> NaN values.
 static void compute_normal_matrix(const GLfloat m[16], GLfloat nm[9])
 {
-    // Extract upper-left 3x3 from column-major mat4
     float a = m[0], b = m[4], c = m[8];
     float d = m[1], e = m[5], f = m[9];
     float g = m[2], h = m[6], k = m[10];
 
     float det = a*(e*k - f*h) - b*(d*k - f*g) + c*(d*h - e*g);
-    // When scale Z=0, det=0; 1/det = Inf
+    // With scale Z=0: k=0, det=0, inv_det=Inf -> Inf * 0 = NaN
     float inv_det = 1.0f / det;
 
-    // Inverse then transpose (= adjugate / det, then transpose)
-    // Result stored column-major for GL
+    // Cofactor matrix (transposed = inverse * det), column-major
     nm[0] = (e*k - f*h) * inv_det;
     nm[1] = (c*h - b*k) * inv_det;
     nm[2] = (b*f - c*e) * inv_det;
@@ -165,9 +166,10 @@ int main(void)
     LOAD_PROC(PFNGLATTACHSHADERPROC,          glAttachShader)
     LOAD_PROC(PFNGLLINKPROGRAMPROC,           glLinkProgram)
     LOAD_PROC(PFNGLGETPROGRAMIVPROC,          glGetProgramiv)
+    LOAD_PROC(PFNGLGETPROGRAMINFOLOGPROC,     glGetProgramInfoLog)
     LOAD_PROC(PFNGLUSEPROGRAMPROC,            glUseProgram)
     LOAD_PROC(PFNGLGETUNIFORMLOCATIONPROC,    glGetUniformLocation)
-    LOAD_PROC(PFNGLUNIFORMMATRIX4FVPROC,      glUniformMatrix4fv)
+    LOAD_PROC(PFNGLUNIFORM3FPROC,             glUniform3f)
     LOAD_PROC(PFNGLUNIFORMMATRIX3FVPROC,      glUniformMatrix3fv)
     LOAD_PROC(PFNGLGENBUFFERSPROC,            glGenBuffers)
     LOAD_PROC(PFNGLBINDBUFFERPROC,            glBindBuffer)
@@ -200,26 +202,31 @@ int main(void)
     {
         GLint ok = 0;
         glGetProgramiv(prog, GL_LINK_STATUS, &ok);
-        if (!ok) { fprintf(stderr, "Program link error\n"); return 1; }
+        if (!ok) {
+            char log[512];
+            glGetProgramInfoLog(prog, sizeof(log), NULL, log);
+            fprintf(stderr, "Program link error: %s\n", log);
+            return 1;
+        }
     }
     glDeleteShader(vs);
     glDeleteShader(fs);
 
-    GLint locModel  = glGetUniformLocation(prog, "uModel");
-    GLint locMVP    = glGetUniformLocation(prog, "uMVP");
-    GLint locNM     = glGetUniformLocation(prog, "uNormalMatrix");
-    GLint locPos    = glGetAttribLocation(prog,  "aPos");
-    GLint locNormal = glGetAttribLocation(prog,  "aNormal");
+    GLint locNM        = glGetUniformLocation(prog, "uNormalMatrix");
+    GLint locBaseColor = glGetUniformLocation(prog, "uBaseColor");
+    GLint locPos       = glGetAttribLocation(prog,  "aPos");
+    GLint locNormal    = glGetAttribLocation(prog,  "aNormal");
 
-    // Front face of a quad: pos(3) + normal(3) interleaved, 6 vertices
+    // Front-facing quad at z=0 with +Z normals, spanning most of the viewport
+    // 6 vertices (2 triangles), interleaved pos(3) + normal(3)
     static const GLfloat verts[] = {
-        // pos             normal (front face +Z)
-        -0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,
-         0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,
-         0.5f,  0.5f, 0.0f,   0.0f, 0.0f, 1.0f,
-        -0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,
-         0.5f,  0.5f, 0.0f,   0.0f, 0.0f, 1.0f,
-        -0.5f,  0.5f, 0.0f,   0.0f, 0.0f, 1.0f,
+        // pos                 normal (+Z)
+        -0.7f, -0.7f, 0.0f,   0.0f, 0.0f, 1.0f,
+         0.7f, -0.7f, 0.0f,   0.0f, 0.0f, 1.0f,
+         0.7f,  0.7f, 0.0f,   0.0f, 0.0f, 1.0f,
+        -0.7f, -0.7f, 0.0f,   0.0f, 0.0f, 1.0f,
+         0.7f,  0.7f, 0.0f,   0.0f, 0.0f, 1.0f,
+        -0.7f,  0.7f, 0.0f,   0.0f, 0.0f, 1.0f,
     };
 
     GLuint vao, vbo;
@@ -236,26 +243,27 @@ int main(void)
     glVertexAttribPointer((GLuint)locNormal, 3, GL_FLOAT, GL_FALSE, stride,
                           (void *)(3 * sizeof(GLfloat)));
 
-    // BUG: model matrix uses scale(1, 1, 0) -- intended for flat shadow projection
-    // This makes the matrix singular, so inverse() produces Inf, and normal matrix has NaN.
+    // BUG: model matrix with scale(1, 1, 0) -- Z scale = 0 makes matrix singular.
+    // Normal matrix = transpose(inverse(model)) -> Inf/NaN in Z-related entries.
+    // Column-major identity with m[10] = 0
     GLfloat model[16];
-    mat4_identity(model);
-    model[10] = 0.0f;  // Z scale = 0  <-- the bug
-
-    GLfloat mvp[16];
-    mat4_identity(mvp);  // simple orthographic for this demo
+    memset(model, 0, sizeof(model));
+    model[0] = 1.0f;
+    model[5] = 1.0f;
+    model[10] = 0.0f;  // <-- BUG: Z scale = 0 (should be 1.0f)
+    model[15] = 1.0f;
 
     GLfloat nm[9];
     compute_normal_matrix(model, nm);
 
     for (int frame = 0; frame < 5; frame++) {
-        glClearColor(0.2f, 0.2f, 0.3f, 1.0f);
+        glClearColor(0.1f, 0.1f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(prog);
-        glUniformMatrix4fv(locModel, 1, GL_FALSE, model);
-        glUniformMatrix4fv(locMVP,   1, GL_FALSE, mvp);
-        // Upload normal matrix that contains Inf/NaN due to singular model
+        // Base color: warm orange -- should be visible if lighting worked
+        glUniform3f(locBaseColor, 0.9f, 0.6f, 0.2f);
+        // Upload normal matrix with Inf/NaN due to singular model
         glUniformMatrix3fv(locNM, 1, GL_FALSE, nm);
 
         glBindVertexArray(vao);

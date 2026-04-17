@@ -1,18 +1,27 @@
 // tests/eval/e3_index_buffer_obo.c
 //
-// E3: Index Buffer Off-by-One (sizeof bug)
+// E3: Index Buffer Off-by-One (sizeof pointer bug)
 //
-// Bug: glBufferData is called with sizeof(indices) where `indices` is a
-//      pointer (GLushort *), not an array — sizeof(pointer) = 8 on a 64-bit
-//      system.  Only 8 bytes (4 uint16 indices) are uploaded instead of
-//      36 * sizeof(GLushort) = 72 bytes for the full cube.
-//      The first triangle (indices 0,1,2) renders correctly; the remaining
-//      triangles pull from uninitialised GPU memory, producing garbage faces.
+// Draws a hexagon (6 triangles = 18 indices) using glDrawElements.
 //
-// The simulated bug is achieved by computing the upload size as
-//   sizeof(GLushort *) rather than n_indices * sizeof(GLushort).
+// Bug: glBufferData size uses sizeof(indices) where `indices` is a pointer
+//      (GLushort *), not an array. On 64-bit: sizeof(GLushort *) = 8 bytes
+//      = only 4 uint16 indices uploaded. The full hexagon needs 18 indices
+//      = 36 bytes. Only the first triangle (indices 0,1,2) may render;
+//      remaining indices pull from uninitialized GPU memory.
 //
-// Compile: gcc -lGL -lX11 -o e3_index_buffer_obo e3_index_buffer_obo.c
+// Expected (if bug were fixed):
+//   - Full hexagon fills the center of the screen in cyan
+//
+// Actual (with bug):
+//   - Only a small partial triangle (first 3-4 valid indices) renders;
+//     rest of the hexagon is missing or corrupted
+//
+// GLA reveals: vertex_count (18) in the draw call does not match the
+//              actual data uploaded (4 indices = 8 bytes).
+// Pixel check: only a small part of the hexagon renders near center.
+//
+// Clear color: near-black (0.08, 0.08, 0.08, 1.0) -- 400x300 window, 5 frames.
 
 #include <X11/Xlib.h>
 #include <GL/gl.h>
@@ -20,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 typedef GLuint (*PFNGLCREATESHADERPROC)(GLenum);
 typedef void   (*PFNGLSHADERSOURCEPROC)(GLuint, GLsizei, const GLchar *const*, const GLint *);
@@ -30,6 +40,7 @@ typedef GLuint (*PFNGLCREATEPROGRAMPROC)(void);
 typedef void   (*PFNGLATTACHSHADERPROC)(GLuint, GLuint);
 typedef void   (*PFNGLLINKPROGRAMPROC)(GLuint);
 typedef void   (*PFNGLGETPROGRAMIVPROC)(GLuint, GLenum, GLint *);
+typedef void   (*PFNGLGETPROGRAMINFOLOGPROC)(GLuint, GLsizei, GLsizei *, GLchar *);
 typedef void   (*PFNGLUSEPROGRAMPROC)(GLuint);
 typedef GLint  (*PFNGLGETUNIFORMLOCATIONPROC)(GLuint, const GLchar *);
 typedef void   (*PFNGLUNIFORM4FPROC)(GLint, GLfloat, GLfloat, GLfloat, GLfloat);
@@ -52,17 +63,13 @@ typedef void   (*PFNGLDELETEVERTEXARRAYSPROC)(GLsizei, const GLuint *);
 
 static const char *vert_src =
     "#version 120\n"
-    "attribute vec3 aPos;\n"
-    "void main() {\n"
-    "    gl_Position = vec4(aPos * 0.5, 1.0);\n"
-    "}\n";
+    "attribute vec2 aPos;\n"
+    "void main() { gl_Position = vec4(aPos, 0.0, 1.0); }\n";
 
 static const char *frag_src =
     "#version 120\n"
     "uniform vec4 uColor;\n"
-    "void main() {\n"
-    "    gl_FragColor = uColor;\n"
-    "}\n";
+    "void main() { gl_FragColor = uColor; }\n";
 
 static GLuint compile_shader(
     PFNGLCREATESHADERPROC     glCreateShader,
@@ -118,6 +125,7 @@ int main(void)
     LOAD_PROC(PFNGLATTACHSHADERPROC,          glAttachShader)
     LOAD_PROC(PFNGLLINKPROGRAMPROC,           glLinkProgram)
     LOAD_PROC(PFNGLGETPROGRAMIVPROC,          glGetProgramiv)
+    LOAD_PROC(PFNGLGETPROGRAMINFOLOGPROC,     glGetProgramInfoLog)
     LOAD_PROC(PFNGLUSEPROGRAMPROC,            glUseProgram)
     LOAD_PROC(PFNGLGETUNIFORMLOCATIONPROC,    glGetUniformLocation)
     LOAD_PROC(PFNGLUNIFORM4FPROC,             glUniform4f)
@@ -135,7 +143,6 @@ int main(void)
     LOAD_PROC(PFNGLDELETEVERTEXARRAYSPROC,    glDeleteVertexArrays)
 
     glViewport(0, 0, 400, 300);
-    glEnable(GL_DEPTH_TEST);
 
     GLuint vs = compile_shader(glCreateShader, glShaderSource, glCompileShader,
                                glGetShaderiv, glGetShaderInfoLog,
@@ -152,7 +159,12 @@ int main(void)
     {
         GLint ok = 0;
         glGetProgramiv(prog, GL_LINK_STATUS, &ok);
-        if (!ok) { fprintf(stderr, "Program link error\n"); return 1; }
+        if (!ok) {
+            char log[512];
+            glGetProgramInfoLog(prog, sizeof(log), NULL, log);
+            fprintf(stderr, "Program link error: %s\n", log);
+            return 1;
+        }
     }
     glDeleteShader(vs);
     glDeleteShader(fs);
@@ -160,22 +172,29 @@ int main(void)
     GLint locColor = glGetUniformLocation(prog, "uColor");
     GLint locPos   = glGetAttribLocation(prog,  "aPos");
 
-    // 8 unique vertices of a unit cube
+    // Hexagon: center vertex (index 0) + 6 perimeter vertices (indices 1-6)
+    // Radius 0.6 in NDC to fill a large portion of the screen
+    // 7 vertices total: [0]=center, [1..6]=perimeter (CCW)
     static const GLfloat verts[] = {
-        -1,-1,-1,   1,-1,-1,   1, 1,-1,  -1, 1,-1,  // back face
-        -1,-1, 1,   1,-1, 1,   1, 1, 1,  -1, 1, 1,  // front face
+         0.0f,  0.0f,                              // 0: center
+         0.6f,  0.0f,                              // 1: right
+         0.3f,  0.5196f,                           // 2: upper-right  (0.6*cos30, 0.6*sin60)
+        -0.3f,  0.5196f,                           // 3: upper-left
+        -0.6f,  0.0f,                              // 4: left
+        -0.3f, -0.5196f,                           // 5: lower-left
+         0.3f, -0.5196f,                           // 6: lower-right
     };
 
-    // 12 triangles * 3 indices = 36 indices for a cube
+    // 6 triangles = 18 indices (fan from center)
     static const GLushort indices_data[] = {
-        0,1,2, 2,3,0,  // back
-        4,5,6, 6,7,4,  // front
-        0,4,7, 7,3,0,  // left
-        1,5,6, 6,2,1,  // right
-        3,2,6, 6,7,3,  // top
-        0,1,5, 5,4,0,  // bottom
+        0, 1, 2,
+        0, 2, 3,
+        0, 3, 4,
+        0, 4, 5,
+        0, 5, 6,
+        0, 6, 1,
     };
-    int n_indices = 36;
+    int n_indices = 18;  // correct count
 
     GLuint vao, vbo, ebo;
     glGenVertexArrays(1, &vao);
@@ -185,29 +204,28 @@ int main(void)
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
     glEnableVertexAttribArray((GLuint)locPos);
-    glVertexAttribPointer((GLuint)locPos, 3, GL_FLOAT, GL_FALSE,
-                          3 * sizeof(GLfloat), (void *)0);
+    glVertexAttribPointer((GLuint)locPos, 2, GL_FLOAT, GL_FALSE,
+                          2 * sizeof(GLfloat), (void *)0);
 
     glGenBuffers(1, &ebo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
 
-    // BUG: sizeof(indices) where indices is a pointer = 8 bytes on 64-bit.
-    // Only 4 uint16 values (indices 0,1,2,2) are uploaded; the rest is
-    // uninitialised GPU memory. Correct would be:
-    //   n_indices * sizeof(GLushort)
+    // BUG: sizeof(indices) where `indices` is a pointer (GLushort *)
+    // On 64-bit: sizeof(GLushort *) = 8 bytes = only 4 uint16 values uploaded.
+    // Full hexagon needs n_indices * sizeof(GLushort) = 18 * 2 = 36 bytes.
     const GLushort *indices = indices_data;
     glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                 sizeof(indices),           // BUG: sizeof(pointer) = 8, not 72
+                 sizeof(indices),           // BUG: sizeof(pointer) = 8, not 36
                  indices, GL_STATIC_DRAW);
 
     for (int frame = 0; frame < 5; frame++) {
-        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+        glClearColor(0.08f, 0.08f, 0.08f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(prog);
-        glUniform4f(locColor, 0.6f, 0.8f, 0.4f, 1.0f);
+        glUniform4f(locColor, 0.0f, 0.9f, 0.9f, 1.0f);  // cyan
         glBindVertexArray(vao);
-        // Attempt to draw all 36 indices; only 4 are valid
+        // Request all 18 indices; only 4 were actually uploaded
         glDrawElements(GL_TRIANGLES, n_indices, GL_UNSIGNED_SHORT, (void *)0);
 
         glXSwapBuffers(dpy, win);

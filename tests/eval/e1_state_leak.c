@@ -2,11 +2,24 @@
 //
 // E1: State Leak
 //
-// Bug: glBindTexture is missing before Quad B's draw call.
-//      Quad B inherits Quad A's texture (red), so both quads appear red
-//      instead of Quad A=red, Quad B=blue.
+// Draws 2 quads using glUniform4f for color (no textures).
 //
-// Compile: gcc -lGL -lX11 -o e1_state_leak e1_state_leak.c
+// Bug: The glUniform4f call for Quad B's blue color is missing.
+//      Quad B inherits Quad A's red uniform, so both quads appear red.
+//
+// Expected (if bug were fixed):
+//   - Quad A (left):  RED   (1,0,0,1)
+//   - Quad B (right): BLUE  (0,0,1,1)
+//
+// Actual (with bug):
+//   - Quad A (left):  RED   (1,0,0,1) -- correct
+//   - Quad B (right): RED   (1,0,0,1) -- wrong, should be blue
+//
+// GLA reveals: inspect_drawcall(1).params shows color=(1,0,0,1) for draw 1,
+//              instead of (0,0,1,1).
+// Pixel check: left quad red (correct), right quad red (wrong, should be blue).
+//
+// Clear color: dark gray (0.15, 0.15, 0.15, 1.0) -- 400x300 window, 5 frames.
 
 #include <X11/Xlib.h>
 #include <GL/gl.h>
@@ -24,9 +37,10 @@ typedef GLuint (*PFNGLCREATEPROGRAMPROC)(void);
 typedef void   (*PFNGLATTACHSHADERPROC)(GLuint, GLuint);
 typedef void   (*PFNGLLINKPROGRAMPROC)(GLuint);
 typedef void   (*PFNGLGETPROGRAMIVPROC)(GLuint, GLenum, GLint *);
+typedef void   (*PFNGLGETPROGRAMINFOLOGPROC)(GLuint, GLsizei, GLsizei *, GLchar *);
 typedef void   (*PFNGLUSEPROGRAMPROC)(GLuint);
 typedef GLint  (*PFNGLGETUNIFORMLOCATIONPROC)(GLuint, const GLchar *);
-typedef void   (*PFNGLUNIFORM1IPROC)(GLint, GLint);
+typedef void   (*PFNGLUNIFORM4FPROC)(GLint, GLfloat, GLfloat, GLfloat, GLfloat);
 typedef void   (*PFNGLGENBUFFERSPROC)(GLsizei, GLuint *);
 typedef void   (*PFNGLBINDBUFFERPROC)(GLenum, GLuint);
 typedef void   (*PFNGLBUFFERDATAPROC)(GLenum, GLsizeiptr, const void *, GLenum);
@@ -44,25 +58,17 @@ typedef void   (*PFNGLDELETEVERTEXARRAYSPROC)(GLsizei, const GLuint *);
     type name = (type)glXGetProcAddress((const GLubyte *)#name); \
     if (!name) { fprintf(stderr, "Cannot resolve " #name "\n"); return 1; }
 
-// Vertex shader: pass-through with 2D position and texcoord
+// Simple vertex shader: 2D position only
 static const char *vert_src =
     "#version 120\n"
     "attribute vec2 aPos;\n"
-    "attribute vec2 aUV;\n"
-    "varying vec2 vUV;\n"
-    "void main() {\n"
-    "    gl_Position = vec4(aPos, 0.0, 1.0);\n"
-    "    vUV = aUV;\n"
-    "}\n";
+    "void main() { gl_Position = vec4(aPos, 0.0, 1.0); }\n";
 
-// Fragment shader: sample texture
+// Simple fragment shader: solid color via uniform
 static const char *frag_src =
     "#version 120\n"
-    "uniform sampler2D uTex;\n"
-    "varying vec2 vUV;\n"
-    "void main() {\n"
-    "    gl_FragColor = texture2D(uTex, vUV);\n"
-    "}\n";
+    "uniform vec4 uColor;\n"
+    "void main() { gl_FragColor = uColor; }\n";
 
 static GLuint compile_shader(
     PFNGLCREATESHADERPROC     glCreateShader,
@@ -84,20 +90,6 @@ static GLuint compile_shader(
         return 0;
     }
     return id;
-}
-
-// Create a 1x1 solid-color texture
-static GLuint make_solid_texture(GLubyte r, GLubyte g, GLubyte b)
-{
-    GLuint tex;
-    glGenTextures(1, &tex);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    GLubyte px[4] = {r, g, b, 255};
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, px);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    return tex;
 }
 
 int main(void)
@@ -132,9 +124,10 @@ int main(void)
     LOAD_PROC(PFNGLATTACHSHADERPROC,          glAttachShader)
     LOAD_PROC(PFNGLLINKPROGRAMPROC,           glLinkProgram)
     LOAD_PROC(PFNGLGETPROGRAMIVPROC,          glGetProgramiv)
+    LOAD_PROC(PFNGLGETPROGRAMINFOLOGPROC,     glGetProgramInfoLog)
     LOAD_PROC(PFNGLUSEPROGRAMPROC,            glUseProgram)
     LOAD_PROC(PFNGLGETUNIFORMLOCATIONPROC,    glGetUniformLocation)
-    LOAD_PROC(PFNGLUNIFORM1IPROC,             glUniform1i)
+    LOAD_PROC(PFNGLUNIFORM4FPROC,             glUniform4f)
     LOAD_PROC(PFNGLGENBUFFERSPROC,            glGenBuffers)
     LOAD_PROC(PFNGLBINDBUFFERPROC,            glBindBuffer)
     LOAD_PROC(PFNGLBUFFERDATAPROC,            glBufferData)
@@ -166,49 +159,41 @@ int main(void)
     {
         GLint ok = 0;
         glGetProgramiv(prog, GL_LINK_STATUS, &ok);
-        if (!ok) { fprintf(stderr, "Program link error\n"); return 1; }
+        if (!ok) {
+            char log[512];
+            glGetProgramInfoLog(prog, sizeof(log), NULL, log);
+            fprintf(stderr, "Program link error: %s\n", log);
+            return 1;
+        }
     }
     glDeleteShader(vs);
     glDeleteShader(fs);
 
-    GLint texLoc = glGetUniformLocation(prog, "uTex");
-    GLint posLoc = glGetAttribLocation(prog,  "aPos");
-    GLint uvLoc  = glGetAttribLocation(prog,  "aUV");
+    GLint colorLoc = glGetUniformLocation(prog, "uColor");
+    GLint posLoc   = glGetAttribLocation(prog,  "aPos");
 
-    // Textures: tex_red for quad A, tex_blue for quad B
-    GLuint tex_red  = make_solid_texture(255, 0, 0);
-    GLuint tex_blue = make_solid_texture(0, 0, 255);
-
-    // Quad A: left half  [-1, -0.5] x [-0.8, 0.8]
-    // Quad B: right half [0.5,  1 ] x [-0.8, 0.8]
-    // Each quad: 2 triangles (6 vertices), interleaved pos(xy)+uv(xy)
+    // Quad A: left half of screen [-1, -0.05] x [-0.8, 0.8]
+    // Quad B: right half          [ 0.05, 1 ] x [-0.8, 0.8]
+    // Two triangles per quad (6 vertices each), 2 floats per vertex
     static const GLfloat quad_a[] = {
-        -1.0f, -0.8f,  0.0f, 0.0f,
-        -0.1f, -0.8f,  1.0f, 0.0f,
-        -0.1f,  0.8f,  1.0f, 1.0f,
-        -1.0f, -0.8f,  0.0f, 0.0f,
-        -0.1f,  0.8f,  1.0f, 1.0f,
-        -1.0f,  0.8f,  0.0f, 1.0f,
+        -1.0f, -0.8f,   -0.05f, -0.8f,   -0.05f,  0.8f,
+        -1.0f, -0.8f,   -0.05f,  0.8f,   -1.0f,   0.8f,
     };
     static const GLfloat quad_b[] = {
-         0.1f, -0.8f,  0.0f, 0.0f,
-         1.0f, -0.8f,  1.0f, 0.0f,
-         1.0f,  0.8f,  1.0f, 1.0f,
-         0.1f, -0.8f,  0.0f, 0.0f,
-         1.0f,  0.8f,  1.0f, 1.0f,
-         0.1f,  0.8f,  0.0f, 1.0f,
+         0.05f, -0.8f,   1.0f, -0.8f,    1.0f,  0.8f,
+         0.05f, -0.8f,   1.0f,  0.8f,    0.05f, 0.8f,
     };
 
     GLuint vao_a, vbo_a, vao_b, vbo_b;
+
     glGenVertexArrays(1, &vao_a);
     glBindVertexArray(vao_a);
     glGenBuffers(1, &vbo_a);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_a);
     glBufferData(GL_ARRAY_BUFFER, sizeof(quad_a), quad_a, GL_STATIC_DRAW);
     glEnableVertexAttribArray((GLuint)posLoc);
-    glVertexAttribPointer((GLuint)posLoc, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), (void *)0);
-    glEnableVertexAttribArray((GLuint)uvLoc);
-    glVertexAttribPointer((GLuint)uvLoc, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), (void *)(2 * sizeof(GLfloat)));
+    glVertexAttribPointer((GLuint)posLoc, 2, GL_FLOAT, GL_FALSE,
+                          2 * sizeof(GLfloat), (void *)0);
 
     glGenVertexArrays(1, &vao_b);
     glBindVertexArray(vao_b);
@@ -216,26 +201,23 @@ int main(void)
     glBindBuffer(GL_ARRAY_BUFFER, vbo_b);
     glBufferData(GL_ARRAY_BUFFER, sizeof(quad_b), quad_b, GL_STATIC_DRAW);
     glEnableVertexAttribArray((GLuint)posLoc);
-    glVertexAttribPointer((GLuint)posLoc, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), (void *)0);
-    glEnableVertexAttribArray((GLuint)uvLoc);
-    glVertexAttribPointer((GLuint)uvLoc, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), (void *)(2 * sizeof(GLfloat)));
+    glVertexAttribPointer((GLuint)posLoc, 2, GL_FLOAT, GL_FALSE,
+                          2 * sizeof(GLfloat), (void *)0);
 
     for (int frame = 0; frame < 5; frame++) {
         glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(prog);
-        glActiveTexture(GL_TEXTURE0);
-        glUniform1i(texLoc, 0);
 
-        // Draw Quad A: bind red texture then draw
-        glBindTexture(GL_TEXTURE_2D, tex_red);
+        // Draw Quad A: set RED color, then draw
+        glUniform4f(colorLoc, 1.0f, 0.0f, 0.0f, 1.0f);  // RED
         glBindVertexArray(vao_a);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
-        // Draw Quad B: BUG - glBindTexture(GL_TEXTURE_2D, tex_blue) is missing!
-        // tex_red is still bound, so Quad B renders red instead of blue.
-        /* glBindTexture(GL_TEXTURE_2D, tex_blue); */  // <-- intentionally omitted
+        // Draw Quad B: BUG -- glUniform4f for BLUE is missing!
+        // The red uniform from Quad A is still active, so Quad B renders red.
+        /* glUniform4f(colorLoc, 0.0f, 0.0f, 1.0f, 1.0f); */  // <-- intentionally omitted
         glBindVertexArray(vao_b);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
@@ -246,8 +228,6 @@ int main(void)
     glDeleteBuffers(1, &vbo_a);
     glDeleteVertexArrays(1, &vao_b);
     glDeleteBuffers(1, &vbo_b);
-    glDeleteTextures(1, &tex_red);
-    glDeleteTextures(1, &tex_blue);
     glDeleteProgram(prog);
 
     glXMakeCurrent(dpy, None, NULL);

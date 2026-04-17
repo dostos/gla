@@ -2,28 +2,34 @@
 //
 // E4: Double-Negation Culling
 //
-// Bug: Two errors interact and partially cancel each other out, making the
-//      root cause hard to spot by visual inspection alone.
+// Draws 2 quads with face culling enabled.
 //
-//   Error 1: Model matrix has negative X scale (-1) to mirror the mesh.
-//            This flips triangle winding from CCW to CW in clip space.
-//   Error 2: glFrontFace(GL_CW) is set, ostensibly to "correct" for the
-//            mirrored winding -- but GL_CW makes CW the front face, which
-//            means the ORIGINAL CCW faces (the mirrored-back faces) are now
-//            treated as front faces too.
+// Setup:
+//   - glEnable(GL_CULL_FACE) + glCullFace(GL_BACK) + glFrontFace(GL_CW)
+//   - Both quads have CCW-wound vertices in NDC
 //
-//   The comment in the code says: "GL_CW because right-handed coords" --
-//   a plausible-sounding but incorrect justification.
+// Quad A (left): has a negative X scale in its model matrix (mirror).
+//   - Negative scale flips winding: CCW -> CW in clip space.
+//   - glFrontFace(GL_CW) says CW is front, so Quad A IS rendered (two errors cancel).
 //
-//   With cull face enabled (GL_BACK), the combination means some faces that
-//   should be visible are culled and some that should be hidden are shown.
-//   For a cube: half the faces render inside-out / are missing.
+// Quad B (right): no model matrix scaling (identity).
+//   - Vertices are CCW in NDC, but glFrontFace(GL_CW) says CW is front.
+//   - CCW quad is treated as back-facing -> CULLED (invisible).
 //
-//   The real fix: use glFrontFace(GL_CCW) (the default) and let the
-//   negative-scale matrix naturally flip winding; OR negate the scale and
-//   keep GL_CCW. Not both.
+// Bug: The double-negation makes Quad A accidentally visible, while Quad B
+//      (correctly-wound without any mirror) is incorrectly culled.
 //
-// Compile: gcc -lGL -lX11 -o e4_double_negation_cull e4_double_negation_cull.c
+// Expected (if bug were fixed with GL_CCW front face):
+//   - Both quads visible, Quad A green, Quad B magenta
+//
+// Actual (with bug):
+//   - Quad A visible (green) -- correct-looking but for wrong reasons
+//   - Quad B invisible -- culled because CCW is treated as back-facing
+//
+// GLA reveals: pipeline state shows cull_enabled=true, front_face=GL_CW.
+// Pixel check: left half shows green quad, right half shows only background.
+//
+// Clear color: dark green-tinted (0.05, 0.15, 0.05, 1.0) -- 400x300 window, 5 frames.
 
 #include <X11/Xlib.h>
 #include <GL/gl.h>
@@ -41,10 +47,11 @@ typedef GLuint (*PFNGLCREATEPROGRAMPROC)(void);
 typedef void   (*PFNGLATTACHSHADERPROC)(GLuint, GLuint);
 typedef void   (*PFNGLLINKPROGRAMPROC)(GLuint);
 typedef void   (*PFNGLGETPROGRAMIVPROC)(GLuint, GLenum, GLint *);
+typedef void   (*PFNGLGETPROGRAMINFOLOGPROC)(GLuint, GLsizei, GLsizei *, GLchar *);
 typedef void   (*PFNGLUSEPROGRAMPROC)(GLuint);
 typedef GLint  (*PFNGLGETUNIFORMLOCATIONPROC)(GLuint, const GLchar *);
-typedef void   (*PFNGLUNIFORMMATRIX4FVPROC)(GLint, GLsizei, GLboolean, const GLfloat *);
 typedef void   (*PFNGLUNIFORM4FPROC)(GLint, GLfloat, GLfloat, GLfloat, GLfloat);
+typedef void   (*PFNGLUNIFORMMATRIX4FVPROC)(GLint, GLsizei, GLboolean, const GLfloat *);
 typedef void   (*PFNGLGENBUFFERSPROC)(GLsizei, GLuint *);
 typedef void   (*PFNGLBINDBUFFERPROC)(GLenum, GLuint);
 typedef void   (*PFNGLBUFFERDATAPROC)(GLenum, GLsizeiptr, const void *, GLenum);
@@ -62,23 +69,18 @@ typedef void   (*PFNGLDELETEVERTEXARRAYSPROC)(GLsizei, const GLuint *);
     type name = (type)glXGetProcAddress((const GLubyte *)#name); \
     if (!name) { fprintf(stderr, "Cannot resolve " #name "\n"); return 1; }
 
+// Vertex shader with model matrix for winding manipulation
 static const char *vert_src =
     "#version 120\n"
-    "attribute vec3 aPos;\n"
-    "attribute vec3 aColor;\n"
-    "uniform mat4 uMVP;\n"
-    "varying vec3 vColor;\n"
-    "void main() {\n"
-    "    gl_Position = uMVP * vec4(aPos, 1.0);\n"
-    "    vColor = aColor;\n"
-    "}\n";
+    "attribute vec2 aPos;\n"
+    "uniform mat4 uModel;\n"
+    "void main() { gl_Position = uModel * vec4(aPos, 0.0, 1.0); }\n";
 
+// Fragment shader: solid color via uniform
 static const char *frag_src =
     "#version 120\n"
-    "varying vec3 vColor;\n"
-    "void main() {\n"
-    "    gl_FragColor = vec4(vColor, 1.0);\n"
-    "}\n";
+    "uniform vec4 uColor;\n"
+    "void main() { gl_FragColor = uColor; }\n";
 
 static GLuint compile_shader(
     PFNGLCREATESHADERPROC     glCreateShader,
@@ -100,17 +102,6 @@ static GLuint compile_shader(
         return 0;
     }
     return id;
-}
-
-// Column-major orthographic projection (simple)
-static void ortho_mvp(GLfloat m[16])
-{
-    memset(m, 0, 16 * sizeof(GLfloat));
-    // Scale down so the cube fits in clip space
-    m[0]  =  0.5f;
-    m[5]  =  0.5f;
-    m[10] = -0.5f;
-    m[15] =  1.0f;
 }
 
 int main(void)
@@ -145,10 +136,11 @@ int main(void)
     LOAD_PROC(PFNGLATTACHSHADERPROC,          glAttachShader)
     LOAD_PROC(PFNGLLINKPROGRAMPROC,           glLinkProgram)
     LOAD_PROC(PFNGLGETPROGRAMIVPROC,          glGetProgramiv)
+    LOAD_PROC(PFNGLGETPROGRAMINFOLOGPROC,     glGetProgramInfoLog)
     LOAD_PROC(PFNGLUSEPROGRAMPROC,            glUseProgram)
     LOAD_PROC(PFNGLGETUNIFORMLOCATIONPROC,    glGetUniformLocation)
-    LOAD_PROC(PFNGLUNIFORMMATRIX4FVPROC,      glUniformMatrix4fv)
     LOAD_PROC(PFNGLUNIFORM4FPROC,             glUniform4f)
+    LOAD_PROC(PFNGLUNIFORMMATRIX4FVPROC,      glUniformMatrix4fv)
     LOAD_PROC(PFNGLGENBUFFERSPROC,            glGenBuffers)
     LOAD_PROC(PFNGLBINDBUFFERPROC,            glBindBuffer)
     LOAD_PROC(PFNGLBUFFERDATAPROC,            glBufferData)
@@ -163,13 +155,15 @@ int main(void)
     LOAD_PROC(PFNGLDELETEVERTEXARRAYSPROC,    glDeleteVertexArrays)
 
     glViewport(0, 0, 400, 300);
-    glEnable(GL_DEPTH_TEST);
+
+    // Enable culling
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
-    // BUG: GL_CW is set with a comment claiming it matches right-handed coords.
-    // Combined with the -X scale in the model matrix below, this produces
-    // incorrect culling: faces that should be visible are culled.
-    glFrontFace(GL_CW);  // <-- BUG (should be GL_CCW when scale is positive)
+    // BUG: GL_CW front face with a mirrored quad creates a double-negation.
+    // A CCW quad under GL_CW front face is BACK -> culled.
+    // A CCW quad mirrored (-X scale) becomes CW -> front -> visible.
+    // But the non-mirrored quad (Quad B) is incorrectly culled.
+    glFrontFace(GL_CW);  // <-- BUG (should be GL_CCW for standard CCW-wound quads)
 
     GLuint vs = compile_shader(glCreateShader, glShaderSource, glCompileShader,
                                glGetShaderiv, glGetShaderInfoLog,
@@ -186,76 +180,80 @@ int main(void)
     {
         GLint ok = 0;
         glGetProgramiv(prog, GL_LINK_STATUS, &ok);
-        if (!ok) { fprintf(stderr, "Program link error\n"); return 1; }
+        if (!ok) {
+            char log[512];
+            glGetProgramInfoLog(prog, sizeof(log), NULL, log);
+            fprintf(stderr, "Program link error: %s\n", log);
+            return 1;
+        }
     }
     glDeleteShader(vs);
     glDeleteShader(fs);
 
-    GLint locMVP   = glGetUniformLocation(prog, "uMVP");
+    GLint locModel = glGetUniformLocation(prog, "uModel");
+    GLint locColor = glGetUniformLocation(prog, "uColor");
     GLint locPos   = glGetAttribLocation(prog,  "aPos");
-    GLint locColor = glGetAttribLocation(prog,  "aColor");
 
-    // Cube: 6 faces * 2 triangles = 12 tris, 36 vertices (not indexed for clarity)
-    // Each vertex: pos(3) + color(3)
-    // Winding is CCW when viewed from outside (standard)
-#define FACE(ax,ay,az,bx,by,bz,cx,cx2,cz,dx,dy,dz,r,g,b) \
-        ax,ay,az,r,g,b,  bx,by,bz,r,g,b,  cx,cx2,cz,r,g,b, \
-        ax,ay,az,r,g,b,  cx,cx2,cz,r,g,b, dx,dy,dz,r,g,b
-    static const GLfloat verts[] = {
-        // front  (+Z)   CCW from front: BL,BR,TR, BL,TR,TL
-        -1,-1, 1, 1,0,0,   1,-1, 1, 1,0,0,   1, 1, 1, 1,0,0,
-        -1,-1, 1, 1,0,0,   1, 1, 1, 1,0,0,  -1, 1, 1, 1,0,0,
-        // back   (-Z)
-        -1,-1,-1, 0,1,0,  -1, 1,-1, 0,1,0,   1, 1,-1, 0,1,0,
-        -1,-1,-1, 0,1,0,   1, 1,-1, 0,1,0,   1,-1,-1, 0,1,0,
-        // left   (-X)
-        -1,-1,-1, 0,0,1,  -1,-1, 1, 0,0,1,  -1, 1, 1, 0,0,1,
-        -1,-1,-1, 0,0,1,  -1, 1, 1, 0,0,1,  -1, 1,-1, 0,0,1,
-        // right  (+X)
-         1,-1,-1, 1,1,0,   1, 1,-1, 1,1,0,   1, 1, 1, 1,1,0,
-         1,-1,-1, 1,1,0,   1, 1, 1, 1,1,0,   1,-1, 1, 1,1,0,
-        // top    (+Y)
-        -1, 1,-1, 1,0,1,  -1, 1, 1, 1,0,1,   1, 1, 1, 1,0,1,
-        -1, 1,-1, 1,0,1,   1, 1, 1, 1,0,1,   1, 1,-1, 1,0,1,
-        // bottom (-Y)
-        -1,-1,-1, 0,1,1,   1,-1,-1, 0,1,1,   1,-1, 1, 0,1,1,
-        -1,-1,-1, 0,1,1,   1,-1, 1, 0,1,1,  -1,-1, 1, 0,1,1,
+    // A single quad geometry centered at origin, spanning [-0.8,0.8]x[-0.8,0.8]
+    // Vertices wound CCW (standard): BL, BR, TR, BL, TR, TL
+    static const GLfloat quad_verts[] = {
+        -0.8f, -0.8f,
+         0.8f, -0.8f,
+         0.8f,  0.8f,
+        -0.8f, -0.8f,
+         0.8f,  0.8f,
+        -0.8f,  0.8f,
     };
-#undef FACE
 
     GLuint vao, vbo;
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
-
-    GLsizei stride = 6 * sizeof(GLfloat);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quad_verts), quad_verts, GL_STATIC_DRAW);
     glEnableVertexAttribArray((GLuint)locPos);
-    glVertexAttribPointer((GLuint)locPos, 3, GL_FLOAT, GL_FALSE, stride, (void *)0);
-    glEnableVertexAttribArray((GLuint)locColor);
-    glVertexAttribPointer((GLuint)locColor, 3, GL_FLOAT, GL_FALSE, stride,
-                          (void *)(3 * sizeof(GLfloat)));
+    glVertexAttribPointer((GLuint)locPos, 2, GL_FLOAT, GL_FALSE,
+                          2 * sizeof(GLfloat), (void *)0);
 
-    // BUG: negative X scale mirrors the cube, flipping winding CCW->CW in clip space
-    // Combined with glFrontFace(GL_CW) above, the two errors interact:
-    //   - Mirroring makes original-front-faces have CW winding
-    //   - GL_CW says CW is front, so they ARE treated as front -> not culled
-    //   - But the original-back-faces now have CCW winding -> treated as back -> culled
-    //   Net effect: the "front" in world space shows, but it's the mirrored geometry.
-    //   Some faces are doubly-wrong and appear inside-out.
-    GLfloat mvp[16];
-    ortho_mvp(mvp);
-    mvp[0] = -mvp[0];  // negative X scale to mirror  <-- BUG (paired with GL_CW)
+    // Model A: translate left and apply negative X scale (mirror) -- column-major identity
+    // Scale X by -1 to mirror: flips CCW -> CW in clip space.
+    // With GL_CW as front, mirrored CW quad IS front-facing -> rendered.
+    GLfloat model_a[16];
+    memset(model_a, 0, sizeof(model_a));
+    model_a[0]  = -0.45f;  // negative X scale: mirror + half-width to fit left half
+    model_a[5]  =  0.9f;
+    model_a[10] =  1.0f;
+    model_a[12] = -0.5f;   // translate left
+    model_a[15] =  1.0f;
+
+    // Model B: translate right, no mirroring (positive X scale).
+    // CCW vertices in NDC with GL_CW front face -> treated as back -> CULLED.
+    GLfloat model_b[16];
+    memset(model_b, 0, sizeof(model_b));
+    model_b[0]  =  0.45f;  // positive X scale: no mirror
+    model_b[5]  =  0.9f;
+    model_b[10] =  1.0f;
+    model_b[12] =  0.5f;   // translate right
+    model_b[15] =  1.0f;
 
     for (int frame = 0; frame < 5; frame++) {
-        glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+        glClearColor(0.05f, 0.15f, 0.05f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(prog);
-        glUniformMatrix4fv(locMVP, 1, GL_FALSE, mvp);
         glBindVertexArray(vao);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        // Quad A (left): mirrored (-X scale) -> CW in clip space -> front face visible
+        // Two bugs cancel: neg scale makes it CW, GL_CW says CW is front -> renders
+        glUniformMatrix4fv(locModel, 1, GL_FALSE, model_a);
+        glUniform4f(locColor, 0.1f, 0.9f, 0.2f, 1.0f);  // green
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        // Quad B (right): not mirrored, CCW in NDC.
+        // GL_CW front face: CCW is treated as back-facing -> CULLED (invisible).
+        glUniformMatrix4fv(locModel, 1, GL_FALSE, model_b);
+        glUniform4f(locColor, 0.9f, 0.1f, 0.9f, 1.0f);  // magenta
+        glDrawArrays(GL_TRIANGLES, 0, 6);
 
         glXSwapBuffers(dpy, win);
     }
