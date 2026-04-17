@@ -10,6 +10,35 @@ from typing import Optional
 from gla.eval.scenario import ScenarioMetadata
 
 
+def _capture_via_rest(base_url: str, token: str) -> dict:
+    """Fetch the latest captured framebuffer + metadata via REST."""
+    import base64
+    import json
+    import urllib.request
+
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+
+    def _get(path):
+        req = urllib.request.Request(base_url + path, headers=headers)
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return r.read()
+
+    fb_resp = json.loads(_get("/api/v1/frames/current/framebuffer"))
+    png_b64 = fb_resp.get("image_base64", "")
+    fb = base64.b64decode(png_b64) if png_b64 else b""
+
+    overview = json.loads(_get("/api/v1/frames/current/overview"))
+    drawcalls = json.loads(_get("/api/v1/frames/current/drawcalls?limit=200&offset=0"))
+
+    return {
+        "framebuffer_png": fb,
+        "metadata": {
+            "draw_call_count": overview.get("draw_call_count", 0),
+            "draw_calls": drawcalls.get("items", []),
+        },
+    }
+
+
 class ScenarioRunner:
     """Compiles and runs eval scenarios under GLA capture.
 
@@ -113,6 +142,37 @@ class ScenarioRunner:
     def read_source(self, scenario: ScenarioMetadata) -> str:
         """Read and return the scenario C source code."""
         return Path(scenario.source_path).read_text(encoding="utf-8")
+
+    def build_and_capture(self, scenario_id: str) -> dict:
+        """Build the scenario via Bazel, run it under Xvfb with GLA shim, capture frame.
+
+        Returns a dict with keys:
+          - framebuffer_png: bytes of the captured PNG
+          - metadata: dict with draw_call_count and draw_calls
+        """
+        # 1. Build
+        subprocess.run(
+            [self._bazel, "build", f"//tests/eval:{scenario_id}"],
+            cwd=str(self._repo_root),
+            check=True,
+        )
+
+        # 2. Run under Xvfb with the shim
+        bin_path = Path(self._repo_root) / "bazel-bin" / "tests" / "eval" / scenario_id
+        env = {
+            "DISPLAY": ":99",
+            "LD_PRELOAD": str(self._shim_path),
+            "GLA_TOKEN": self._token,
+        }
+        proc = subprocess.Popen(
+            ["xvfb-run", "-a", str(bin_path)],
+            env=env,
+        )
+        try:
+            return _capture_via_rest(self._base_url, self._token)
+        finally:
+            proc.terminate()
+            proc.wait(timeout=5)
 
     # ------------------------------------------------------------------
     # Helpers
