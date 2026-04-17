@@ -17,6 +17,11 @@ class AgentResult:
     num_turns: int
     time_seconds: float
     conversation: list       # full message history for debugging
+    # Strategy tracking — which tools were called and in what order
+    tool_sequence: list = field(default_factory=list)  # ["read_source_file", "query_pixel", ...]
+    pixel_queries: int = 0       # how many times query_pixel was called
+    state_queries: int = 0       # inspect_drawcall + query_scene calls
+    framebuffer_first: bool = False  # did agent query pixels before inspecting state?
 
 
 class GlaToolExecutor:
@@ -311,6 +316,7 @@ class EvalAgent:
         total_input_tokens = 0
         total_output_tokens = 0
         tool_call_count = 0
+        tool_sequence = []
         num_turns = 0
         start_time = time.time()
         conversation = []
@@ -351,6 +357,7 @@ class EvalAgent:
                     tool_call_count += 1
                     tool_name = block.name
                     tool_input = block.input
+                    tool_sequence.append(tool_name)
 
                     if tool_name == "read_source_file":
                         result = source_code
@@ -381,6 +388,18 @@ class EvalAgent:
             if hasattr(block, "text"):
                 diagnosis += block.text
 
+        # Analyze strategy
+        pixel_queries = tool_sequence.count("query_pixel")
+        state_queries = tool_sequence.count("inspect_drawcall") + tool_sequence.count("query_scene")
+        # Did agent query pixels before ever inspecting structured state?
+        fb_first = False
+        for t in tool_sequence:
+            if t == "query_pixel":
+                fb_first = True
+                break
+            if t in ("inspect_drawcall", "query_scene"):
+                break
+
         return AgentResult(
             diagnosis=diagnosis,
             input_tokens=total_input_tokens,
@@ -390,45 +409,37 @@ class EvalAgent:
             num_turns=num_turns,
             time_seconds=elapsed,
             conversation=conversation,
+            tool_sequence=tool_sequence,
+            pixel_queries=pixel_queries,
+            state_queries=state_queries,
+            framebuffer_first=fb_first,
         )
 
     def _build_system_prompt(self, mode: str) -> str:
         base = (
-            "You are a graphics debugging expert. An OpenGL application has a "
-            "rendering bug. You MUST read the source code first to understand "
-            "what the application intends to do.\n\n"
+            "You are debugging an OpenGL application that has a rendering bug. "
+            "Your goal is to identify the root cause and suggest a fix.\n\n"
         )
         if mode == "with_gla":
             return base + (
-                "You also have access to GLA (Graphics Library for Agents), a "
-                "live debugger that captured the actual rendered state.\n\n"
-                "Available tools:\n"
-                "- read_source_file: Read the application source code (USE THIS FIRST)\n"
+                "You have access to these tools:\n"
+                "- read_source_file: Read the application source code\n"
                 "- query_frame: Get frame overview and draw call list\n"
-                "- inspect_drawcall: Deep dive into a specific draw call's state\n"
-                "- query_pixel: Check pixel color/depth at coordinates\n"
+                "- inspect_drawcall: Inspect a draw call's shader params, "
+                "textures, pipeline state, or vertex data\n"
+                "- query_pixel: Get color/depth at a pixel coordinate\n"
                 "- query_scene: Get camera and object information\n"
                 "- compare_frames: Diff two frames\n\n"
-                "Strategy:\n"
-                "1. Read the source code to understand what SHOULD happen\n"
-                "2. Query GLA to see what ACTUALLY happened at runtime\n"
-                "3. Compare intent vs reality to identify the root cause\n\n"
+                "Use whatever approach you think is best.\n\n"
                 "End your response with:\n"
                 "DIAGNOSIS: <one-sentence root cause>\n"
                 "FIX: <specific code change needed>"
             )
         else:
             return base + (
-                "You have access ONLY to the source code. You must reason about "
-                "what the rendered output would be by mentally simulating the "
-                "OpenGL state machine and rendering pipeline.\n\n"
-                "Available tools:\n"
+                "You have access to these tools:\n"
                 "- read_source_file: Read the application source code\n\n"
-                "Strategy:\n"
-                "1. Read the source code thoroughly\n"
-                "2. Trace the GL state (bindings, enables, uniforms) through "
-                "each draw call\n"
-                "3. Identify where the state or output diverges from intent\n\n"
+                "Use whatever approach you think is best.\n\n"
                 "End your response with:\n"
                 "DIAGNOSIS: <one-sentence root cause>\n"
                 "FIX: <specific code change needed>"

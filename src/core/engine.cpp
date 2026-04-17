@@ -241,7 +241,9 @@ void Engine::handle_frame_ready(int /*client_fd*/, uint64_t frame_id,
 void Engine::ingest_frame(const void* shm_data, uint64_t data_size,
                            uint64_t frame_id) {
     store::RawFrame frame{};
-    frame.frame_id  = frame_id;
+    // Use engine-assigned monotonic ID to avoid collisions across shim connections
+    frame.frame_id  = next_frame_id_.fetch_add(1);
+    (void)frame_id;  // shim's frame_id ignored
     frame.api_type  = 0; // GL
 
     // Record a monotonic timestamp

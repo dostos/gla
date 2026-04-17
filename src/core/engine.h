@@ -56,6 +56,7 @@ private:
     std::vector<int> client_fds_;
     std::string socket_path_;
     std::string shm_name_;
+    std::atomic<uint64_t> next_frame_id_{1};  // monotonic engine-assigned frame ID
 };
 
 } // namespace gla

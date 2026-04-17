@@ -217,15 +217,15 @@ TEST_F(EngineTest, DrawCallRoundTrip) {
     shm_client->commit_write(wslot.index, payload.size());
     ASSERT_TRUE(client.send_frame_ready(/*frame_id=*/77, wslot.index));
 
-    // Wait for the engine to process the frame
+    // Wait for the engine to process the frame (engine assigns its own ID)
     for (int i = 0; i < 200; ++i) {
-        const gla::store::RawFrame* f = engine_->frame_store().get(77);
+        const gla::store::RawFrame* f = engine_->frame_store().latest();
         if (f && !f->draw_calls.empty()) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
-    const gla::store::RawFrame* frame = engine_->frame_store().get(77);
-    ASSERT_NE(frame, nullptr) << "Frame 77 not found in store";
+    const gla::store::RawFrame* frame = engine_->frame_store().latest();
+    ASSERT_NE(frame, nullptr) << "No frame found in store";
 
     // Pixel buffers
     EXPECT_EQ(frame->fb_width,  W);
