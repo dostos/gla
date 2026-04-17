@@ -29,9 +29,9 @@ def build_debug_group_tree(draw_calls) -> DebugGroupNode:
         # Support both objects and dicts
         dc_id = dc.id if hasattr(dc, 'id') else dc.get('id', 0)
         path = (
-            getattr(dc, 'debug_group_path', '')
-            if hasattr(dc, 'debug_group_path')
-            else dc.get('debug_group_path', '')
+            dc.get('debug_group_path', '')
+            if isinstance(dc, dict)
+            else getattr(dc, 'debug_group_path', '')
         )
 
         if not path:
