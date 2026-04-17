@@ -57,3 +57,43 @@ def test_color_histogram_in_region_mismatch_outside_region():
         },
     )
     assert result.matched is False
+
+def test_missing_draw_call_match():
+    result = match_signature(
+        image_png=_load("solid_red.png"),
+        signature={"type": "missing_draw_call",
+                   "spec": {"expected_count": 2, "actual_count_key": "draw_call_count"}},
+        metadata={"draw_call_count": 1},
+    )
+    assert result.matched is True
+
+def test_missing_draw_call_mismatch():
+    result = match_signature(
+        image_png=_load("solid_red.png"),
+        signature={"type": "missing_draw_call",
+                   "spec": {"expected_count": 2, "actual_count_key": "draw_call_count"}},
+        metadata={"draw_call_count": 2},
+    )
+    assert result.matched is False
+
+def test_unexpected_state_in_draw():
+    result = match_signature(
+        image_png=_load("solid_red.png"),
+        signature={"type": "unexpected_state_in_draw",
+                   "spec": {"draw_call": 0, "field": "cull_mode",
+                            "expected_value": "BACK", "actual_must_differ": True}},
+        metadata={"draw_calls": [{"id": 0, "pipeline": {"cull_mode": "FRONT"}}]},
+    )
+    assert result.matched is True
+
+def test_nan_or_inf_in_uniform():
+    import math
+    result = match_signature(
+        image_png=_load("solid_red.png"),
+        signature={"type": "nan_or_inf_in_uniform",
+                   "spec": {"draw_call": 0, "uniform": "normalMatrix"}},
+        metadata={"draw_calls": [{"id": 0, "params": [
+            {"name": "normalMatrix", "value": [1.0, float("nan"), 0.0]}
+        ]}]},
+    )
+    assert result.matched is True
