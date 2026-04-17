@@ -61,6 +61,10 @@ typedef struct {
     void (*glReadPixels)(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void* pixels);
     void (*glGetIntegerv)(GLenum pname, GLint* data);
 
+    // Debug groups (GL_KHR_debug)
+    void (*glPushDebugGroup)(GLenum source, GLuint id, GLsizei length, const char* message);
+    void (*glPopDebugGroup)(void);
+
     // GLX
     void (*glXSwapBuffers)(Display* dpy, GLXDrawable drawable);
     __GLXextFuncPtr (*glXGetProcAddressARB)(const unsigned char* procName);

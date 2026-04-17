@@ -49,6 +49,9 @@ void gla_wrappers_init(void) {
     gla_real_gl.glReadPixels   = dlsym(RTLD_NEXT, "glReadPixels");
     gla_real_gl.glGetIntegerv  = dlsym(RTLD_NEXT, "glGetIntegerv");
 
+    gla_real_gl.glPushDebugGroup = dlsym(RTLD_NEXT, "glPushDebugGroup");
+    gla_real_gl.glPopDebugGroup  = dlsym(RTLD_NEXT, "glPopDebugGroup");
+
     gla_real_gl.glXSwapBuffers        = dlsym(RTLD_NEXT, "glXSwapBuffers");
     gla_real_gl.glXGetProcAddressARB  = dlsym(RTLD_NEXT, "glXGetProcAddressARB");
 }
@@ -279,6 +282,24 @@ void glGetIntegerv(GLenum pname, GLint* data) {
 }
 
 /* --------------------------------------------------------------------------
+ * Debug group wrappers (GL_KHR_debug)
+ * -------------------------------------------------------------------------- */
+
+void glPushDebugGroup(GLenum source, GLuint id, GLsizei length, const char* message) {
+    gla_init();
+    if (gla_real_gl.glPushDebugGroup)
+        gla_real_gl.glPushDebugGroup(source, id, length, message);
+    gla_shadow_push_debug_group(&gla_shadow, id, message);
+}
+
+void glPopDebugGroup(void) {
+    gla_init();
+    if (gla_real_gl.glPopDebugGroup)
+        gla_real_gl.glPopDebugGroup();
+    gla_shadow_pop_debug_group(&gla_shadow);
+}
+
+/* --------------------------------------------------------------------------
  * GLX wrappers
  * -------------------------------------------------------------------------- */
 
@@ -328,6 +349,9 @@ static __GLXextFuncPtr gla_resolve_wrapper(const char* name) {
     /* Readback */
     if (strcmp(name, "glReadPixels") == 0)             return (__GLXextFuncPtr)glReadPixels;
     if (strcmp(name, "glGetIntegerv") == 0)            return (__GLXextFuncPtr)glGetIntegerv;
+    /* Debug groups */
+    if (strcmp(name, "glPushDebugGroup") == 0) return (__GLXextFuncPtr)glPushDebugGroup;
+    if (strcmp(name, "glPopDebugGroup") == 0)  return (__GLXextFuncPtr)glPopDebugGroup;
     return (void*)0;
 }
 
