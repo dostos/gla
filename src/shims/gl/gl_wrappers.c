@@ -1,5 +1,7 @@
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <stdio.h>
+#include <string.h>
 #include "gl_wrappers.h"
 #include "shadow_state.h"
 #include "frame_capture.h"
@@ -270,7 +272,57 @@ void glXSwapBuffers(Display* dpy, GLXDrawable drawable) {
     gla_real_gl.glXSwapBuffers(dpy, drawable);
 }
 
+/* Map function names to our wrapper addresses so that apps using
+ * glXGetProcAddress get our interceptors, not the real GL functions. */
+static __GLXextFuncPtr gla_resolve_wrapper(const char* name) {
+    if (!name) return (void*)0;
+    /* Draw calls */
+    if (strcmp(name, "glDrawArrays") == 0)            return (__GLXextFuncPtr)glDrawArrays;
+    if (strcmp(name, "glDrawElements") == 0)           return (__GLXextFuncPtr)glDrawElements;
+    if (strcmp(name, "glDrawArraysInstanced") == 0)    return (__GLXextFuncPtr)glDrawArraysInstanced;
+    if (strcmp(name, "glDrawElementsInstanced") == 0)  return (__GLXextFuncPtr)glDrawElementsInstanced;
+    /* Shader */
+    if (strcmp(name, "glUseProgram") == 0)             return (__GLXextFuncPtr)glUseProgram;
+    if (strcmp(name, "glUniform1f") == 0)              return (__GLXextFuncPtr)glUniform1f;
+    if (strcmp(name, "glUniform3f") == 0)              return (__GLXextFuncPtr)glUniform3f;
+    if (strcmp(name, "glUniform4f") == 0)              return (__GLXextFuncPtr)glUniform4f;
+    if (strcmp(name, "glUniform1i") == 0)              return (__GLXextFuncPtr)glUniform1i;
+    if (strcmp(name, "glUniformMatrix4fv") == 0)       return (__GLXextFuncPtr)glUniformMatrix4fv;
+    if (strcmp(name, "glUniformMatrix3fv") == 0)       return (__GLXextFuncPtr)glUniformMatrix3fv;
+    /* Textures */
+    if (strcmp(name, "glActiveTexture") == 0)          return (__GLXextFuncPtr)glActiveTexture;
+    if (strcmp(name, "glBindTexture") == 0)            return (__GLXextFuncPtr)glBindTexture;
+    /* State */
+    if (strcmp(name, "glEnable") == 0)                 return (__GLXextFuncPtr)glEnable;
+    if (strcmp(name, "glDisable") == 0)                return (__GLXextFuncPtr)glDisable;
+    if (strcmp(name, "glDepthFunc") == 0)              return (__GLXextFuncPtr)glDepthFunc;
+    if (strcmp(name, "glDepthMask") == 0)              return (__GLXextFuncPtr)glDepthMask;
+    if (strcmp(name, "glBlendFunc") == 0)              return (__GLXextFuncPtr)glBlendFunc;
+    if (strcmp(name, "glCullFace") == 0)               return (__GLXextFuncPtr)glCullFace;
+    if (strcmp(name, "glFrontFace") == 0)              return (__GLXextFuncPtr)glFrontFace;
+    if (strcmp(name, "glViewport") == 0)               return (__GLXextFuncPtr)glViewport;
+    if (strcmp(name, "glScissor") == 0)                return (__GLXextFuncPtr)glScissor;
+    /* Buffers */
+    if (strcmp(name, "glBindVertexArray") == 0)        return (__GLXextFuncPtr)glBindVertexArray;
+    if (strcmp(name, "glBindBuffer") == 0)             return (__GLXextFuncPtr)glBindBuffer;
+    if (strcmp(name, "glBindFramebuffer") == 0)        return (__GLXextFuncPtr)glBindFramebuffer;
+    /* Readback */
+    if (strcmp(name, "glReadPixels") == 0)             return (__GLXextFuncPtr)glReadPixels;
+    if (strcmp(name, "glGetIntegerv") == 0)            return (__GLXextFuncPtr)glGetIntegerv;
+    return (void*)0;
+}
+
 __GLXextFuncPtr glXGetProcAddressARB(const unsigned char* procName) {
     gla_init();
+    __GLXextFuncPtr wrapper = gla_resolve_wrapper((const char*)procName);
+    if (wrapper) return wrapper;
+    return gla_real_gl.glXGetProcAddressARB(procName);
+}
+
+/* Also intercept glXGetProcAddress (non-ARB variant) */
+__GLXextFuncPtr glXGetProcAddress(const unsigned char* procName) {
+    gla_init();
+    __GLXextFuncPtr wrapper = gla_resolve_wrapper((const char*)procName);
+    if (wrapper) return wrapper;
     return gla_real_gl.glXGetProcAddressARB(procName);
 }
