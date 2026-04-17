@@ -17,4 +17,5 @@ load("@rules_cc//cc:defs.bzl", "cc_binary")
     "e10_compensating_vp",
     "r1_webgl_backend_instancenode_ubo_exceeds_g",
     "r5_feedback_loop_error_with_transmission_an",
+    "r14_using_quadmesh_with_a_custom_vertexnode_",
 ]]

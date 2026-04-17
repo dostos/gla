@@ -1,16 +1,17 @@
 # GLA Coverage Gaps
 
-*Regenerated: 2026-04-17T16:41:14.085198+00:00*
+*Regenerated: 2026-04-17T22:29:34.365719+00:00*
 
 ## Summary
-- Issues reviewed: 6
-- Scenarios committed: 2
-- Rejected: 4
+- Issues reviewed: 26
+- Scenarios committed: 3
+- Rejected: 23
 
 ## Helpfulness Distribution
 - observed_helps=yes: 0
 - observed_helps=no: 0
-- observed_helps=ambiguous: 2
+- observed_helps=ambiguous: 3
 
 ## Rejection Breakdown
-- out_of_scope_not_rendering_bug: 4
+- out_of_scope_not_rendering_bug: 20
+- out_of_scope_insufficient_info: 3
