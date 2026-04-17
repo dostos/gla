@@ -2,6 +2,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+import yaml
+
 from gla.eval.curation.llm_client import LLMClient
 from gla.eval.curation.prompts import load_prompt
 from gla.eval.curation.triage import IssueThread, TriageResult
@@ -61,3 +63,15 @@ class Draft:
             raise ValueError("Ground Truth Diagnosis section missing")
         if not re.search(r"^>\s+", m.group(1), re.MULTILINE):
             raise ValueError("Ground Truth Diagnosis missing upstream citation (>) blockquote")
+        # Bug Signature must be a well-formed yaml dict with 'type' and 'spec'
+        m_sig = re.search(
+            r"##\s+Bug Signature\s*\n.*?```yaml\s*\n(.+?)\n```",
+            md_body, re.DOTALL | re.IGNORECASE)
+        if not m_sig:
+            raise ValueError("Bug Signature section missing or YAML block absent")
+        try:
+            parsed = yaml.safe_load(m_sig.group(1))
+        except yaml.YAMLError as e:
+            raise ValueError(f"Bug Signature YAML parse failed: {e}")
+        if not isinstance(parsed, dict) or "type" not in parsed or "spec" not in parsed:
+            raise ValueError("Bug Signature must have 'type' and 'spec' keys")
