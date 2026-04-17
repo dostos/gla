@@ -1,0 +1,30 @@
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_shared_library")
+
+cc_shared_library(
+    name = "VkLayer_gla_capture",
+    deps = [":vk_layer_impl"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "vk_layer_impl",
+    srcs = [
+        "gla_layer.c",
+        "vk_dispatch.c",
+        "vk_capture.c",
+        "vk_ipc_client.c",
+    ],
+    hdrs = [
+        "gla_layer.h",
+        "vk_dispatch.h",
+        "vk_capture.h",
+        "vk_ipc_client.h",
+    ],
+    copts = ["-I/usr/include"],
+    linkopts = [
+        "-lrt",
+        "-lpthread",
+    ],
+    deps = ["//src/core:ipc"],
+    visibility = ["//visibility:public"],
+)

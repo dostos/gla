@@ -1,0 +1,11 @@
+{
+    "file_format_version": "1.0.0",
+    "layer": {
+        "name": "VK_LAYER_GLA_capture",
+        "type": "GLOBAL",
+        "library_path": "./libVkLayer_gla_capture.so",
+        "api_version": "1.0.0",
+        "implementation_version": "1",
+        "description": "GLA frame capture layer for graphics debugging"
+    }
+}
