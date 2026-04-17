@@ -78,9 +78,8 @@ def test_parser_extracts_new_sections(tmp_path):
     assert s.predicted_helps_reasoning.startswith("The binding")
 
 
-def test_parser_backward_compatible_with_e1(monkeypatch):
+def test_parser_backward_compatible_with_e1():
     """Existing E1-E10 scenarios still parse (new fields default to None)."""
-    from pathlib import Path
     eval_dir = Path(__file__).parent.parent / "eval"
     loader = ScenarioLoader(eval_dir=str(eval_dir))
     s = loader.load("e1_state_leak")

@@ -87,6 +87,7 @@ _extract_key_value_bullets = parse_key_value_bullets
 
 
 def _extract_yaml_block(text: str) -> Optional[dict]:
+    """Extract the first ```yaml ... ``` fenced block and parse it, or return None."""
     m = re.search(r"```yaml\n(.+?)\n```", text, re.DOTALL)
     if not m:
         return None
