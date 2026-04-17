@@ -78,6 +78,20 @@ def test_parser_extracts_new_sections(tmp_path):
     assert s.predicted_helps_reasoning.startswith("The binding")
 
 
+def test_load_all_includes_real_world_scenarios(tmp_path):
+    """load_all discovers both e-prefixed and r-prefixed scenarios via glob."""
+    for prefix in ("e1_test", "r1_test"):
+        (tmp_path / f"{prefix}.md").write_text(
+            f"# {prefix}\n## Bug\nbug\n## Ground Truth Diagnosis\ngt"
+        )
+        (tmp_path / f"{prefix}.c").write_text("int main(){}")
+
+    loader = ScenarioLoader(eval_dir=str(tmp_path))
+    ids = [s.id for s in loader.load_all()]
+    assert "e1_test" in ids
+    assert "r1_test" in ids
+
+
 def test_parser_backward_compatible_with_e1():
     """Existing E1-E10 scenarios still parse (new fields default to None)."""
     eval_dir = Path(__file__).parent.parent / "eval"
