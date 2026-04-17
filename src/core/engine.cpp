@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstring>
 #include <ctime>
+#include <stdexcept>
 #include <vector>
 
 namespace gla {
@@ -76,49 +77,86 @@ void Engine::run() {
     running_.store(true, std::memory_order_relaxed);
 
     while (running_.load(std::memory_order_relaxed)) {
-        // Build pollfd array: server socket + all client fds
-        std::vector<struct pollfd> pfds;
-        pfds.reserve(1 + client_fds_.size());
+        try {
+            // Build pollfd array: server socket + all client fds
+            std::vector<struct pollfd> pfds;
+            pfds.reserve(1 + client_fds_.size());
 
-        struct pollfd server_pfd{};
-        server_pfd.fd     = socket_->fd();
-        server_pfd.events = POLLIN;
-        pfds.push_back(server_pfd);
+            struct pollfd server_pfd{};
+            server_pfd.fd     = socket_->fd();
+            server_pfd.events = POLLIN;
+            pfds.push_back(server_pfd);
 
-        for (int fd : client_fds_) {
-            struct pollfd pfd{};
-            pfd.fd     = fd;
-            pfd.events = POLLIN;
-            pfds.push_back(pfd);
-        }
+            for (int fd : client_fds_) {
+                struct pollfd pfd{};
+                pfd.fd     = fd;
+                pfd.events = POLLIN;
+                pfds.push_back(pfd);
+            }
 
-        int ret = ::poll(pfds.data(), static_cast<nfds_t>(pfds.size()), 100 /*ms*/);
+            int ret = ::poll(pfds.data(), static_cast<nfds_t>(pfds.size()), 100 /*ms*/);
 
-        if (ret < 0) {
-            if (errno == EINTR) continue;
-            break; // unexpected error — stop loop
-        }
+            if (ret < 0) {
+                if (errno == EINTR) continue;
+                fprintf(stderr, "[GLA Engine] poll() error: %s\n", strerror(errno));
+                break; // unexpected error — stop loop
+            }
 
-        // Check server socket for new connections
-        if (pfds[0].revents & POLLIN) {
-            accept_connections();
-        }
-
-        // Check client fds — iterate backwards so we can erase cleanly
-        for (int i = static_cast<int>(client_fds_.size()) - 1; i >= 0; --i) {
-            auto& pfd = pfds[1 + i];
-            if (pfd.revents & (POLLIN | POLLHUP | POLLERR)) {
-                process_client_messages(client_fds_[i]);
-                // If the fd was closed/erased, remove it
-                if (client_fds_[i] < 0) {
-                    client_fds_.erase(client_fds_.begin() + i);
+            // Check server socket for new connections
+            if (pfds[0].revents & POLLIN) {
+                try {
+                    accept_connections();
+                } catch (const std::exception& e) {
+                    fprintf(stderr, "[GLA Engine] Error in accept_connections(): %s\n", e.what());
+                } catch (...) {
+                    fprintf(stderr, "[GLA Engine] Unknown error in accept_connections()\n");
                 }
             }
-        }
 
-        // Send pending control commands to shim clients
-        send_control_to_clients();
+            // Check client fds — iterate backwards so we can erase cleanly
+            for (int i = static_cast<int>(client_fds_.size()) - 1; i >= 0; --i) {
+                // Guard against fds that were marked bad during this iteration
+                if (client_fds_[i] < 0) {
+                    client_fds_.erase(client_fds_.begin() + i);
+                    continue;
+                }
+                auto& pfd = pfds[1 + i];
+                if (pfd.revents & (POLLIN | POLLHUP | POLLERR)) {
+                    try {
+                        process_client_messages(client_fds_[i]);
+                    } catch (const std::exception& e) {
+                        fprintf(stderr, "[GLA Engine] Error in process_client_messages(fd=%d): %s\n",
+                                client_fds_[i], e.what());
+                        // Close and mark fd bad so it gets cleaned up below
+                        if (client_fds_[i] >= 0) {
+                            ::close(client_fds_[i]);
+                            client_fds_[i] = -1;
+                        }
+                    } catch (...) {
+                        fprintf(stderr, "[GLA Engine] Unknown error in process_client_messages(fd=%d)\n",
+                                client_fds_[i]);
+                        if (client_fds_[i] >= 0) {
+                            ::close(client_fds_[i]);
+                            client_fds_[i] = -1;
+                        }
+                    }
+                    // If the fd was closed/erased, remove it
+                    if (client_fds_[i] < 0) {
+                        client_fds_.erase(client_fds_.begin() + i);
+                    }
+                }
+            }
+
+            // Send pending control commands to shim clients
+            send_control_to_clients();
+        } catch (const std::exception& e) {
+            fprintf(stderr, "[GLA Engine] Error in run loop: %s\n", e.what());
+        } catch (...) {
+            fprintf(stderr, "[GLA Engine] Unknown error in run loop\n");
+        }
     }
+
+    running_.store(false, std::memory_order_relaxed);
 }
 
 // ---------------------------------------------------------------------------

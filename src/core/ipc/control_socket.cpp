@@ -152,6 +152,9 @@ bool ControlSocketServer::read_message(int client_fd,
 
     uint32_t length = ntohl(length_be);
     if (length < 1) return false;
+    // Sanity limit: reject messages larger than 256 MiB to prevent bad_alloc
+    // from a malformed or truncated length header.
+    if (length > 256u * 1024u * 1024u) return false;
 
     // After getting the length header, read the rest (type + payload) blocking
     // by temporarily making it blocking for the rest of this call.
