@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 from pathlib import Path
 from gla.eval.curation.validate import Validator, ValidationResult
 from gla.eval.curation.draft import DraftResult
+from gla.eval.curation.llm_client import LLMResponse
 
 def test_validator_builds_runs_and_signature_matches(tmp_path):
     scenario_id = "r_test_ok"
@@ -82,3 +83,39 @@ def test_validator_fails_on_signature_mismatch(tmp_path):
     result = v.validate(draft)
     assert result.ok is False
     assert "did not match" in result.reason
+
+
+def test_validator_uses_llm_fallback_on_ambiguous(tmp_path):
+    # Arrange: a signature type that returns ambiguous
+    llm = MagicMock()
+    llm.complete.return_value = LLMResponse(
+        text='```json\n{"matches": true, "reason": "looks right"}\n```',
+        input_tokens=0, output_tokens=0,
+        cache_creation_input_tokens=0, cache_read_input_tokens=0,
+        stop_reason="end_turn",
+    )
+    # Use a signature of type unknown_x which the matcher reports ambiguous for
+    md_body = (
+        "# R_X\n## Bug\nb\n## Expected Correct Output\ne\n"
+        "## Actual Broken Output\na\n## Ground Truth Diagnosis\n> q\nd\n"
+        "## Difficulty Rating\n3/5\n## Adversarial Principles\n- p\n"
+        "## How GLA Helps\nh\n## Source\n- **URL**: https://x/1\n"
+        "## Tier\ncore\n## API\nopengl\n## Framework\nnone\n"
+        "## Bug Signature\n```yaml\ntype: unknown_custom\nspec: {}\n```\n"
+        "## Predicted GLA Helpfulness\n- **Verdict**: yes\n- **Reasoning**: r\n"
+    )
+    draft = DraftResult(scenario_id="r_x",
+                         c_source="// SOURCE: https://x/1\nint main(){}",
+                         md_body=md_body)
+    red_png = Path(__file__).parent.joinpath(
+        "fixtures/curation/framebuffers/solid_red.png").read_bytes()
+    fake_runner = MagicMock()
+    fake_runner.build_and_capture.return_value = {
+        "framebuffer_png": red_png,
+        "metadata": {},
+    }
+    from gla.eval.curation.validate import Validator
+    v = Validator(eval_dir=tmp_path, runner=fake_runner, llm_fallback=llm)
+    result = v.validate(draft)
+    assert result.ok is True
+    assert "LLM fallback" in result.reason
