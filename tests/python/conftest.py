@@ -1,14 +1,16 @@
 """Shared pytest fixtures for GLA REST API tests.
 
 All C++ (_gla_core) types are mocked — no native extension needed at test time.
+The test fixtures now construct a NativeBackend around mock objects, so the
+routes exercise the full provider-based code path.
 """
-import base64
 from unittest.mock import MagicMock
 
 import pytest
 from starlette.testclient import TestClient
 
 from gla.api.app import create_app
+from gla.backends.native import NativeBackend
 
 AUTH_TOKEN = "test-token"
 AUTH_HEADERS = {"Authorization": f"Bearer {AUTH_TOKEN}"}
@@ -44,6 +46,9 @@ def _make_drawcall(dc_id: int = 0, frame_id: int = 1) -> MagicMock:
     dc.index_count = 0
     dc.shader_id = 7
     ps = MagicMock()
+    ps.viewport = (0, 0, 800, 600)
+    ps.scissor = (0, 0, 800, 600)
+    ps.scissor_enabled = False
     ps.blend_enabled = False
     ps.blend_src = "ONE"
     ps.blend_dst = "ZERO"
@@ -146,9 +151,9 @@ def mock_engine() -> MagicMock:
 @pytest.fixture
 def client(mock_query_engine, mock_engine) -> TestClient:
     """TestClient with Bearer token pre-configured."""
+    provider = NativeBackend(mock_query_engine, engine=mock_engine)
     app = create_app(
-        query_engine=mock_query_engine,
-        engine=mock_engine,
+        provider=provider,
         auth_token=AUTH_TOKEN,
     )
     return TestClient(app, raise_server_exceptions=True)

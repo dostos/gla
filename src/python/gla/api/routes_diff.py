@@ -54,8 +54,8 @@ def compare_frames(
             detail=f"Invalid depth '{depth}'. Must be one of: {sorted(_VALID_DEPTHS)}",
         )
 
-    qe = request.app.state.query_engine
-    result = qe.compare_frames(frame_a, frame_b, depth)
+    provider = request.app.state.provider
+    result = provider.compare_frames(frame_a, frame_b, depth)
     if result is None:
         raise HTTPException(
             status_code=404,

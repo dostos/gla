@@ -5,6 +5,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from gla.api.app import create_app
+from gla.backends.native import NativeBackend
 
 AUTH_TOKEN = "test-token"
 AUTH_HEADERS = {"Authorization": f"Bearer {AUTH_TOKEN}"}
@@ -83,9 +84,9 @@ def _make_client(quality: str = "full", has_camera: bool = True,
                  has_frame: bool = True) -> TestClient:
     qe = _make_query_engine(has_frame=has_frame)
     rec = _make_reconstructor(quality, has_camera)
+    provider = NativeBackend(qe, scene_reconstructor=rec)
     app = create_app(
-        query_engine=qe,
-        scene_reconstructor=rec,
+        provider=provider,
         auth_token=AUTH_TOKEN,
     )
     return TestClient(app, raise_server_exceptions=True)

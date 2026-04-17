@@ -17,6 +17,11 @@ import threading
 
 def main():
     parser = argparse.ArgumentParser(description="GLA Engine + REST API")
+    parser.add_argument("--backend", default="native",
+                        choices=["native", "renderdoc"],
+                        help="Capture backend to use (default: native)")
+    parser.add_argument("--capture-file", default=None,
+                        help="Path to a .rdc capture file (renderdoc backend only)")
     parser.add_argument("--socket", default="/tmp/gla.sock",
                         help="Unix socket path for shim connections")
     parser.add_argument("--shm", default="/gla_capture",
@@ -33,34 +38,52 @@ def main():
 
     token = args.token or secrets.token_urlsafe(32)
 
-    # Import C++ bindings
-    import _gla_core
+    if args.backend == "native":
+        # Import C++ bindings
+        import _gla_core
 
-    # Create engine
-    engine = _gla_core.Engine(args.socket, args.shm, args.shm_slots, args.slot_size)
+        # Create engine
+        engine = _gla_core.Engine(args.socket, args.shm, args.shm_slots, args.slot_size)
 
-    # Start engine in background thread
-    engine_thread = threading.Thread(target=engine.run, daemon=True, name="gla-engine")
-    engine_thread.start()
+        # Start engine in background thread
+        engine_thread = threading.Thread(target=engine.run, daemon=True, name="gla-engine")
+        engine_thread.start()
 
-    # Create query engine
-    normalizer = _gla_core.Normalizer()
-    qe = _gla_core.QueryEngine(engine.frame_store(), normalizer)
+        # Create query engine
+        normalizer = _gla_core.Normalizer()
+        qe = _gla_core.QueryEngine(engine.frame_store(), normalizer)
+
+        from gla.backends.native import NativeBackend
+        provider = NativeBackend(qe, engine=engine)
+
+    elif args.backend == "renderdoc":
+        if not args.capture_file:
+            parser.error("--capture-file is required for the renderdoc backend")
+
+        from gla.backends.renderdoc import RenderDocBackend
+        provider = RenderDocBackend(args.capture_file)
+        engine = None
+        engine_thread = None
+
+    else:
+        raise ValueError(f"Unknown backend: {args.backend}")
 
     # Create FastAPI app
     from gla.api.app import create_app
-    app = create_app(qe, engine=engine, auth_token=token)
+    app = create_app(provider=provider, auth_token=token)
 
     # Print connection info
-    print(f"GLA_SOCKET_PATH={args.socket}")
-    print(f"GLA_SHM_NAME={args.shm}")
+    if args.backend == "native":
+        print(f"GLA_SOCKET_PATH={args.socket}")
+        print(f"GLA_SHM_NAME={args.shm}")
     print(f"GLA_AUTH_TOKEN={token}")
     print(f"GLA listening on http://127.0.0.1:{args.port}")
     sys.stdout.flush()
 
     # Handle SIGTERM gracefully
     def shutdown(sig, frame):
-        engine.stop()
+        if engine is not None:
+            engine.stop()
         sys.exit(0)
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
@@ -69,8 +92,10 @@ def main():
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
 
-    engine.stop()
-    engine_thread.join(timeout=5)
+    if engine is not None:
+        engine.stop()
+    if engine_thread is not None:
+        engine_thread.join(timeout=5)
 
 if __name__ == "__main__":
     main()
