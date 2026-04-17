@@ -453,3 +453,68 @@ class EvalAgent:
             f"Please investigate and identify the root cause of the rendering bug. "
             f"End with DIAGNOSIS and FIX."
         )
+
+
+# ---------------------------------------------------------------------------
+# Factory: default agent_fn for EvalHarness
+# ---------------------------------------------------------------------------
+
+
+def build_agent_fn(
+    model: str = "claude-sonnet-4-20250514",
+    max_turns: int = 20,
+    api_key: str = None,
+):
+    """Return the default agent_fn used by EvalHarness.
+
+    The returned callable has signature
+        (scenario, mode, tools) ->
+            (diagnosis_text, input_tokens, output_tokens,
+             tool_calls, num_turns, time_seconds)
+    matching `gla.eval.harness.AgentFn`.
+
+    In "with_gla" mode the agent is given the full GLA tool set plus the
+    source reader and is driven by a `GlaToolExecutor` pointed at the
+    captured frame. In "code_only" mode the agent only has `read_source_file`.
+    """
+    import os
+
+    def agent_fn(scenario, mode: str, tools: dict):
+        agent = EvalAgent(model=model, api_key=api_key, max_turns=max_turns)
+
+        source_code = tools["read_source"]()
+        description = getattr(scenario, "description", "") or getattr(
+            scenario, "bug_description", ""
+        )
+        source_path = getattr(scenario, "source_path", "")
+
+        if mode == "with_gla":
+            frame_id = tools["run_with_capture"]()
+            executor = GlaToolExecutor(
+                base_url=os.environ.get("GLA_BASE_URL", "http://127.0.0.1:18080"),
+                token=os.environ.get("GLA_TOKEN", ""),
+                frame_id=frame_id,
+            )
+            result = agent.run_with_gla(
+                scenario_description=description,
+                source_code=source_code,
+                source_path=source_path,
+                tool_executor=executor,
+            )
+        else:
+            result = agent.run_code_only(
+                scenario_description=description,
+                source_code=source_code,
+                source_path=source_path,
+            )
+
+        return (
+            result.diagnosis,
+            result.input_tokens,
+            result.output_tokens,
+            result.tool_calls,
+            result.num_turns,
+            result.time_seconds,
+        )
+
+    return agent_fn

@@ -73,6 +73,25 @@ class ScenarioRunner:
             else:
                 self._repo_root = Path.cwd()
 
+    @classmethod
+    def from_env(cls) -> "ScenarioRunner":
+        """Construct a ScenarioRunner from environment variables.
+
+        Reads:
+          - GLA_BASE_URL (default: http://127.0.0.1:18080)
+          - GLA_TOKEN    (default: empty)
+          - GLA_SHIM_PATH (default: empty)
+          - BAZEL         (default: bazel)
+          - GLA_REPO_ROOT (default: None, auto-detect)
+        """
+        return cls(
+            gla_base_url=os.environ.get("GLA_BASE_URL", "http://127.0.0.1:18080"),
+            gla_token=os.environ.get("GLA_TOKEN", ""),
+            shim_path=os.environ.get("GLA_SHIM_PATH", ""),
+            bazel_bin=os.environ.get("BAZEL", "bazel"),
+            repo_root=os.environ.get("GLA_REPO_ROOT"),
+        )
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------

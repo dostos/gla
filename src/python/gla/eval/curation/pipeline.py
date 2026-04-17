@@ -9,6 +9,7 @@ For each discovered candidate, the pipeline runs:
 """
 from __future__ import annotations
 
+import argparse
 import re
 from pathlib import Path
 from typing import Callable, Optional
@@ -244,3 +245,94 @@ class CurationPipeline:
                 f"- **Details**: {failure_details or ''}\n"
             )
         return md_body.rstrip() + "\n" + obs_section
+
+
+# ---------------------------------------------------------------------------
+# CLI entry point
+# ---------------------------------------------------------------------------
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments for the curation pipeline."""
+    parser = argparse.ArgumentParser(
+        description="GLA eval-set curation pipeline",
+    )
+    parser.add_argument("--eval-dir", default="tests/eval")
+    parser.add_argument("--workdir", default=".eval-pipeline")
+    parser.add_argument(
+        "--log", default="docs/superpowers/eval/coverage-log.jsonl"
+    )
+    parser.add_argument(
+        "--summary", default="docs/superpowers/eval/coverage-gaps.md"
+    )
+    parser.add_argument("--batch-quota", type=int, default=20)
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Run discovery + triage only; do not draft/validate/commit",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry point. Constructs real stage instances and runs a batch."""
+    args = parse_args(argv)
+
+    # Imports kept inside main() so `--help` / module import does not need
+    # network-capable deps (e.g. anthropic) to load.
+    from gla.eval.curation.llm_client import LLMClient
+    from gla.eval.curation.discover import (
+        GitHubSearch,
+        Discoverer,
+        DEFAULT_QUERIES,
+    )
+    from gla.eval.curation.triage import Triage, fetch_issue_thread
+    from gla.eval.curation.draft import Draft
+    from gla.eval.curation.validate import Validator
+    from gla.eval.curation.run_eval import RunEval
+    from gla.eval.curation.classify import attribute_failure_mode
+    from gla.eval.harness import EvalHarness
+    from gla.eval.runner import ScenarioRunner
+    from gla.eval.llm_agent import build_agent_fn
+
+    llm = LLMClient.from_env()
+    log = CoverageLog(args.log)
+    disc = Discoverer(
+        search=GitHubSearch(),
+        coverage_log=log,
+        queries=DEFAULT_QUERIES,
+        batch_quota=args.batch_quota,
+    )
+    triager = Triage(llm_client=llm)
+    drafter = Draft(llm_client=llm)
+
+    # Shared ScenarioRunner for Validator + RunEval.
+    runner = ScenarioRunner.from_env()
+    validator = Validator(eval_dir=args.eval_dir, runner=runner)
+
+    harness = EvalHarness(config={"eval_dir": args.eval_dir})
+    agent_fn = build_agent_fn()
+    run_eval = RunEval(harness=harness, agent_fn=agent_fn)
+
+    def failure_mode(**kwargs):
+        return attribute_failure_mode(llm_client=llm, **kwargs)
+
+    pipeline = CurationPipeline(
+        discoverer=disc,
+        fetch_thread=fetch_issue_thread,
+        triager=triager,
+        drafter=drafter,
+        validator=validator,
+        run_eval=run_eval,
+        failure_mode_fn=failure_mode,
+        eval_dir=args.eval_dir,
+        workdir_root=args.workdir,
+        coverage_log_path=args.log,
+        summary_path=args.summary,
+    )
+    pipeline.run_batch()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

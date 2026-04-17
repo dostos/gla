@@ -20,3 +20,6 @@ dev = [
     "pytest>=8",
     "httpx>=0.27",
 ]
+
+[project.scripts]
+gla-curate = "gla.eval.curation.pipeline:main"

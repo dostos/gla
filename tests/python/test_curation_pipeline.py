@@ -1,13 +1,26 @@
 from unittest.mock import MagicMock
 from datetime import datetime, timezone
 
-from gla.eval.curation.pipeline import CurationPipeline
+from gla.eval.curation.pipeline import CurationPipeline, parse_args
 from gla.eval.curation.discover import DiscoveryCandidate
 from gla.eval.curation.triage import IssueThread, TriageResult
 from gla.eval.curation.draft import DraftResult
 from gla.eval.curation.validate import ValidationResult
 from gla.eval.curation.run_eval import RunEvalResult
 from gla.eval.metrics import EvalResult
+
+
+def test_parse_args_defaults():
+    args = parse_args(["--batch-quota", "10"])
+    assert args.batch_quota == 10
+    assert args.eval_dir == "tests/eval"
+
+
+def test_parse_args_custom_paths():
+    args = parse_args(["--eval-dir", "/tmp/eval", "--log",
+                       "/tmp/log.jsonl", "--batch-quota", "5"])
+    assert args.eval_dir == "/tmp/eval"
+    assert args.log == "/tmp/log.jsonl"
 
 
 def _eval_result(mode, correct, total):
