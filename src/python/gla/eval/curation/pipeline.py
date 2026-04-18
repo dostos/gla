@@ -22,9 +22,12 @@ from dataclasses import dataclass
 
 from gla.eval.curation.classify import classify_observed_helps
 from gla.eval.curation.commit import commit_scenario, log_rejection
+from gla.eval.curation.context_enrichment import (
+    UpstreamFile, enrich_context, format_for_drafter,
+)
 from gla.eval.curation.coverage_log import CoverageLog
 from gla.eval.curation.draft import DraftResult
-from gla.eval.curation.triage import TriageResult
+from gla.eval.curation.triage import IssueThread, TriageResult
 from gla.eval.curation.workdir import IssueWorkdir
 
 
@@ -40,6 +43,14 @@ def _hash(*parts: str) -> str:
     for p in parts:
         h.update(p.encode())
     return h.hexdigest()[:16]
+
+
+def _extract_default_repo(url: str) -> tuple[str, str]:
+    """Parse ``owner``/``repo`` from a GitHub URL; returns ``("", "")`` on failure."""
+    m = re.search(r"github\.com/([^/]+)/([^/]+)/", url)
+    if not m:
+        return ("", "")
+    return (m.group(1), m.group(2))
 
 
 def load_config(path: str) -> dict:
@@ -160,6 +171,43 @@ class CurationPipeline:
                 rejection_reason="duplicate_of_existing_scenario",
             )
             return
+
+        # --- Context enrichment (cached on the same thread hash as triage) ---
+        # Extract owner/repo from the candidate URL for short-form `#NNN` refs.
+        owner, repo = _extract_default_repo(cand.url)
+        all_text = thread.body + "\n" + "\n".join(thread.comments)
+
+        enrichment_hash = triage_hash  # enrichment is keyed on the thread contents
+        if workdir.should_skip_stage(
+            "enrichment", current_input_hash=enrichment_hash
+        ):
+            cached = workdir.read_stage("enrichment")
+            upstream_files = [UpstreamFile(**d) for d in cached["output"]]
+        else:
+            upstream_files = enrich_context(
+                all_text, default_owner=owner, default_repo=repo,
+            )
+            workdir.write_stage(
+                "enrichment",
+                [
+                    {"path": f.path, "content": f.content,
+                     "ref": f.ref, "truncated": f.truncated}
+                    for f in upstream_files
+                ],
+                input_hash=enrichment_hash,
+            )
+
+        if upstream_files:
+            # Append the formatted snapshot to thread.comments so the drafter
+            # sees the pre-fix source verbatim (the drafter currently composes
+            # its user message from thread title/body/comments).
+            enrichment_text = format_for_drafter(upstream_files)
+            thread = IssueThread(
+                url=thread.url,
+                title=thread.title,
+                body=thread.body,
+                comments=list(thread.comments) + [enrichment_text],
+            )
 
         slug = re.sub(r"\W+", "_", cand.title.lower()).strip("_")[:40] or "unnamed"
         proposed_scenario_id = f"r{index}_{slug}"
