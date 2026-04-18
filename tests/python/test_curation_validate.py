@@ -184,6 +184,108 @@ def test_validator_keeps_files_on_success(tmp_path):
     assert (tmp_path / scenario_id / "scenario.md").exists()
 
 
+def test_validator_writes_multiple_files_to_scenario_dir(tmp_path):
+    """Validator writes all files from DraftResult.files, not just main.c + scenario.md."""
+    scenario_id = "r_multi"
+    draft = DraftResult(
+        scenario_id=scenario_id,
+        files={
+            "main.c": "// SOURCE: https://x/1\nint main(){return 0;}",
+            "helper.c": "void helper(void) {}",
+            "scenario.md": (
+                "# R_MULTI\n"
+                "## Bug\nb\n## Expected Correct Output\ne\n"
+                "## Actual Broken Output\na\n"
+                "## Ground Truth Diagnosis\n> quote\ndiag\n"
+                "## Difficulty Rating\n3/5\n"
+                "## Adversarial Principles\n- p\n"
+                "## How GLA Helps\nh\n## Source\n- **URL**: https://x/1\n"
+                "## Tier\ncore\n## API\nopengl\n## Framework\nnone\n"
+                "## Bug Signature\n```yaml\n"
+                "type: framebuffer_dominant_color\n"
+                "spec:\n  color: [1.0, 0.0, 0.0, 1.0]\n  tolerance: 0.1\n"
+                "```\n"
+                "## Predicted GLA Helpfulness\n- **Verdict**: yes\n"
+                "- **Reasoning**: x\n"
+            ),
+        },
+    )
+
+    fake_runner = MagicMock()
+    red_png = Path(__file__).parent.joinpath(
+        "fixtures/curation/framebuffers/solid_red.png").read_bytes()
+    fake_runner.build_and_capture.return_value = {
+        "framebuffer_png": red_png,
+        "metadata": {"draw_call_count": 1, "draw_calls": []},
+    }
+
+    v = Validator(eval_dir=tmp_path, runner=fake_runner)
+    result = v.validate(draft)
+
+    assert result.ok is True
+    scenario_dir = tmp_path / scenario_id
+    assert (scenario_dir / "main.c").exists()
+    assert (scenario_dir / "helper.c").exists()
+    assert (scenario_dir / "scenario.md").exists()
+
+
+def test_validator_cleans_up_whole_dir_on_failure(tmp_path):
+    """When validation fails, the entire scenario dir (including extra files) is removed."""
+    draft = DraftResult(
+        scenario_id="r_fail",
+        files={
+            "main.c": "// SOURCE: https://x/1\nint main(){return 0;}",
+            "helper.c": "void helper(void) {}",
+            "scenario.md": (
+                "# R_FAIL\n## Bug\nb\n## Expected Correct Output\ne\n"
+                "## Actual Broken Output\na\n## Ground Truth Diagnosis\n> q\nd\n"
+                "## Difficulty Rating\n3/5\n## Adversarial Principles\n- p\n"
+                "## How GLA Helps\nh\n## Source\n- **URL**: https://x/1\n"
+                "## Tier\ncore\n## API\nopengl\n## Framework\nnone\n"
+                "## Bug Signature\n```yaml\ntype: framebuffer_dominant_color\n"
+                "spec:\n  color: [1.0, 0.0, 0.0, 1.0]\n  tolerance: 0.1\n```\n"
+                "## Predicted GLA Helpfulness\n- **Verdict**: yes\n- **Reasoning**: x\n"
+            ),
+        },
+    )
+
+    fake_runner = MagicMock()
+    blue_png = Path(__file__).parent.joinpath(
+        "fixtures/curation/framebuffers/solid_blue.png").read_bytes()
+    fake_runner.build_and_capture.return_value = {
+        "framebuffer_png": blue_png,
+        "metadata": {"draw_call_count": 1, "draw_calls": []},
+    }
+
+    v = Validator(eval_dir=tmp_path, runner=fake_runner)
+    result = v.validate(draft)
+    assert result.ok is False
+    # Entire dir removed on failure
+    assert not (tmp_path / "r_fail").exists()
+
+
+def test_validator_rejects_preexisting_scenario_dir(tmp_path):
+    """If scenario dir already exists, validate() returns ok=False immediately."""
+    scenario_id = "r_preexist"
+    scenario_dir = tmp_path / scenario_id
+    scenario_dir.mkdir()
+    (scenario_dir / "main.c").write_text("preexisting content")
+
+    draft = DraftResult(
+        scenario_id=scenario_id,
+        files={"main.c": "new content", "scenario.md": "# NEW"},
+    )
+    fake_runner = MagicMock()
+    v = Validator(eval_dir=tmp_path, runner=fake_runner)
+    result = v.validate(draft)
+
+    assert result.ok is False
+    assert "already exists" in result.reason
+    # Pre-existing file must be untouched
+    assert (scenario_dir / "main.c").read_text() == "preexisting content"
+    fake_runner.build_and_capture.assert_not_called()
+
+
 def test_validator_uses_llm_fallback_on_ambiguous(tmp_path):
     # Arrange: a signature type that returns ambiguous
     llm = MagicMock()

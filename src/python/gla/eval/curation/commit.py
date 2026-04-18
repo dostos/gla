@@ -21,8 +21,9 @@ def commit_scenario(
     *,
     eval_dir: Path | str,
     scenario_id: str,
-    c_source: str,
-    md_body: str,
+    files: Optional[dict[str, str]] = None,
+    c_source: Optional[str] = None,   # deprecated: use files
+    md_body: Optional[str] = None,    # deprecated: use files
     coverage_log: CoverageLog,
     summary_path: Path | str,
     issue_url: str,
@@ -35,11 +36,21 @@ def commit_scenario(
     failure_mode: Optional[str],
     eval_summary: Optional[dict[str, Any]],
 ) -> None:
+    # Backward-compat: if files is None, build from c_source + md_body.
+    if files is None:
+        if c_source is None or md_body is None:
+            raise ValueError(
+                "commit_scenario requires either `files` or both `c_source` and `md_body`"
+            )
+        files = {"main.c": c_source, "scenario.md": md_body}
+
     eval_dir = Path(eval_dir)
     scenario_dir = eval_dir / scenario_id
     scenario_dir.mkdir(parents=True, exist_ok=True)
-    (scenario_dir / "main.c").write_text(c_source)
-    (scenario_dir / "scenario.md").write_text(md_body)
+    for filename, content in files.items():
+        file_path = scenario_dir / filename
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(content)
     # BUILD.bazel is now glob-driven — no explicit append needed. The no-op
     # call is retained for backward compatibility with any external callers.
     _append_to_build_bazel(eval_dir, scenario_id)

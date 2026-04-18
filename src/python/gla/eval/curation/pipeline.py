@@ -63,7 +63,7 @@ class CurationPipeline:
         workdir_root: Path | str,
         coverage_log_path: Path | str,
         summary_path: Path | str,
-        skip_validate: bool = False,  # NEW: for dev environments without GLA stack
+        skip_validate: bool = False,  # NEW: for dev environments without OpenGPA stack
     ):
         self._discoverer = discoverer
         self._fetch = fetch_thread
@@ -170,7 +170,21 @@ class CurationPipeline:
         )
         if workdir.should_skip_stage("draft", current_input_hash=draft_hash):
             cached = workdir.read_stage("draft")
-            draft = DraftResult(**cached["output"])
+            output = cached["output"]
+            if "files" in output:
+                draft = DraftResult(
+                    scenario_id=output["scenario_id"],
+                    files=output["files"],
+                )
+            else:
+                # Legacy cache shape — fall back to c_source/md_body fields.
+                draft = DraftResult(
+                    scenario_id=output["scenario_id"],
+                    files={
+                        "main.c": output["c_source"],
+                        "scenario.md": output["md_body"],
+                    },
+                )
         else:
             try:
                 draft = self._drafter.draft(
@@ -191,8 +205,7 @@ class CurationPipeline:
                 "draft",
                 {
                     "scenario_id": draft.scenario_id,
-                    "c_source": draft.c_source,
-                    "md_body": draft.md_body,
+                    "files": draft.files,
                 },
                 input_hash=draft_hash,
             )
@@ -245,14 +258,13 @@ class CurationPipeline:
                     failure_mode = "other"
         else:
             # Skip validation entirely: write artifacts directly, set observed to ambiguous.
-            # Validator normally writes the main.c and scenario.md files, so we do
-            # it manually here into the per-scenario directory.
+            # Validator normally writes all scenario files, so we do it manually here.
             scenario_dir = self._eval_dir / draft.scenario_id
             scenario_dir.mkdir(parents=True, exist_ok=True)
-            c_path = scenario_dir / "main.c"
-            md_path = scenario_dir / "scenario.md"
-            c_path.write_text(draft.c_source)
-            md_path.write_text(draft.md_body)
+            for filename, content in draft.files.items():
+                file_path = scenario_dir / filename
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                file_path.write_text(content)
             observed = _NoValidateClassification()
             run_result = None  # prevent eval_summary below from using it
             failure_mode = None
@@ -285,11 +297,13 @@ class CurationPipeline:
                 },
             }
 
+        files_to_commit = dict(draft.files)
+        files_to_commit["scenario.md"] = md_with_observed
+
         commit_scenario(
             eval_dir=self._eval_dir,
             scenario_id=scenario_id,
-            c_source=draft.c_source,
-            md_body=md_with_observed,
+            files=files_to_commit,
             coverage_log=self._log,
             summary_path=self._summary,
             issue_url=cand.url,
@@ -321,7 +335,7 @@ class CurationPipeline:
         failure_details: Optional[str],
     ) -> str:
         obs_section = (
-            "\n## Observed GLA Helpfulness\n"
+            "\n## Observed OpenGPA Helpfulness\n"
             f"- **Verdict**: {observed.verdict}\n"
             f"- **Evidence**: {observed.evidence}\n"
         )
@@ -342,7 +356,7 @@ class CurationPipeline:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments for the curation pipeline."""
     parser = argparse.ArgumentParser(
-        description="GLA eval-set curation pipeline",
+        description="OpenGPA eval-set curation pipeline",
     )
     parser.add_argument("--eval-dir", default="tests/eval")
     parser.add_argument("--workdir", default=".eval-pipeline")
@@ -369,7 +383,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                              "if ANTHROPIC_API_KEY is unset.")
     parser.add_argument("--no-validate", action="store_true",
                         help="Skip Validator + Run-Eval stages (for dev environments "
-                             "without xvfb-run or a GLA shim). Commits scenarios based "
+                             "without xvfb-run or an OpenGPA shim). Commits scenarios based "
                              "on triage + draft only. Do not use in production runs.")
     return parser.parse_args(argv)
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -33,29 +34,31 @@ class Validator:
         # Write artifacts into eval dir, then validate. On failure, clean up
         # so failed drafts don't pollute tests/eval/.
         scenario_dir = self.eval_dir / draft.scenario_id
-        scenario_dir.mkdir(parents=True, exist_ok=True)
-        c_path = scenario_dir / "main.c"
-        md_path = scenario_dir / "scenario.md"
-        c_path.write_text(draft.c_source)
-        md_path.write_text(draft.md_body)
 
-        result = self._validate_inner(draft, c_path, md_path)
+        # Safety: require the scenario dir to not pre-exist so we can safely
+        # rmtree it on failure without clobbering unrelated content.
+        if scenario_dir.exists():
+            return ValidationResult(
+                ok=False,
+                reason="scenario dir already exists",
+            )
+
+        scenario_dir.mkdir(parents=True, exist_ok=True)
+        for filename, content in draft.files.items():
+            file_path = scenario_dir / filename
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(content)
+
+        result = self._validate_inner(draft, scenario_dir)
 
         if not result.ok:
-            # Remove fresh-created files. If the scenario dir is now empty,
-            # remove it too (safe: we created it above).
-            c_path.unlink(missing_ok=True)
-            md_path.unlink(missing_ok=True)
-            try:
-                scenario_dir.rmdir()
-            except OSError:
-                # Directory not empty (user had files there) — leave it.
-                pass
+            # Remove the entire freshly-created scenario directory.
+            shutil.rmtree(scenario_dir, ignore_errors=True)
 
         return result
 
     def _validate_inner(
-        self, draft: DraftResult, c_path: Path, md_path: Path
+        self, draft: DraftResult, scenario_dir: Path
     ) -> ValidationResult:
         # Parse the md for the signature
         try:

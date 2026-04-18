@@ -117,6 +117,96 @@ def test_commit_without_build_bazel_is_fine(tmp_path):
     assert (eval_dir / "r2_nobuild" / "scenario.md").exists()
 
 
+def test_commit_scenario_writes_multiple_files(tmp_path):
+    eval_dir = tmp_path / "eval"
+    log_path = tmp_path / "log.jsonl"
+    summary_path = tmp_path / "gaps.md"
+    log = CoverageLog(log_path)
+
+    commit_scenario(
+        eval_dir=eval_dir,
+        scenario_id="r1_test",
+        files={
+            "main.c": "int main(){}",
+            "helper.c": "void helper(void) {}",
+            "shader.glsl": "#version 330\n",
+            "scenario.md": "# R1_TEST",
+        },
+        coverage_log=log,
+        summary_path=summary_path,
+        issue_url="https://x/1",
+        source_type="issue",
+        triage_verdict="in_scope",
+        fingerprint="state_leak:x",
+        tier="core",
+        predicted_helps="yes",
+        observed_helps="yes",
+        failure_mode=None,
+        eval_summary=None,
+    )
+
+    assert (eval_dir / "r1_test" / "main.c").read_text() == "int main(){}"
+    assert (eval_dir / "r1_test" / "helper.c").read_text() == "void helper(void) {}"
+    assert (eval_dir / "r1_test" / "shader.glsl").read_text().startswith("#version 330")
+    assert (eval_dir / "r1_test" / "scenario.md").read_text() == "# R1_TEST"
+
+
+def test_commit_scenario_writes_nested_upstream_snapshot(tmp_path):
+    """Files with forward-slash paths create subdirs."""
+    eval_dir = tmp_path / "eval"
+    log = CoverageLog(tmp_path / "log.jsonl")
+
+    commit_scenario(
+        eval_dir=eval_dir,
+        scenario_id="r2_test",
+        files={
+            "main.c": "int main(){}",
+            "scenario.md": "# R2_TEST",
+            "upstream_snapshot/original.c": "// verbatim upstream\nvoid foo(){}",
+        },
+        coverage_log=log,
+        summary_path=tmp_path / "gaps.md",
+        issue_url="https://x/2",
+        source_type="issue",
+        triage_verdict="in_scope",
+        fingerprint="state_leak:y",
+        tier="core",
+        predicted_helps="yes",
+        observed_helps="yes",
+        failure_mode=None,
+        eval_summary=None,
+    )
+    snapshot_path = eval_dir / "r2_test" / "upstream_snapshot" / "original.c"
+    assert snapshot_path.exists()
+    assert "verbatim upstream" in snapshot_path.read_text()
+
+
+def test_commit_scenario_legacy_kwargs_still_work(tmp_path):
+    """Old c_source/md_body kwargs still work (pipeline not migrated yet)."""
+    eval_dir = tmp_path / "eval"
+    log = CoverageLog(tmp_path / "log.jsonl")
+
+    commit_scenario(
+        eval_dir=eval_dir,
+        scenario_id="r3_legacy",
+        c_source="int main(){}",
+        md_body="# R3_LEGACY",
+        coverage_log=log,
+        summary_path=tmp_path / "gaps.md",
+        issue_url="https://x/3",
+        source_type="issue",
+        triage_verdict="in_scope",
+        fingerprint="state_leak:z",
+        tier="core",
+        predicted_helps="yes",
+        observed_helps="yes",
+        failure_mode=None,
+        eval_summary=None,
+    )
+    assert (eval_dir / "r3_legacy" / "main.c").exists()
+    assert (eval_dir / "r3_legacy" / "scenario.md").exists()
+
+
 def test_log_rejection_appends_rejected_entry_and_writes_summary(tmp_path):
     log = CoverageLog(tmp_path / "log.jsonl")
     summary_path = tmp_path / "gaps.md"
