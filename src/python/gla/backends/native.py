@@ -113,7 +113,7 @@ class NativeBackend(FrameProvider):
             decoded = NativeBackend._decode_param_bytes(raw, gl_type)
             entry: dict = {
                 "name": p.name,
-                "type": gl_type,
+                "type": p.type,
                 "data": base64.b64encode(raw).decode("ascii"),
             }
             if decoded is not None:
