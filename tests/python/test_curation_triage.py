@@ -109,6 +109,18 @@ def test_fetch_thread_dispatches_by_url_shape():
     assert r2.title == "c"
 
 
+def test_fetch_thread_dispatches_to_stackoverflow():
+    """SO URLs are routed to fetch_stackoverflow_thread."""
+    import gla.eval.curation.triage as T
+    import gla.eval.curation.stackoverflow as SO
+
+    so_stub = MagicMock(return_value=IssueThread(url="so", title="so", body="b"))
+    with patch.object(SO, "fetch_stackoverflow_thread", so_stub):
+        result = T.fetch_thread("https://stackoverflow.com/questions/12345/title")
+    assert result.title == "so"
+    so_stub.assert_called_once()
+
+
 def test_extract_pr_refs_finds_short_form():
     from gla.eval.curation.triage import _extract_pr_refs
     text = "Fixed by #1234 and also see #5678."

@@ -42,6 +42,14 @@ DEFAULT_QUERIES: dict[str, list[str]] = {
         'repo:mrdoob/three.js "fix:" "z-fighting" OR "culling" OR "precision"',
         'repo:godotengine/godot "fix:" "shader" OR "depth buffer"',
     ],
+    # SO queries are lists of tags combined AND-wise (SO search restricts
+    # to questions tagged with ALL provided tags).
+    "stackoverflow": [
+        ["three.js"],
+        ["webgl", "glsl"],
+        ["godot", "shader"],
+        ["opengl", "debug"],
+    ],
 }
 
 
@@ -77,6 +85,15 @@ _NON_RENDERING_LABELS = {
 }
 
 _NON_RENDERING_RE = re.compile("|".join(_NON_RENDERING_KEYWORDS), re.IGNORECASE)
+
+
+def _is_obviously_non_rendering_so(q) -> bool:
+    """SO-specific pre-filter — mirrors _is_obviously_non_rendering but
+    checks tags (not labels) and uses the title heuristic."""
+    if _NON_RENDERING_RE.search(getattr(q, "title", "") or ""):
+        return True
+    tag_set = {t.lower().strip() for t in (getattr(q, "tags", None) or [])}
+    return bool(tag_set & _NON_RENDERING_LABELS)
 
 
 def _is_obviously_non_rendering(cand: "DiscoveryCandidate") -> bool:
@@ -150,10 +167,21 @@ class GitHubSearch:
         return out
 
 
+class StackExchangeSearch:
+    """Thin wrapper over ``stackoverflow.search_questions`` for injection
+    symmetry with :class:`GitHubSearch`."""
+
+    def search_questions(self, tags: list[str], per_page: int = 30):
+        from gla.eval.curation.stackoverflow import search_questions
+        return search_questions(tags, per_page=per_page)
+
+
 class Discoverer:
     def __init__(self, search, coverage_log: "CoverageLog",
-                 queries: dict[str, list[str]], batch_quota: int = 20):
+                 queries: dict, batch_quota: int = 20,
+                 so_search=None):
         self._search = search
+        self._so_search = so_search
         self._log = coverage_log
         self._queries = queries
         self._quota = batch_quota
@@ -197,6 +225,38 @@ class Discoverer:
                     continue
                 seen.add(cand.url)
                 out.append(cand)
+
+        # Stack Overflow queries (only if SO search was injected).
+        if self._so_search is not None:
+            for tags in self._queries.get("stackoverflow", []):
+                if len(out) >= self._quota:
+                    break
+                for q in self._so_search.search_questions(tags):
+                    if len(out) >= self._quota:
+                        break
+                    if q.url in seen:
+                        continue
+                    if self._log.contains_url(q.url):
+                        continue
+                    if _is_obviously_non_rendering_so(q):
+                        rej = DiscoveryCandidate(
+                            url=q.url, source_type="stackoverflow",
+                            title=q.title, labels=list(q.tags or []),
+                        )
+                        self._log_discovery_rejection(
+                            rej, reason="out_of_scope_not_rendering_bug"
+                        )
+                        seen.add(q.url)
+                        continue
+                    seen.add(q.url)
+                    out.append(DiscoveryCandidate(
+                        url=q.url,
+                        source_type="stackoverflow",
+                        title=q.title,
+                        labels=list(q.tags or []),
+                        created_at=q.creation_date,
+                        metadata={"accepted_answer_id": q.accepted_answer_id},
+                    ))
 
         return out
 

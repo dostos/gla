@@ -122,6 +122,95 @@ def test_is_obviously_non_rendering_lets_real_rendering_through():
         assert _is_obviously_non_rendering(cand) is False, \
             f"expected accept: {title}"
 
+def test_discoverer_processes_stackoverflow_queries(tmp_path):
+    """Discoverer wires the so_search provider end-to-end, yielding
+    candidates with source_type='stackoverflow' and carrying accepted_answer_id."""
+    from gla.eval.curation.discover import Discoverer
+    from gla.eval.curation.stackoverflow import SOQuestion
+    from gla.eval.curation.coverage_log import CoverageLog
+
+    class FakeGitHub:
+        def search_issues(self, q, per_page=30):
+            return []
+        def search_commits(self, q, per_page=30):
+            return []
+
+    class FakeSOSearch:
+        def search_questions(self, tags, per_page=30):
+            return [
+                SOQuestion(
+                    url="https://stackoverflow.com/questions/111/zfight",
+                    title="Z-fighting on large scenes",
+                    body_html="<p>body</p>",
+                    tags=["three.js", "webgl"],
+                    accepted_answer_id=555,
+                    creation_date="2024-01-01T00:00:00+00:00",
+                ),
+                SOQuestion(
+                    url="https://stackoverflow.com/questions/222/typescript",
+                    title="TypeScript typings for Camera",
+                    body_html="<p>typings</p>",
+                    tags=["three.js", "typescript"],
+                    accepted_answer_id=556,
+                    creation_date="2024-01-02T00:00:00+00:00",
+                ),
+            ]
+
+    log = CoverageLog(tmp_path / "log.jsonl")
+    d = Discoverer(
+        search=FakeGitHub(),
+        so_search=FakeSOSearch(),
+        coverage_log=log,
+        queries={"issue": [], "commit": [], "stackoverflow": [["three.js"]]},
+        batch_quota=10,
+    )
+    candidates = d.run()
+
+    urls = [c.url for c in candidates]
+    # Real rendering SO question passes through
+    assert "https://stackoverflow.com/questions/111/zfight" in urls
+    # Non-rendering (TypeScript) one is filtered at discovery
+    assert "https://stackoverflow.com/questions/222/typescript" not in urls
+
+    # Verify source_type + metadata carries over
+    so_cand = next(c for c in candidates
+                   if c.url == "https://stackoverflow.com/questions/111/zfight")
+    assert so_cand.source_type == "stackoverflow"
+    assert so_cand.metadata["accepted_answer_id"] == 555
+    assert "three.js" in so_cand.labels
+
+    # Filtered SO question should be logged as rejection
+    entries = log.read_all()
+    assert any(e.issue_url == "https://stackoverflow.com/questions/222/typescript"
+               and e.source_type == "stackoverflow"
+               and e.outcome == "rejected"
+               and e.rejection_reason == "out_of_scope_not_rendering_bug"
+               for e in entries)
+
+
+def test_discoverer_skips_so_when_no_so_search_provider(tmp_path):
+    """Without an so_search provider, SO queries are silently skipped
+    (backward compat)."""
+    from gla.eval.curation.discover import Discoverer
+    from gla.eval.curation.coverage_log import CoverageLog
+
+    class FakeGitHub:
+        def search_issues(self, q, per_page=30):
+            return []
+        def search_commits(self, q, per_page=30):
+            return []
+
+    log = CoverageLog(tmp_path / "log.jsonl")
+    d = Discoverer(
+        search=FakeGitHub(),
+        coverage_log=log,
+        queries={"issue": [], "commit": [], "stackoverflow": [["three.js"]]},
+        batch_quota=10,
+    )
+    candidates = d.run()
+    assert candidates == []
+
+
 def test_discoverer_skips_obviously_non_rendering(tmp_path):
     from gla.eval.curation.discover import Discoverer, DiscoveryCandidate
     from gla.eval.curation.coverage_log import CoverageLog

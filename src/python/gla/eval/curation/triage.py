@@ -189,7 +189,10 @@ class Triage:
 
 
 def fetch_thread(url: str) -> IssueThread:
-    """Dispatch to fetch_issue_thread or fetch_commit_thread based on URL."""
+    """Dispatch to fetch_issue_thread, fetch_commit_thread, or SO fetcher."""
+    if "stackoverflow.com/questions/" in url:
+        from gla.eval.curation.stackoverflow import fetch_stackoverflow_thread
+        return fetch_stackoverflow_thread(url)
     if "/commit/" in url:
         return fetch_commit_thread(url)
     return fetch_issue_thread(url)

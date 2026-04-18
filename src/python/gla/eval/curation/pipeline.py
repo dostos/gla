@@ -513,6 +513,7 @@ def main(argv: list[str] | None = None) -> int:
         GitHubSearch,
         Discoverer,
         DEFAULT_QUERIES,
+        StackExchangeSearch,
     )
     from gla.eval.curation.triage import Triage, fetch_thread
     from gla.eval.curation.draft import Draft
@@ -535,6 +536,7 @@ def main(argv: list[str] | None = None) -> int:
     log = CoverageLog(args.log)
     disc = Discoverer(
         search=GitHubSearch(),
+        so_search=StackExchangeSearch(),
         coverage_log=log,
         queries=queries,
         batch_quota=batch_quota,
