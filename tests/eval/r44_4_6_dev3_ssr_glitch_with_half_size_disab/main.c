@@ -16,6 +16,15 @@ typedef GLXContext (*CtxAttribsProc)(Display*, GLXFBConfig, GLXContext, Bool, co
 #define W 64
 #define H 64
 
+// Suppress non-fatal X errors (e.g. MIT-SHM BadMatch from Mesa/Xvfb teardown).
+static int x_error_handler(Display *dpy, XErrorEvent *ev) {
+    char buf[256];
+    XGetErrorText(dpy, ev->error_code, buf, sizeof(buf));
+    fprintf(stderr, "X Error (suppressed): %s (opcode %d/%d)\n",
+            buf, ev->request_code, ev->minor_code);
+    return 0;
+}
+
 static const char *VS =
 "#version 330 core\n"
 "out vec2 uv;\n"
@@ -59,6 +68,7 @@ static GLuint makeProg(const char *vs, const char *fs) {
 }
 
 int main(void) {
+    XSetErrorHandler(x_error_handler);
     Display *d = XOpenDisplay(NULL);
     if(!d){ fprintf(stderr,"no display\n"); return 1; }
     int fbattr[] = { GLX_DRAWABLE_TYPE, GLX_PBUFFER_BIT, GLX_RENDER_TYPE, GLX_RGBA_BIT,
@@ -67,9 +77,20 @@ int main(void) {
     GLXFBConfig *fbcs = glXChooseFBConfig(d, DefaultScreen(d), fbattr, &nfbc);
     if(!fbcs || !nfbc){ fprintf(stderr,"no fbconfig\n"); return 1; }
     CtxAttribsProc cca = (CtxAttribsProc)glXGetProcAddressARB((const GLubyte*)"glXCreateContextAttribsARB");
-    int ctxattr[] = { GLX_CONTEXT_MAJOR_VERSION_ARB, 3, GLX_CONTEXT_MINOR_VERSION_ARB, 3,
-                      GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB, None };
-    GLXContext ctx = cca(d, fbcs[0], NULL, True, ctxattr);
+    GLXContext ctx = NULL;
+    if (cca) {
+        int ctxattr[] = { GLX_CONTEXT_MAJOR_VERSION_ARB, 3, GLX_CONTEXT_MINOR_VERSION_ARB, 3,
+                          GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB, None };
+        ctx = cca(d, fbcs[0], NULL, True, ctxattr);
+        if (!ctx) {
+            /* Fall back to compatibility profile for Mesa/Xvfb environments */
+            int ctxattr_compat[] = { GLX_CONTEXT_MAJOR_VERSION_ARB, 3, GLX_CONTEXT_MINOR_VERSION_ARB, 3,
+                                     GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB, None };
+            ctx = cca(d, fbcs[0], NULL, True, ctxattr_compat);
+        }
+    }
+    if (!ctx) ctx = glXCreateNewContext(d, fbcs[0], GLX_RGBA_TYPE, NULL, True);
+    if (!ctx) { fprintf(stderr,"no GL context\n"); return 1; }
     int pattr[] = { GLX_PBUFFER_WIDTH, W, GLX_PBUFFER_HEIGHT, H, None };
     GLXPbuffer pb = glXCreatePbuffer(d, fbcs[0], pattr);
     glXMakeCurrent(d, pb, ctx);
@@ -123,7 +144,8 @@ int main(void) {
     glDrawArrays(GL_TRIANGLES, 0, 3);
 
     unsigned char *pix = (unsigned char*)malloc(W*H*4);
-    glReadBuffer(GL_BACK);
+    /* Pbuffers are single-buffered; GL_BACK is invalid and triggers SHM errors. */
+    glReadBuffer(GL_FRONT);
     glReadPixels(0,0,W,H,GL_RGBA,GL_UNSIGNED_BYTE,pix);
     int black = 0;
     for (int i = 0; i < W*H; i++)
