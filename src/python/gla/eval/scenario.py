@@ -57,14 +57,14 @@ _SECTION_ALIASES: dict[str, list[str]] = {
     "ground_truth_diagnosis": ["ground truth diagnosis"],
     "difficulty": ["difficulty rating", "difficulty"],
     "adversarial_principles": ["adversarial principles"],
-    "gla_advantage": ["how gla helps", "gla advantage"],
+    "gla_advantage": ["how gla helps", "how opengpa helps", "gla advantage", "opengpa advantage"],
     "source": ["source"],
     "tier": ["tier"],
     "api": ["api"],
     "framework": ["framework"],
     "bug_signature": ["bug signature"],
-    "predicted_helps": ["predicted gla helpfulness", "predicted helpfulness"],
-    "observed_helps": ["observed gla helpfulness", "observed helpfulness"],
+    "predicted_helps": ["predicted gla helpfulness", "predicted opengpa helpfulness", "predicted helpfulness"],
+    "observed_helps": ["observed gla helpfulness", "observed opengpa helpfulness", "observed helpfulness"],
     "failure_mode": ["failure mode"],
 }
 

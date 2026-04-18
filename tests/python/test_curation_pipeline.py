@@ -571,7 +571,7 @@ def test_pipeline_end_to_end_with_fixture(tmp_path):
     committed = list((tmp_path / "eval").glob("r1_*/main.c"))
     assert len(committed) == 1
     md_text = (committed[0].parent / "scenario.md").read_text()
-    assert "Observed GLA Helpfulness" in md_text
+    assert "Observed OpenGPA Helpfulness" in md_text
     assert "**Verdict**: yes" in md_text
     summary = (tmp_path / "gaps.md").read_text()
     assert "Scenarios committed: 1" in summary

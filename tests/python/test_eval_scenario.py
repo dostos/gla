@@ -181,7 +181,7 @@ class TestReportGenerator:
     def test_generate_markdown_contains_header(self):
         gen = ReportGenerator()
         md = gen.generate_markdown(self._two_mode_results())
-        assert "# GLA Evaluation Report" in md
+        assert "# OpenGPA Evaluation Report" in md
 
     def test_generate_markdown_contains_scenario_id(self):
         gen = ReportGenerator()
@@ -222,7 +222,7 @@ class TestReportGenerator:
     def test_empty_results_produce_valid_markdown(self):
         gen = ReportGenerator()
         md = gen.generate_markdown([])
-        assert "# GLA Evaluation Report" in md
+        assert "# OpenGPA Evaluation Report" in md
         assert isinstance(md, str)
 
 
