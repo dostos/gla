@@ -98,6 +98,55 @@ static void test_uniform_mat4(void) {
 }
 
 /* -------------------------------------------------------------------------
+ * 4b. UniformVec3
+ * ---------------------------------------------------------------------- */
+static void test_uniform_vec3(void) {
+    GlaShadowState s;
+    gla_shadow_init(&s);
+
+    gla_shadow_set_uniform_3f(&s, 2, 0.1f, 0.5f, 0.9f);
+
+    assert(s.uniform_count == 1);
+    assert(s.uniforms[0].location  == 2);
+    assert(s.uniforms[0].type      == GL_FLOAT_VEC3);
+    assert(s.uniforms[0].data_size == 3 * sizeof(float));
+    assert(s.uniforms[0].active    == true);
+
+    float vals[3];
+    memcpy(vals, s.uniforms[0].data, 3 * sizeof(float));
+    assert(vals[0] == 0.1f);
+    assert(vals[1] == 0.5f);
+    assert(vals[2] == 0.9f);
+
+    printf("PASS test_uniform_vec3\n");
+}
+
+/* -------------------------------------------------------------------------
+ * 4c. UniformVec4
+ * ---------------------------------------------------------------------- */
+static void test_uniform_vec4(void) {
+    GlaShadowState s;
+    gla_shadow_init(&s);
+
+    gla_shadow_set_uniform_4f(&s, 3, 1.0f, 0.0f, 0.0f, 1.0f);
+
+    assert(s.uniform_count == 1);
+    assert(s.uniforms[0].location  == 3);
+    assert(s.uniforms[0].type      == GL_FLOAT_VEC4);
+    assert(s.uniforms[0].data_size == 4 * sizeof(float));
+    assert(s.uniforms[0].active    == true);
+
+    float vals[4];
+    memcpy(vals, s.uniforms[0].data, 4 * sizeof(float));
+    assert(vals[0] == 1.0f);
+    assert(vals[1] == 0.0f);
+    assert(vals[2] == 0.0f);
+    assert(vals[3] == 1.0f);
+
+    printf("PASS test_uniform_vec4\n");
+}
+
+/* -------------------------------------------------------------------------
  * 5. UniformOverwrite
  * ---------------------------------------------------------------------- */
 static void test_uniform_overwrite(void) {
@@ -309,6 +358,8 @@ int main(void) {
     test_texture_bindings();
     test_program_binding();
     test_uniform_mat4();
+    test_uniform_vec3();
+    test_uniform_vec4();
     test_uniform_overwrite();
     test_enable_disable();
     test_viewport_and_scissor();

@@ -193,6 +193,78 @@ static std::vector<uint8_t> build_frame_with_draw_call(
 }
 
 // ---------------------------------------------------------------------------
+// Helper: build a frame with one draw call containing a vec4 uniform param
+// ---------------------------------------------------------------------------
+static std::vector<uint8_t> build_frame_with_vec4_param(
+        uint32_t width, uint32_t height,
+        uint32_t location, float x, float y, float z, float w)
+{
+    std::vector<uint8_t> buf;
+    auto push_u32 = [&](uint32_t v) {
+        buf.push_back(v & 0xFF);
+        buf.push_back((v >> 8) & 0xFF);
+        buf.push_back((v >> 16) & 0xFF);
+        buf.push_back((v >> 24) & 0xFF);
+    };
+    auto push_i32 = [&](int32_t v) { push_u32(static_cast<uint32_t>(v)); };
+    auto push_u8  = [&](uint8_t  v) { buf.push_back(v); };
+    auto push_f32 = [&](float    v) {
+        uint32_t bits;
+        std::memcpy(&bits, &v, 4);
+        push_u32(bits);
+    };
+
+    // header
+    push_u32(width);
+    push_u32(height);
+    // color + depth pixels (all zero)
+    buf.resize(buf.size() + (size_t)width * height * 8, 0);
+
+    // draw_call_count = 1
+    push_u32(1);
+
+    // draw call record
+    push_u32(0);    // id
+    push_u32(0x0004); // GL_TRIANGLES
+    push_u32(3);    // vertex_count
+    push_u32(0);    // index_count
+    push_u32(1);    // instance_count
+    push_u32(5);    // shader_program_id
+
+    // viewport[4], scissor[4]
+    push_i32(0); push_i32(0); push_i32((int32_t)width); push_i32((int32_t)height);
+    push_i32(0); push_i32(0); push_i32(0); push_i32(0);
+    // scissor_enabled, depth_test, depth_write, pad
+    push_u8(0); push_u8(1); push_u8(1); push_u8(0);
+    // depth_func
+    push_u32(0x0201);
+    // blend_enabled, pad[3], blend_src, blend_dst
+    push_u8(0); push_u8(0); push_u8(0); push_u8(0);
+    push_u32(0); push_u32(0);
+    // cull_enabled, pad[3], cull_mode, front_face
+    push_u8(0); push_u8(0); push_u8(0); push_u8(0);
+    push_u32(0x0405); push_u32(0x0901);
+
+    // texture_count = 0
+    push_u32(0);
+
+    // param_count = 1
+    push_u32(1);
+    push_u32(location);           // location
+    push_u32(0x8B52);             // type: GL_FLOAT_VEC4
+    push_u32(4 * sizeof(float));  // data_size = 16
+    push_f32(x);
+    push_f32(y);
+    push_f32(z);
+    push_f32(w);
+
+    // debug_group_path: empty (uint16 len = 0)
+    buf.push_back(0); buf.push_back(0);
+
+    return buf;
+}
+
+// ---------------------------------------------------------------------------
 // 3b. DrawCallRoundTrip — write a frame with draw call data; engine parses it
 // ---------------------------------------------------------------------------
 TEST_F(EngineTest, DrawCallRoundTrip) {
@@ -326,4 +398,60 @@ TEST_F(EngineTest, MultipleFrames) {
 
     EXPECT_GE(engine_->frame_store().total_stored(),
               static_cast<uint64_t>(kFrames));
+}
+
+// ---------------------------------------------------------------------------
+// 7. Vec4ParamRoundTrip — frame with a GL_FLOAT_VEC4 uniform; engine must
+//    deserialize all 16 bytes with the correct type and values.
+// ---------------------------------------------------------------------------
+TEST_F(EngineTest, Vec4ParamRoundTrip) {
+    const uint32_t W = 4, H = 4;
+    const float R = 1.0f, G = 0.0f, B = 0.0f, A = 1.0f;
+    const uint32_t LOCATION = 7;
+
+    auto shm_client = gla::ShmRingBuffer::open(kShmName);
+    ASSERT_NE(shm_client, nullptr);
+
+    gla::ipc::ControlSocketClient client = connect_and_handshake();
+    ASSERT_GE(client.fd(), 0);
+
+    std::vector<uint8_t> payload =
+        build_frame_with_vec4_param(W, H, LOCATION, R, G, B, A);
+
+    auto wslot = shm_client->claim_write_slot();
+    ASSERT_NE(wslot.data, nullptr);
+    ASSERT_LE(payload.size(), (size_t)1024 * 1024);
+    std::memcpy(wslot.data, payload.data(), payload.size());
+    shm_client->commit_write(wslot.index, payload.size());
+    ASSERT_TRUE(client.send_frame_ready(/*frame_id=*/200, wslot.index));
+
+    // Wait for engine to ingest the frame
+    for (int i = 0; i < 200; ++i) {
+        const gla::store::RawFrame* f = engine_->frame_store().latest();
+        if (f && !f->draw_calls.empty() && !f->draw_calls[0].params.empty()) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    const gla::store::RawFrame* frame = engine_->frame_store().latest();
+    ASSERT_NE(frame, nullptr);
+    ASSERT_EQ(frame->draw_calls.size(), 1u);
+    const auto& dc = frame->draw_calls[0];
+
+    // Must have exactly one param
+    ASSERT_EQ(dc.params.size(), 1u);
+    const auto& param = dc.params[0];
+
+    // Type must be GL_FLOAT_VEC4 = 0x8B52
+    EXPECT_EQ(param.type, 0x8B52u) << "type should be GL_FLOAT_VEC4";
+
+    // data must be exactly 16 bytes (4 floats)
+    ASSERT_EQ(param.data.size(), 16u) << "vec4 must have 16 bytes of data";
+
+    // Decode floats and verify values
+    float vals[4];
+    std::memcpy(vals, param.data.data(), 16);
+    EXPECT_FLOAT_EQ(vals[0], R);
+    EXPECT_FLOAT_EQ(vals[1], G);
+    EXPECT_FLOAT_EQ(vals[2], B);
+    EXPECT_FLOAT_EQ(vals[3], A);
 }

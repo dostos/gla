@@ -60,6 +60,12 @@ class TestDrawCallShader:
         assert len(data["parameters"]) >= 1
         p = data["parameters"][0]
         assert p["name"] == "uColor"
+        # GL_FLOAT_VEC4 = 0x8B52; native backend must decode bytes to float values
+        assert p["type"] == 0x8B52
+        assert "value" in p, "vec4 uniform must have a decoded 'value' field"
+        assert p["value"] == [1.0, 0.0, 0.0, 1.0], (
+            f"vec4(1.0,0.0,0.0,1.0) must decode correctly; got {p['value']}"
+        )
 
     def test_get_shader_nonexistent_drawcall_404(self, client, auth_headers):
         resp = client.get(
