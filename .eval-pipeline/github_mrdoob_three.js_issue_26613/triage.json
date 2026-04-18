@@ -1,0 +1,9 @@
+{
+  "input_hash": "29008dde6d436955",
+  "output": {
+    "verdict": "out_of_scope",
+    "fingerprint": "other:n_a",
+    "rejection_reason": "out_of_scope_not_rendering_bug",
+    "summary": "SVGLoader's shape-construction algorithm incorrectly classifies holes vs solid paths based on x-axis ordering, a CPU-side geometry algorithm bug unrelated to GPU rendering."
+  }
+}

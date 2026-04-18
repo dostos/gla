@@ -11,20 +11,34 @@ if TYPE_CHECKING:
 
 DEFAULT_QUERIES: dict[str, list[str]] = {
     "issue": [
-        # three.js: no rendering label exists, so use closed+completed + specific
-        # visual-symptom terms
+        # === Framework bugs (original) ===
         'repo:mrdoob/three.js is:issue is:closed reason:completed "z-fighting" OR "winding" OR "culling"',
         'repo:mrdoob/three.js is:issue is:closed reason:completed "shader" "uniform"',
         'repo:mrdoob/three.js is:issue is:closed reason:completed "NaN" OR "Inf" texture',
-        # Godot: has topic:rendering label, use it
         'repo:godotengine/godot is:issue is:closed reason:completed label:"topic:rendering" shader',
         'repo:godotengine/godot is:issue is:closed reason:completed label:"topic:rendering" "z-fighting" OR "depth"',
-        # Babylon: has "bug" label, pair with rendering terms
         'repo:BabylonJS/Babylon.js is:issue is:closed reason:completed label:"bug" shader precision',
+
+        # === User project bugs (projects USING the frameworks) ===
+        # Three.js user projects — rendering issues from misusing the API
+        '"three.js" "rendering" "wrong color" OR "invisible" OR "black screen" is:issue is:closed -repo:mrdoob/three.js',
+        '"three.js" "texture" "not showing" OR "flickering" OR "missing" is:issue is:closed -repo:mrdoob/three.js',
+        '"three.js" "depth" OR "z-fighting" OR "transparent" "bug" is:issue is:closed -repo:mrdoob/three.js',
+        # Godot user projects
+        '"godot" "rendering" "wrong" OR "broken" OR "glitch" is:issue is:closed -repo:godotengine/godot',
+        '"godot" "shader" "not working" OR "visual bug" is:issue is:closed -repo:godotengine/godot',
+        # Open3D user projects
+        'repo:isl-org/Open3D is:issue is:closed "rendering" "wrong" OR "broken" OR "black"',
+        '"open3d" "visualization" "not rendering" OR "wrong color" OR "missing" is:issue is:closed',
+        # Babylon.js user projects
+        '"babylon.js" "rendering" "wrong" OR "glitch" OR "artifact" is:issue is:closed -repo:BabylonJS/Babylon.js',
+        # p5.js / Processing user projects
+        '"p5.js" "webgl" "rendering" "bug" OR "wrong" OR "broken" is:issue is:closed -repo:processing/p5.js',
+        # General WebGL/OpenGL user issues
+        '"webgl" "state" "leak" OR "not reset" OR "wrong texture" is:issue is:closed',
+        '"opengl" "rendering" "bug" "uniform" OR "texture" OR "blend" is:issue is:closed',
     ],
     "commit": [
-        # Fix commits — Task A just landed support for these. Commit messages
-        # contain the diagnosis directly.
         'repo:mrdoob/three.js "fix:" "z-fighting" OR "culling" OR "precision"',
         'repo:godotengine/godot "fix:" "shader" OR "depth buffer"',
     ],
