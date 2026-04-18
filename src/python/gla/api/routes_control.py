@@ -1,7 +1,7 @@
 """Capture engine control endpoints (pause / resume / step / status)."""
-from typing import Any, Dict
-
 from fastapi import APIRouter, HTTPException, Query, Request
+
+from gla.api.app import safe_json_response
 
 router = APIRouter(tags=["control"])
 
@@ -14,31 +14,31 @@ def _provider_or_503(request: Request):
 
 
 @router.post("/control/pause")
-def pause_engine(request: Request) -> Dict[str, Any]:
+def pause_engine(request: Request):
     """Pause frame capture."""
     provider = _provider_or_503(request)
-    return provider.pause()
+    return safe_json_response(provider.pause())
 
 
 @router.post("/control/resume")
-def resume_engine(request: Request) -> Dict[str, Any]:
+def resume_engine(request: Request):
     """Resume frame capture."""
     provider = _provider_or_503(request)
-    return provider.resume()
+    return safe_json_response(provider.resume())
 
 
 @router.post("/control/step")
 def step_engine(
     request: Request,
     count: int = Query(1, ge=1, description="Number of frames to advance"),
-) -> Dict[str, Any]:
+):
     """Advance capture by *count* frames (only valid while paused)."""
     provider = _provider_or_503(request)
-    return provider.step(count)
+    return safe_json_response(provider.step(count))
 
 
 @router.get("/control/status")
-def get_status(request: Request) -> Dict[str, Any]:
+def get_status(request: Request):
     """Return the current engine running state."""
     provider = _provider_or_503(request)
-    return provider.status()
+    return safe_json_response(provider.status())

@@ -8,12 +8,19 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 
-class _BytesSafeEncoder(json.JSONEncoder):
-    """JSON encoder that base64-encodes bytes objects instead of crashing."""
-    def default(self, obj):
+def safe_json_response(data, status_code=200):
+    """JSONResponse with bytes → base64 encoding.
+
+    Use this instead of returning plain dicts from route handlers so that
+    FastAPI skips pydantic serialization (which crashes on raw bytes from
+    pybind11 shader parameter data).
+    """
+    def default(obj):
         if isinstance(obj, (bytes, bytearray)):
             return base64.b64encode(obj).decode("ascii")
-        return super().default(obj)
+        raise TypeError(f"Not serializable: {type(obj)}")
+    body = json.dumps(data, default=default)
+    return JSONResponse(content=json.loads(body), status_code=status_code)
 
 
 def create_app(provider=None, auth_token: str = "",
@@ -48,27 +55,7 @@ def create_app(provider=None, auth_token: str = "",
         from gla.backends.native import NativeBackend
         provider = NativeBackend(query_engine, engine)
 
-    def _bytes_safe_serializer(obj):
-        """Custom serializer for FastAPI that handles bytes → base64."""
-        if isinstance(obj, (bytes, bytearray)):
-            return base64.b64encode(obj).decode("ascii")
-        raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
-
     app = FastAPI(title="GLA", version="0.1.0")
-
-    # Override default JSON serialization to handle raw bytes from pybind11
-    from fastapi.responses import JSONResponse as _JSONResp
-    import functools
-    _orig_render = _JSONResp.render
-    @functools.wraps(_orig_render)
-    def _safe_render(self, content):
-        try:
-            return _orig_render(self, content)
-        except Exception:
-            # Fallback: serialize with bytes-safe encoder
-            body = json.dumps(content, cls=_BytesSafeEncoder, ensure_ascii=False)
-            return body.encode("utf-8")
-    _JSONResp.render = _safe_render
 
     app.state.provider = provider
     app.state.auth_token = auth_token

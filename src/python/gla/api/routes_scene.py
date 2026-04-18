@@ -5,9 +5,9 @@ supplied via POST /frames/{id}/metadata or a framework plugin.
 Tier 1 raw capture (GL/Vulkan calls) is intentionally not interpreted
 as scene semantics.
 """
-from typing import Any, Dict
-
 from fastapi import APIRouter, HTTPException, Request
+
+from gla.api.app import safe_json_response
 
 router = APIRouter(tags=["scene"])
 
@@ -41,29 +41,29 @@ def _get_scene_from_tier3(fqe, frame_id: int):
 # ---------------------------------------------------------------------------
 
 @router.get("/frames/{frame_id}/scene")
-def get_scene(frame_id: int, request: Request) -> Dict[str, Any]:
+def get_scene(frame_id: int, request: Request):
     """Full scene data from Tier 3 framework metadata."""
     fqe = _get_framework_query_engine(request)
     scene = _get_scene_from_tier3(fqe, frame_id)
-    return {
+    return safe_json_response({
         "camera": scene.camera,
         "objects": scene.objects,
-    }
+    })
 
 
 @router.get("/frames/{frame_id}/scene/camera")
-def get_camera(frame_id: int, request: Request) -> Dict[str, Any]:
+def get_camera(frame_id: int, request: Request):
     """Camera parameters from Tier 3 framework metadata."""
     fqe = _get_framework_query_engine(request)
     scene = _get_scene_from_tier3(fqe, frame_id)
     if scene.camera is None:
         raise HTTPException(status_code=404, detail=_NO_FRAMEWORK_METADATA)
-    return scene.camera
+    return safe_json_response(scene.camera)
 
 
 @router.get("/frames/{frame_id}/scene/objects")
-def get_objects(frame_id: int, request: Request) -> Dict[str, Any]:
+def get_objects(frame_id: int, request: Request):
     """Scene objects from Tier 3 framework metadata."""
     fqe = _get_framework_query_engine(request)
     scene = _get_scene_from_tier3(fqe, frame_id)
-    return {"objects": scene.objects}
+    return safe_json_response({"objects": scene.objects})

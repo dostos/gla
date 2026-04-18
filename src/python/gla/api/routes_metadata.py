@@ -14,6 +14,8 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, Request
 
+from gla.api.app import safe_json_response
+
 router = APIRouter(tags=["metadata"])
 
 
@@ -22,7 +24,7 @@ def post_frame_metadata(
     frame_id: int,
     payload: Dict[str, Any],
     request: Request,
-) -> Dict[str, Any]:
+):
     """Store framework scene graph metadata for *frame_id*.
 
     The JSON body is an arbitrary object understood by the calling framework
@@ -31,14 +33,14 @@ def post_frame_metadata(
     """
     store = request.app.state.metadata_store
     store.store(frame_id, payload)
-    return {"status": "ok", "frame_id": frame_id}
+    return safe_json_response({"status": "ok", "frame_id": frame_id})
 
 
 @router.get("/frames/{frame_id}/metadata")
 def get_frame_metadata(
     frame_id: int,
     request: Request,
-) -> Dict[str, Any]:
+):
     """Return a summary of stored metadata for *frame_id*.
 
     Raises 404 if no metadata has been posted for this frame.
@@ -51,11 +53,11 @@ def get_frame_metadata(
             detail=f"No metadata found for frame {frame_id}",
         )
 
-    return {
+    return safe_json_response({
         "frame_id": frame_id,
         "framework": metadata.framework,
         "version": metadata.version,
         "object_count": len(metadata.objects),
         "material_count": len(metadata.materials),
         "render_pass_count": len(metadata.render_passes),
-    }
+    })

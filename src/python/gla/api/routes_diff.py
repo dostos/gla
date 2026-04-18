@@ -6,6 +6,8 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from gla.api.app import safe_json_response
+
 router = APIRouter(tags=["diff"])
 
 _VALID_DEPTHS = {"summary", "drawcalls", "pixels"}
@@ -40,7 +42,7 @@ def compare_frames(
     frame_b: int,
     request: Request,
     depth: str = Query(default="summary"),
-) -> Dict[str, Any]:
+):
     """Compare two captured frames.
 
     Returns a diff at the requested depth:
@@ -69,7 +71,7 @@ def compare_frames(
         _pixel_diff_to_dict(p) for p in result.pixel_diffs
     ]
 
-    return {
+    return safe_json_response({
         "frame_id_a": result.frame_id_a,
         "frame_id_b": result.frame_id_b,
         "summary": {
@@ -81,4 +83,4 @@ def compare_frames(
         },
         "draw_call_diffs": draw_call_diffs,
         "pixel_diffs": pixel_diffs,
-    }
+    })

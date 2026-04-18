@@ -5,6 +5,8 @@ from dataclasses import asdict
 
 from fastapi import APIRouter, HTTPException, Request
 
+from gla.api.app import safe_json_response
+
 router = APIRouter(tags=["explain"])
 
 
@@ -16,4 +18,4 @@ async def explain_pixel(frame_id: int, x: int, y: int, request: Request):
     explanation = fqe.explain_pixel(frame_id, x, y)
     if not explanation:
         raise HTTPException(status_code=404, detail="No pixel explanation available")
-    return asdict(explanation)
+    return safe_json_response(asdict(explanation))

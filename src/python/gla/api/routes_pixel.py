@@ -1,13 +1,13 @@
 """Per-pixel query endpoint."""
-from typing import Any, Dict
-
 from fastapi import APIRouter, HTTPException, Request
+
+from gla.api.app import safe_json_response
 
 router = APIRouter(tags=["pixel"])
 
 
 @router.get("/frames/{frame_id}/pixel/{x}/{y}")
-def get_pixel(frame_id: int, x: int, y: int, request: Request) -> Dict[str, Any]:
+def get_pixel(frame_id: int, x: int, y: int, request: Request):
     """Return colour, depth, and stencil values for a single pixel.
 
     Coordinates are in framebuffer space (origin top-left, x right, y down).
@@ -21,7 +21,7 @@ def get_pixel(frame_id: int, x: int, y: int, request: Request) -> Dict[str, Any]
             detail=f"Pixel ({x}, {y}) not found in frame {frame_id} "
                    "(frame missing or coordinates out of bounds)",
         )
-    return {
+    return safe_json_response({
         "x": x,
         "y": y,
         "r": result.r,
@@ -30,4 +30,4 @@ def get_pixel(frame_id: int, x: int, y: int, request: Request) -> Dict[str, Any]
         "a": result.a,
         "depth": result.depth,
         "stencil": result.stencil,
-    }
+    })
