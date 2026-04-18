@@ -143,15 +143,34 @@ class SnapshotFetcher:
 
         run([self._git, "init", "-q"])
         run([self._git, "remote", "add", "origin", ref.repo_url])
-        # Try to fetch the SHA directly.
+        # Try to fetch the SHA directly (fast, minimal bandwidth).
+        fetched = False
         try:
             run([self._git, "fetch", "--depth", "1", "origin", ref.sha])
+            fetched = True
         except SnapshotError:
-            # Fallback: some servers refuse by-SHA fetches; fetch default branch
-            # (deep) and check out. This is slower but always works.
-            # Try default branch at depth 50 (enough for most post-merge SHAs).
-            run([self._git, "fetch", "--depth", "50", "origin"])
-        run([self._git, "reset", "--hard", ref.sha])
+            pass
+
+        if not fetched:
+            # Fallback 1: fetch with enough depth to include merge commits.
+            try:
+                run([self._git, "fetch", "--depth", "500", "origin"])
+                fetched = True
+            except SnapshotError:
+                pass
+
+        if not fetched:
+            # Fallback 2: full unshallow fetch. Slow but always works.
+            run([self._git, "fetch", "--unshallow", "origin"])
+
+        # Try reset to the target SHA. If it's a merge commit SHA,
+        # it should be in the fetched history now.
+        try:
+            run([self._git, "reset", "--hard", ref.sha])
+        except SnapshotError:
+            # Last resort: fetch ALL refs and retry
+            run([self._git, "fetch", "origin", "+refs/heads/*:refs/remotes/origin/*"])
+            run([self._git, "reset", "--hard", ref.sha])
 
     def is_cached(self, ref: SnapshotRef) -> bool:
         """True iff the snapshot is already fully in the cache."""
