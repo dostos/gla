@@ -12,3 +12,5 @@ __pycache__/
 .mcp.json
 /tmp/
 examples/vulkan/minimal_app
+node_modules/
+core.*
