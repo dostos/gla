@@ -302,18 +302,53 @@ bazel test //tests/integration/...
 
 ## Project Status
 
+### Core Pipeline
+
 | Milestone | Description | Status |
 |-----------|-------------|--------|
-| M1 | OpenGL shim + basic capture (LD_PRELOAD, shared memory, one-frame ingestion) | In progress |
-| M2 | Query engine + REST API (normalized representation, FastAPI endpoints) | In progress |
-| M3 | Semantic reconstruction (matrix classification, camera, object grouping, AABB) | Planned |
-| M4 | MCP server (wrap REST API in 6 MCP tools, test with Claude Code) | Planned |
-| M5 | Vulkan layer (implicit layer, dispatch table chaining) | Planned |
-| M6 | WebGL shim (browser extension + Node.js bridge) | Planned |
-| M7 | Frame comparison + advanced queries (frame diff, pixel attribution, spatial) | Planned |
+| M1 | OpenGL shim (LD_PRELOAD, shadow state, frame capture, shared memory IPC) | Done |
+| M2 | Query engine + REST API (normalizer, 22+ endpoints, pybind11, FastAPI) | Done |
+| M3 | Semantic reconstruction | Removed (replaced by Tier 3 metadata — no heuristics) |
+| M4 | MCP server (10 tools over stdio JSON-RPC) | Done |
+| M5 | Vulkan implicit layer (dispatch table chaining, VK_LAYER_GLA_capture) | Done (scaffolded, not E2E tested) |
+| M6 | WebGL browser extension + Node.js bridge | Done (scaffolded, not E2E tested) |
+| M7 | Frame comparison (draw call + pixel diff at 3 depth levels) | Done |
 
-Out of scope for v1: Windows/macOS support, DirectX, compute shaders, shader
-hot-reload, continuous trace recording, GPU performance profiling.
+### Framework Integration
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| Debug markers | Intercept glPushDebugGroup/glPopDebugGroup, build tree | Done |
+| Metadata sidecar | POST /frames/{id}/metadata for framework scene graph | Done |
+| Correlation engine | Join GL capture + markers + metadata via draw call IDs | Done |
+| Framework queries | query_object, explain_pixel, list_render_passes, query_material | Done |
+| Three.js plugin | Scene graph capture + HTTP POST (~120 LOC) | Done |
+| RenderDoc backend | Read .rdc capture files via replay API | Done |
+
+### Eval Suite
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| Synthetic scenarios | 10 adversarial GL apps (e1-e10) | Done |
+| Real-world scenarios | 8+ from Three.js/Godot GitHub issues (r-prefix) | Done |
+| Mined state bugs | 4 from real projects (s-prefix: texture cache, blend, depth, FBO) | Done |
+| Multi-model eval runner | Cross-model comparison (Haiku/Sonnet/Opus) | Done |
+| Hint-stripped code | No BUG/should-be comments in source | Done |
+
+### Known Limitations
+
+| Issue | Impact | Priority |
+|-------|--------|----------|
+| Vec3 uniform serialization | Multi-component uniforms need verification | P0 (fix in progress) |
+| Pixel attribution (draw call ID buffer) | explain_pixel can't map pixel → draw call | P1 |
+| glClear not intercepted | Can't detect missing clears (r31 scenario) | P2 |
+| FBO attachment tracking | Can't detect feedback loops (r5 scenario) | P3 |
+| Engine launcher shutdown crash | terminate called on process exit | P3 |
+
+### Out of Scope (v1)
+
+Windows/macOS support, DirectX interception, compute shaders, shader hot-reload,
+continuous trace recording, GPU performance profiling.
 
 ---
 
