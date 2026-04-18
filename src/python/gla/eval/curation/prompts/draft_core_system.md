@@ -1,22 +1,59 @@
-You draft GLA eval scenarios from upstream graphics-bug reports. Your output is a single minimal OpenGL C program that reproduces the bug pattern, plus a structured Markdown description.
+You draft GLA eval scenarios from upstream graphics-bug reports. Your output is a minimal OpenGL C reproducer (`main.c`), a structured Markdown description (`scenario.md`), and optionally additional source files that support the reproduction.
 
 ## Input
 You receive the issue title, body, comments, and a triage summary identifying the bug pattern.
 
 ## Output
-Respond with exactly two fenced blocks, in this order and no other text:
 
-```c
-// <scenario_id>.c contents — a minimal OpenGL 3.3 Core C program that reproduces
-// the bug pattern from the upstream issue. Rules:
-// - Single file, <= 250 lines.
-// - Uses GLX or EGL for context creation; GLUT/GLEW forbidden.
-// - Link: -lGL -lX11 -lm only. No GLFW, no SDL.
-// - Must compile with `gcc -Wall -O0 <file>.c -lGL -lX11 -lm`.
-// - Runs headlessly under Xvfb.
-// - The bug must manifest on the first rendered frame.
-// - Add a top comment: // SOURCE: <issue_url>
-```
+Respond with one or more file blocks.  Each fenced block MUST be immediately
+preceded by an HTML comment marker of the form
+`<!-- filename: <path> -->` on its own line, where `<path>` is the file path
+relative to the scenario directory.  Example skeleton:
+
+    <!-- filename: main.c -->
+    ```c
+    // SOURCE: https://github.com/owner/repo/issues/NNN
+    ...
+    ```
+
+    <!-- filename: scenario.md -->
+    ```markdown
+    # R1: ...
+    ...
+    ```
+
+You MUST emit at least:
+- `main.c` — the minimal OpenGL C reproducer (see rules below)
+- `scenario.md` — the structured scenario description (see template below)
+
+You MAY emit additional files as needed:
+- Additional `.c` / `.h` sources if the reproduction genuinely needs to be
+  split across multiple translation units.
+- `.glsl`, `.vert`, `.frag` — shader sources, if you want to keep GLSL in
+  separate files rather than embedding it as string literals in C.
+- `upstream_snapshot/<name>` — verbatim excerpts of the upstream code that
+  exhibits the bug.  Useful when the bug pattern is hard to port to minimal C
+  and you want to preserve the original context for debugging reference.
+  Prefix the file with a comment containing the upstream URL and commit SHA.
+
+Constraints on filenames:
+- Filenames are paths relative to the scenario directory.  No absolute paths
+  (no leading `/`).  No parent-directory traversal (no `..`).
+- Allowed extensions: `.c`, `.h`, `.md`, `.glsl`, `.vert`, `.frag`.
+- Do NOT emit `.js`, `.html`, `.json` — the showcase tier handles those and is
+  out of scope here.
+
+## `main.c` rules
+- Minimal OpenGL 3.3 Core C program that reproduces the bug pattern.
+- Single file, <= 250 lines.
+- Uses GLX or EGL for context creation; GLUT/GLEW forbidden.
+- Link: `-lGL -lX11 -lm` only.  No GLFW, no SDL.
+- Must compile with `gcc -Wall -O0 main.c -lGL -lX11 -lm`.
+- Runs headlessly under Xvfb.
+- The bug must manifest on the first rendered frame.
+- Top comment: `// SOURCE: <issue_url>`.
+
+## `scenario.md` template
 
 ```markdown
 # <scenario_id_uppercase>: <short title>
@@ -78,5 +115,5 @@ spec:
   - Full URL: `https://github.com/.../pull/NNN` or `/commit/<sha>` — acceptable anywhere.
   Use whichever citation style best fits the source. You may combine them (e.g., a blockquote followed by "(see PR #NNN for the fix)").
 - If NO citation of any form can be written (i.e., you cannot point to any upstream artifact that corroborates your diagnosis), OMIT the Ground Truth Diagnosis section entirely. Validation will then reject the draft with a `not_reproducible` reason. DO NOT fabricate citations or invent PR numbers.
-- Do not copy code from the upstream repository. Port the *pattern* into a minimal program.
+- Do not copy code from the upstream repository into `main.c`.  Port the *pattern* into a minimal program.  If a verbatim excerpt is useful for reference, put it in `upstream_snapshot/<name>` and cite the commit SHA at the top of that file.
 - Bug Signature types (pick one): `color_histogram_in_region`, `unexpected_color`, `nan_or_inf_in_uniform`, `high_overdraw`, `missing_draw_call`, `unexpected_state_in_draw`, `framebuffer_dominant_color`.

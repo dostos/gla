@@ -69,29 +69,78 @@ spec:
 - **Reasoning**: inspect_drawcall exposes it.
 """
 
-def test_draft_parses_c_and_md_blocks():
-    llm = MagicMock()
-    llm.complete.return_value = _fake_response(
-        f"```c\n{_C_CODE}```\n\n```markdown\n{_MD_BODY}```"
-    )
-    d = Draft(llm_client=llm)
-    thread = IssueThread(url="https://github.com/x/y/issues/1",
-                         title="t", body="b", comments=[])
-    triage = TriageResult(verdict="in_scope",
-                          fingerprint="state_leak:tex_binding",
-                          rejection_reason=None, summary="")
 
-    result = d.draft(thread, triage, scenario_id="r1_test")
-    assert "int main()" in result.c_source
-    assert "SOURCE: https://github.com/x/y/issues/1" in result.c_source
-    assert "## Bug Signature" in result.md_body
+# Map filename extensions to fence language tags used by the LLM.
+_LANG_BY_EXT = {
+    "c": "c",
+    "h": "c",
+    "md": "markdown",
+    "glsl": "glsl",
+    "vert": "glsl",
+    "frag": "glsl",
+}
+
+
+def _wrap_draft_response(c_code: str, md_body: str,
+                         extra_files: dict | None = None) -> str:
+    """Build an LLM response string in the new filename-marked format."""
+    parts = [
+        "<!-- filename: main.c -->",
+        "```c",
+        c_code.rstrip("\n"),
+        "```",
+        "",
+        "<!-- filename: scenario.md -->",
+        "```markdown",
+        md_body.rstrip("\n"),
+        "```",
+    ]
+    for name, content in (extra_files or {}).items():
+        ext = name.rsplit(".", 1)[-1].lower()
+        lang = _LANG_BY_EXT.get(ext, ext)
+        parts.extend([
+            "",
+            f"<!-- filename: {name} -->",
+            f"```{lang}",
+            content.rstrip("\n"),
+            "```",
+        ])
+    return "\n".join(parts) + "\n"
+
+
+def _default_thread(url: str = "https://github.com/x/y/issues/1") -> IssueThread:
+    return IssueThread(url=url, title="t", body="b", comments=[])
+
+
+def _default_triage() -> TriageResult:
+    return TriageResult(verdict="in_scope",
+                        fingerprint="state_leak:tex_binding",
+                        rejection_reason=None, summary="")
+
+
+def test_draft_parses_main_c_and_scenario_md():
+    llm = MagicMock()
+    llm.complete.return_value = _fake_response(_wrap_draft_response(_C_CODE, _MD_BODY))
+    d = Draft(llm_client=llm)
+
+    result = d.draft(_default_thread(), _default_triage(), scenario_id="r1_test")
     assert result.scenario_id == "r1_test"
+    assert set(result.files.keys()) == {"main.c", "scenario.md"}
+    assert "int main()" in result.files["main.c"]
+    assert "SOURCE: https://github.com/x/y/issues/1" in result.files["main.c"]
+    assert "## Bug Signature" in result.files["scenario.md"]
+    # Backward-compat accessors still work.
+    assert result.c_source == result.files["main.c"]
+    assert result.md_body == result.files["scenario.md"]
+    assert result.main_c == result.files["main.c"]
+    assert result.scenario_md == result.files["scenario.md"]
+
 
 def test_draft_rejects_missing_source_comment():
     """C source without // SOURCE: comment should fail validation."""
     llm = MagicMock()
     llm.complete.return_value = _fake_response(
-        "```c\nint main(){return 0;}\n```\n\n```markdown\n# x\n```"
+        _wrap_draft_response("int main(){return 0;}\n", _MD_BODY)
     )
     d = Draft(llm_client=llm)
     import pytest
@@ -101,14 +150,14 @@ def test_draft_rejects_missing_source_comment():
                              rejection_reason=None, summary=""),
                 scenario_id="r1_test")
 
+
 def test_draft_rejects_missing_blockquote_in_diagnosis():
-    """Ground Truth Diagnosis without a blockquote (>) fails validation."""
-    _c_src_x1 = "// SOURCE: https://x/1\n#include <GL/gl.h>\nint main() { return 0; }\n"
-    md_without_quote = _MD_BODY.replace('> "the texture is wrong" (quoted from upstream)\n\n', '')
+    """Ground Truth Diagnosis without any citation form fails validation."""
+    c_src = "// SOURCE: https://x/1\n#include <GL/gl.h>\nint main() { return 0; }\n"
+    md_without_quote = _MD_BODY.replace(
+        '> "the texture is wrong" (quoted from upstream)\n\n', '')
     llm = MagicMock()
-    llm.complete.return_value = _fake_response(
-        f"```c\n{_c_src_x1}```\n\n```markdown\n{md_without_quote}```"
-    )
+    llm.complete.return_value = _fake_response(_wrap_draft_response(c_src, md_without_quote))
     d = Draft(llm_client=llm)
     import pytest
     with pytest.raises(ValueError, match="citation"):
@@ -117,15 +166,14 @@ def test_draft_rejects_missing_blockquote_in_diagnosis():
                              rejection_reason=None, summary=""),
                 scenario_id="r1_test")
 
+
 def test_draft_rejects_bug_signature_missing_type():
     """Bug Signature yaml without 'type' key fails validation."""
     md_without_type = _MD_BODY.replace(
         "type: color_histogram_in_region\n", ""
     )
     llm = MagicMock()
-    llm.complete.return_value = _fake_response(
-        f"```c\n{_C_CODE}```\n\n```markdown\n{md_without_type}```"
-    )
+    llm.complete.return_value = _fake_response(_wrap_draft_response(_C_CODE, md_without_type))
     d = Draft(llm_client=llm)
     import pytest
     with pytest.raises(ValueError, match="type"):
@@ -139,7 +187,6 @@ def test_draft_rejects_bug_signature_missing_type():
 
 def test_draft_rejects_bug_signature_missing_spec():
     """Bug Signature yaml without 'spec' key fails validation."""
-    # Replace the full yaml block with one that only has `type` (no spec)
     md_without_spec = re.sub(
         r"```yaml\n.*?\n```",
         "```yaml\ntype: color_histogram_in_region\n```",
@@ -149,9 +196,7 @@ def test_draft_rejects_bug_signature_missing_spec():
     )
     assert "spec:" not in md_without_spec
     llm = MagicMock()
-    llm.complete.return_value = _fake_response(
-        f"```c\n{_C_CODE}```\n\n```markdown\n{md_without_spec}```"
-    )
+    llm.complete.return_value = _fake_response(_wrap_draft_response(_C_CODE, md_without_spec))
     d = Draft(llm_client=llm)
     import pytest
     with pytest.raises(ValueError, match="spec"):
@@ -174,9 +219,7 @@ def test_draft_rejects_malformed_bug_signature_yaml():
         "type: [unclosed\n  spec: {bad}\n",
     )
     llm = MagicMock()
-    llm.complete.return_value = _fake_response(
-        f"```c\n{_C_CODE}```\n\n```markdown\n{malformed}```"
-    )
+    llm.complete.return_value = _fake_response(_wrap_draft_response(_C_CODE, malformed))
     d = Draft(llm_client=llm)
     import pytest
     with pytest.raises(ValueError):
@@ -191,9 +234,7 @@ def test_draft_rejects_malformed_bug_signature_yaml():
 def test_draft_preserves_nested_yaml_fence_in_md():
     """Markdown block containing a yaml fenced block must not be truncated."""
     llm = MagicMock()
-    llm.complete.return_value = _fake_response(
-        f"```c\n{_C_CODE}```\n\n```markdown\n{_MD_BODY}```"
-    )
+    llm.complete.return_value = _fake_response(_wrap_draft_response(_C_CODE, _MD_BODY))
     d = Draft(llm_client=llm)
     result = d.draft(
         IssueThread(url="https://github.com/x/y/issues/1",
@@ -215,7 +256,7 @@ def test_draft_accepts_pr_reference_as_citation():
         "The root cause is addressed by PR #1234 which changes the binding order.",
     )
     llm = MagicMock()
-    llm.complete.return_value = _fake_response(f"```c\n{c_src}```\n\n```markdown\n{md}```")
+    llm.complete.return_value = _fake_response(_wrap_draft_response(c_src, md))
     d = Draft(llm_client=llm)
     result = d.draft(
         IssueThread(url="https://github.com/x/y/issues/1", title="t", body="b"),
@@ -223,7 +264,6 @@ def test_draft_accepts_pr_reference_as_citation():
                      rejection_reason=None, summary=""),
         scenario_id="r1_test",
     )
-    # Should not raise
     assert result.scenario_id == "r1_test"
 
 
@@ -235,7 +275,7 @@ def test_draft_accepts_commit_sha_citation():
         "Fixed in commit abc1234def56 which adds the missing re-bind.",
     )
     llm = MagicMock()
-    llm.complete.return_value = _fake_response(f"```c\n{c_src}```\n\n```markdown\n{md}```")
+    llm.complete.return_value = _fake_response(_wrap_draft_response(c_src, md))
     d = Draft(llm_client=llm)
     result = d.draft(
         IssueThread(url="https://github.com/x/y/issues/1", title="t", body="b"),
@@ -253,7 +293,7 @@ def test_draft_accepts_github_pr_url_as_citation():
         "See https://github.com/mrdoob/three.js/pull/9876 for the fix.",
     )
     llm = MagicMock()
-    llm.complete.return_value = _fake_response(f"```c\n{c_src}```\n\n```markdown\n{md}```")
+    llm.complete.return_value = _fake_response(_wrap_draft_response(c_src, md))
     d = Draft(llm_client=llm)
     result = d.draft(
         IssueThread(url="https://github.com/x/y/issues/1", title="t", body="b"),
@@ -272,7 +312,7 @@ def test_draft_still_rejects_diagnosis_with_no_citation_of_any_kind():
         "The bug is that the texture binding is wrong.",  # bare prose, no cite
     )
     llm = MagicMock()
-    llm.complete.return_value = _fake_response(f"```c\n{c_src}```\n\n```markdown\n{md}```")
+    llm.complete.return_value = _fake_response(_wrap_draft_response(c_src, md))
     d = Draft(llm_client=llm)
     import pytest
     with pytest.raises(ValueError, match="citation"):
@@ -282,3 +322,108 @@ def test_draft_still_rejects_diagnosis_with_no_citation_of_any_kind():
                          rejection_reason=None, summary=""),
             scenario_id="r1_test",
         )
+
+
+# --- New multi-file tests ------------------------------------------------
+
+
+def test_draft_supports_multiple_c_files():
+    """A draft with main.c + helper.c produces a 3-file DraftResult."""
+    helper_c = "// helper\nvoid helper(void) {}\n"
+    response = _wrap_draft_response(_C_CODE, _MD_BODY,
+                                     extra_files={"helper.c": helper_c})
+    llm = MagicMock()
+    llm.complete.return_value = _fake_response(response)
+    d = Draft(llm_client=llm)
+    result = d.draft(_default_thread(), _default_triage(), scenario_id="r1_test")
+    assert set(result.files.keys()) == {"main.c", "scenario.md", "helper.c"}
+    assert result.files["helper.c"].rstrip("\n") == helper_c.rstrip("\n")
+    # Backward-compat: c_source returns main.c, not helper.c.
+    assert result.c_source == result.files["main.c"]
+    assert "int main()" in result.c_source
+
+
+def test_draft_supports_upstream_snapshot():
+    """A draft may include upstream_snapshot/<file> for verbatim upstream code."""
+    snapshot = "// upstream @ abc1234: src/shadow.c\nvoid original_fn() {}\n"
+    response = _wrap_draft_response(
+        _C_CODE, _MD_BODY,
+        extra_files={"upstream_snapshot/original.c": snapshot},
+    )
+    llm = MagicMock()
+    llm.complete.return_value = _fake_response(response)
+    d = Draft(llm_client=llm)
+    result = d.draft(_default_thread(), _default_triage(), scenario_id="r1_test")
+    assert "upstream_snapshot/original.c" in result.files
+    assert "original_fn" in result.files["upstream_snapshot/original.c"]
+
+
+def test_draft_rejects_absolute_path_in_filename():
+    response = (
+        "<!-- filename: /etc/passwd -->\n"
+        "```c\ninjected\n```\n\n"
+        + _wrap_draft_response(_C_CODE, _MD_BODY)
+    )
+    llm = MagicMock()
+    llm.complete.return_value = _fake_response(response)
+    d = Draft(llm_client=llm)
+    import pytest
+    with pytest.raises(ValueError, match="absolute"):
+        d.draft(_default_thread(), _default_triage(), scenario_id="r1_test")
+
+
+def test_draft_rejects_parent_traversal_in_filename():
+    response = (
+        "<!-- filename: ../evil.c -->\n"
+        "```c\ninjected\n```\n\n"
+        + _wrap_draft_response(_C_CODE, _MD_BODY)
+    )
+    llm = MagicMock()
+    llm.complete.return_value = _fake_response(response)
+    d = Draft(llm_client=llm)
+    import pytest
+    with pytest.raises(ValueError, match="traverse"):
+        d.draft(_default_thread(), _default_triage(), scenario_id="r1_test")
+
+
+def test_draft_rejects_unsupported_extension():
+    """`.js` is disallowed (showcase-tier only)."""
+    response = (
+        _wrap_draft_response(_C_CODE, _MD_BODY)
+        + "\n<!-- filename: app.js -->\n"
+        + "```javascript\nwindow.onload=()=>{}\n```\n"
+    )
+    llm = MagicMock()
+    llm.complete.return_value = _fake_response(response)
+    d = Draft(llm_client=llm)
+    import pytest
+    with pytest.raises(ValueError, match="extension"):
+        d.draft(_default_thread(), _default_triage(), scenario_id="r1_test")
+
+
+def test_draft_rejects_duplicate_filename():
+    response = (
+        "<!-- filename: main.c -->\n"
+        "```c\n" + _C_CODE.rstrip("\n") + "\n```\n\n"
+        "<!-- filename: main.c -->\n"
+        "```c\nduplicate\n```\n\n"
+        "<!-- filename: scenario.md -->\n"
+        "```markdown\n" + _MD_BODY.rstrip("\n") + "\n```\n"
+    )
+    llm = MagicMock()
+    llm.complete.return_value = _fake_response(response)
+    d = Draft(llm_client=llm)
+    import pytest
+    with pytest.raises(ValueError, match="duplicate"):
+        d.draft(_default_thread(), _default_triage(), scenario_id="r1_test")
+
+
+def test_draft_rejects_response_without_any_filename_markers():
+    """Old-style two-fence response with no filename markers is rejected."""
+    response = f"```c\n{_C_CODE}```\n\n```markdown\n{_MD_BODY}```"
+    llm = MagicMock()
+    llm.complete.return_value = _fake_response(response)
+    d = Draft(llm_client=llm)
+    import pytest
+    with pytest.raises(ValueError, match="filename"):
+        d.draft(_default_thread(), _default_triage(), scenario_id="r1_test")

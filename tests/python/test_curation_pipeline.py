@@ -503,7 +503,12 @@ def test_pipeline_end_to_end_with_fixture(tmp_path):
         "## Predicted GLA Helpfulness\n- **Verdict**: yes\n"
         "- **Reasoning**: inspect_drawcall exposes the stale binding.\n"
     )
-    draft_resp = f"```c\n{c_src}```\n\n```markdown\n{md_body}```"
+    draft_resp = (
+        "<!-- filename: main.c -->\n"
+        f"```c\n{c_src}```\n\n"
+        "<!-- filename: scenario.md -->\n"
+        f"```markdown\n{md_body}```\n"
+    )
 
     llm = MagicMock()
     llm.complete.side_effect = [
