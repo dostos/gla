@@ -1,16 +1,8 @@
 // tests/eval/e8_race_texture_upload.c
 //
-// Adversarial Eval Scenario E8: Race Condition / Partial Texture Upload
+// E8: Race Condition / Partial Texture Upload
 //
-// Bug: A 4x4 coloured checkerboard texture is intended, but only a 1x1
-// placeholder (solid cyan texel) is ever uploaded. The 4x4 glTexImage2D call
-// is commented out, simulating a background loader thread that stalls before
-// completing the upload.
-//
-// Result: entire quad renders as a uniform cyan colour — no checkerboard.
-//
-// GLA diagnosis:
-//   inspect_drawcall(textures) -> texture width=1, height=1 (expected 4x4)
+// Draws a textured quad with a placeholder texture.
 //
 // Clear color: dark cyan (0.0, 0.1, 0.1)
 
@@ -170,14 +162,12 @@ int main(void)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    /* Step 1: upload 1x1 cyan placeholder.
-     * Simulates the texture object being "ready" but data not yet present. */
+    /* Step 1: upload 1x1 cyan placeholder. */
     unsigned char cyan_1x1[4] = { 0, 220, 220, 255 };
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0,
                  GL_RGBA, GL_UNSIGNED_BYTE, cyan_1x1);
 
-    /* Step 2 (BUG): the 4x4 real upload never happens — loader thread stalled.
-     * Uncomment the block below to fix the bug.
+    /* Step 2: 4x4 upload (pending).
     {
         static const unsigned char checker4x4[4 * 4 * 4] = {
             255,  0,255,255,   0,  0,  0,255,  255,  0,255,255,   0,  0,  0,255,

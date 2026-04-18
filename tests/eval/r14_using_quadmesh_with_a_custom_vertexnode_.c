@@ -81,11 +81,8 @@ int main(void) {
     glAttachShader(prog, fs);
     glLinkProgram(prog);
 
-    // BUG: mirrors the upstream custom vertexNode positions
+    // Mirrors the upstream custom vertexNode positions
     //   [vec3(-1,-1,0), vec3(0,1,0), vec3(1,-1,0)]
-    // Viewed from the default +Z camera toward -Z, this ordering is
-    // clockwise. With GL_CULL_FACE on and default GL_CCW front face, the
-    // triangle is classified as back-facing and culled -> blank frame.
     float verts[] = {
         -1.0f, -1.0f, 0.0f,
          0.0f,  1.0f, 0.0f,

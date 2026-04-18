@@ -4,31 +4,6 @@
 //
 // Draws 2 quads with face culling enabled.
 //
-// Setup:
-//   - glEnable(GL_CULL_FACE) + glCullFace(GL_BACK) + glFrontFace(GL_CW)
-//   - Both quads have CCW-wound vertices in NDC
-//
-// Quad A (left): has a negative X scale in its model matrix (mirror).
-//   - Negative scale flips winding: CCW -> CW in clip space.
-//   - glFrontFace(GL_CW) says CW is front, so Quad A IS rendered (two errors cancel).
-//
-// Quad B (right): no model matrix scaling (identity).
-//   - Vertices are CCW in NDC, but glFrontFace(GL_CW) says CW is front.
-//   - CCW quad is treated as back-facing -> CULLED (invisible).
-//
-// Bug: The double-negation makes Quad A accidentally visible, while Quad B
-//      (correctly-wound without any mirror) is incorrectly culled.
-//
-// Expected (if bug were fixed with GL_CCW front face):
-//   - Both quads visible, Quad A green, Quad B magenta
-//
-// Actual (with bug):
-//   - Quad A visible (green) -- correct-looking but for wrong reasons
-//   - Quad B invisible -- culled because CCW is treated as back-facing
-//
-// GLA reveals: pipeline state shows cull_enabled=true, front_face=GL_CW.
-// Pixel check: left half shows green quad, right half shows only background.
-//
 // Clear color: dark green-tinted (0.05, 0.15, 0.05, 1.0) -- 400x300 window, 5 frames.
 
 #include <X11/Xlib.h>
@@ -159,11 +134,7 @@ int main(void)
     // Enable culling
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
-    // BUG: GL_CW front face with a mirrored quad creates a double-negation.
-    // A CCW quad under GL_CW front face is BACK -> culled.
-    // A CCW quad mirrored (-X scale) becomes CW -> front -> visible.
-    // But the non-mirrored quad (Quad B) is incorrectly culled.
-    glFrontFace(GL_CW);  // <-- BUG (should be GL_CCW for standard CCW-wound quads)
+    glFrontFace(GL_CW);
 
     GLuint vs = compile_shader(glCreateShader, glShaderSource, glCompileShader,
                                glGetShaderiv, glGetShaderInfoLog,
@@ -215,25 +186,22 @@ int main(void)
     glVertexAttribPointer((GLuint)locPos, 2, GL_FLOAT, GL_FALSE,
                           2 * sizeof(GLfloat), (void *)0);
 
-    // Model A: translate left and apply negative X scale (mirror) -- column-major identity
-    // Scale X by -1 to mirror: flips CCW -> CW in clip space.
-    // With GL_CW as front, mirrored CW quad IS front-facing -> rendered.
+    // Model A: translate left, negative X scale
     GLfloat model_a[16];
     memset(model_a, 0, sizeof(model_a));
-    model_a[0]  = -0.45f;  // negative X scale: mirror + half-width to fit left half
+    model_a[0]  = -0.45f;
     model_a[5]  =  0.9f;
     model_a[10] =  1.0f;
-    model_a[12] = -0.5f;   // translate left
+    model_a[12] = -0.5f;
     model_a[15] =  1.0f;
 
-    // Model B: translate right, no mirroring (positive X scale).
-    // CCW vertices in NDC with GL_CW front face -> treated as back -> CULLED.
+    // Model B: translate right, positive X scale
     GLfloat model_b[16];
     memset(model_b, 0, sizeof(model_b));
-    model_b[0]  =  0.45f;  // positive X scale: no mirror
+    model_b[0]  =  0.45f;
     model_b[5]  =  0.9f;
     model_b[10] =  1.0f;
-    model_b[12] =  0.5f;   // translate right
+    model_b[12] =  0.5f;
     model_b[15] =  1.0f;
 
     for (int frame = 0; frame < 5; frame++) {
@@ -243,14 +211,12 @@ int main(void)
         glUseProgram(prog);
         glBindVertexArray(vao);
 
-        // Quad A (left): mirrored (-X scale) -> CW in clip space -> front face visible
-        // Two bugs cancel: neg scale makes it CW, GL_CW says CW is front -> renders
+        // Quad A (left)
         glUniformMatrix4fv(locModel, 1, GL_FALSE, model_a);
         glUniform4f(locColor, 0.1f, 0.9f, 0.2f, 1.0f);  // green
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
-        // Quad B (right): not mirrored, CCW in NDC.
-        // GL_CW front face: CCW is treated as back-facing -> CULLED (invisible).
+        // Quad B (right)
         glUniformMatrix4fv(locModel, 1, GL_FALSE, model_b);
         glUniform4f(locColor, 0.9f, 0.1f, 0.9f, 1.0f);  // magenta
         glDrawArrays(GL_TRIANGLES, 0, 6);

@@ -4,21 +4,6 @@
 //
 // Draws 2 quads using glUniform4f for color (no textures).
 //
-// Bug: The glUniform4f call for Quad B's blue color is missing.
-//      Quad B inherits Quad A's red uniform, so both quads appear red.
-//
-// Expected (if bug were fixed):
-//   - Quad A (left):  RED   (1,0,0,1)
-//   - Quad B (right): BLUE  (0,0,1,1)
-//
-// Actual (with bug):
-//   - Quad A (left):  RED   (1,0,0,1) -- correct
-//   - Quad B (right): RED   (1,0,0,1) -- wrong, should be blue
-//
-// GLA reveals: inspect_drawcall(1).params shows color=(1,0,0,1) for draw 1,
-//              instead of (0,0,1,1).
-// Pixel check: left quad red (correct), right quad red (wrong, should be blue).
-//
 // Clear color: dark gray (0.15, 0.15, 0.15, 1.0) -- 400x300 window, 5 frames.
 
 #include <X11/Xlib.h>
@@ -215,9 +200,7 @@ int main(void)
         glBindVertexArray(vao_a);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
-        // Draw Quad B: BUG -- glUniform4f for BLUE is missing!
-        // The red uniform from Quad A is still active, so Quad B renders red.
-        /* glUniform4f(colorLoc, 0.0f, 0.0f, 1.0f, 1.0f); */  // <-- intentionally omitted
+        /* glUniform4f(colorLoc, 0.0f, 0.0f, 1.0f, 1.0f); */
         glBindVertexArray(vao_b);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 

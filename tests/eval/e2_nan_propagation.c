@@ -4,20 +4,6 @@
 //
 // Draws 1 lit quad with a normal matrix uniform.
 //
-// Bug: Model matrix has scale(1, 1, 0) -- zero Z scale -- making it singular.
-//      The normal matrix = transpose(inverse(model)) produces Inf/NaN.
-//      The fragment shader computes diffuse lighting using the corrupted normal,
-//      and max(NaN, 0.0) evaluates to 0, making the lit object appear black.
-//
-// Expected (if bug were fixed):
-//   - Object area shows a lit color ~(0.7, 0.5, 0.2) (warm orange-ish lit by baseColor)
-//
-// Actual (with bug):
-//   - Object area is black (0,0,0) -- lighting produces zero due to NaN
-//
-// GLA reveals: inspect_drawcall(0).params shows normalMatrix with Inf values.
-// Pixel check: object center is black instead of a lit warm color.
-//
 // Clear color: dark blue (0.1, 0.1, 0.3, 1.0) -- 400x300 window, 5 frames.
 
 #include <X11/Xlib.h>
@@ -68,13 +54,10 @@ static const char *vert_src =
     "varying vec3 vNormal;\n"
     "void main() {\n"
     "    gl_Position = vec4(aPos, 1.0);\n"
-    "    vNormal = uNormalMatrix * aNormal;\n"  // NaN propagates here
+    "    vNormal = uNormalMatrix * aNormal;\n"
     "}\n";
 
 // Fragment shader: diffuse lighting with base color
-// color = max(dot(normal, lightDir), 0.0) * baseColor
-// When normalMatrix has Inf/NaN, the normal becomes NaN,
-// dot(NaN, lightDir) = NaN, max(NaN, 0.0) = 0.0 -> black
 static const char *frag_src =
     "#version 120\n"
     "uniform vec3 uBaseColor;\n"
@@ -82,7 +65,7 @@ static const char *frag_src =
     "void main() {\n"
     "    vec3 lightDir = normalize(vec3(0.5, 0.7, 1.0));\n"
     "    vec3 n = normalize(vNormal);\n"
-    "    float diff = max(dot(n, lightDir), 0.0);\n"  // NaN -> 0 -> black
+    "    float diff = max(dot(n, lightDir), 0.0);\n"
     "    gl_FragColor = vec4(uBaseColor * diff, 1.0);\n"
     "}\n";
 
@@ -109,7 +92,7 @@ static GLuint compile_shader(
 }
 
 // Compute normal matrix (transpose of inverse of upper-left 3x3 of model).
-// Model is stored column-major. With scale Z=0, det=0, inv_det=Inf -> NaN values.
+// Model is stored column-major.
 static void compute_normal_matrix(const GLfloat m[16], GLfloat nm[9])
 {
     float a = m[0], b = m[4], c = m[8];
@@ -117,7 +100,6 @@ static void compute_normal_matrix(const GLfloat m[16], GLfloat nm[9])
     float g = m[2], h = m[6], k = m[10];
 
     float det = a*(e*k - f*h) - b*(d*k - f*g) + c*(d*h - e*g);
-    // With scale Z=0: k=0, det=0, inv_det=Inf -> Inf * 0 = NaN
     float inv_det = 1.0f / det;
 
     // Cofactor matrix (transposed = inverse * det), column-major
@@ -243,14 +225,12 @@ int main(void)
     glVertexAttribPointer((GLuint)locNormal, 3, GL_FLOAT, GL_FALSE, stride,
                           (void *)(3 * sizeof(GLfloat)));
 
-    // BUG: model matrix with scale(1, 1, 0) -- Z scale = 0 makes matrix singular.
-    // Normal matrix = transpose(inverse(model)) -> Inf/NaN in Z-related entries.
-    // Column-major identity with m[10] = 0
+    // Column-major model matrix
     GLfloat model[16];
     memset(model, 0, sizeof(model));
     model[0] = 1.0f;
     model[5] = 1.0f;
-    model[10] = 0.0f;  // <-- BUG: Z scale = 0 (should be 1.0f)
+    model[10] = 0.0f;
     model[15] = 1.0f;
 
     GLfloat nm[9];
@@ -261,9 +241,8 @@ int main(void)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(prog);
-        // Base color: warm orange -- should be visible if lighting worked
+        // Base color: warm orange
         glUniform3f(locBaseColor, 0.9f, 0.6f, 0.2f);
-        // Upload normal matrix with Inf/NaN due to singular model
         glUniformMatrix3fv(locNM, 1, GL_FALSE, nm);
 
         glBindVertexArray(vao);

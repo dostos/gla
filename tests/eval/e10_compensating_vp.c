@@ -1,18 +1,8 @@
 // tests/eval/e10_compensating_vp.c
 //
-// Adversarial Eval Scenario E10: Compensating View/Projection Bugs
+// E10: Compensating View/Projection Bugs
 //
-// Bug 1 (view): buggy_lookat uses forward = eye - center (negated).
-//   Correct: forward = normalize(center - eye).
-// Bug 2 (projection): m[10] and m[14] are negated vs. standard OpenGL perspective.
-//
-// For the centred quad (symmetric about X=0), the two errors cancel and it
-// renders correctly. For the off-centre quad (shifted right in world space),
-// the X-axis is effectively mirrored — it appears on the LEFT instead of RIGHT.
-//
-// GLA diagnosis:
-//   inspect_drawcall(params) -> view/proj matrices have wrong-sign entries
-//   query_scene(camera)      -> forward vector is (0,0,+1) instead of (0,0,-1)
+// Draws two quads using a view matrix and perspective projection.
 //
 // Clear color: dark yellow (0.15, 0.12, 0.0)
 
@@ -86,14 +76,12 @@ static void cross3(float *out, const float *a, const float *b)
     out[2] = a[0]*b[1] - a[1]*b[0];
 }
 
-/* BUG 1: forward direction is negated (eye - center instead of center - eye).
- * Column-major output. */
+/* Column-major lookat matrix. */
 static void buggy_lookat(float *m,
                          float ex, float ey, float ez,
                          float cx, float cy, float cz,
                          float ux, float uy, float uz)
 {
-    /* BUG: should be (cx-ex, cy-ey, cz-ez) */
     float fwd[3] = { ex - cx, ey - cy, ez - cz };
     norm3(fwd);
     float up[3] = { ux, uy, uz };
@@ -113,8 +101,7 @@ static void buggy_lookat(float *m,
     m[15] = 1.0f;
 }
 
-/* BUG 2: m[10] and m[14] are negated (wrong sign on [2][2] and [2][3]).
- * This partially cancels Bug 1 for on-axis (X=0) geometry. */
+/* Column-major perspective matrix. */
 static void buggy_perspective(float *m, float fovy_deg, float aspect,
                                float near_z, float far_z)
 {
@@ -123,7 +110,6 @@ static void buggy_perspective(float *m, float fovy_deg, float aspect,
     memset(m, 0, 16 * sizeof(float));
     m[0]  =  f / aspect;
     m[5]  =  f;
-    /* BUG: negated — depth range inverted, partially cancels view bug */
     m[10] = -(far_z + near_z) * nf;
     m[11] = -1.0f;
     m[14] = -(2.0f * far_z * near_z * nf);
@@ -230,9 +216,8 @@ int main(void)
     GLint posLoc   = glGetAttribLocation(prog,  "aPos");
 
     /* Two quads (each as 2 triangles):
-     *   Quad A — centred at X=0, Z=-3: looks correct (bugs cancel for symmetric geo).
-     *   Quad B — centred at X=+0.8, Z=-3: should appear on the RIGHT, but due to
-     *            the X-mirror from the buggy matrices, appears on the LEFT.
+     *   Quad A — centred at X=0, Z=-3.
+     *   Quad B — centred at X=+0.8, Z=-3.
      */
     static const GLfloat verts[] = {
         /* Quad A: centred (green) at world (0, 0, -3) */
@@ -261,15 +246,13 @@ int main(void)
     glVertexAttribPointer((GLuint)posLoc, 3, GL_FLOAT, GL_FALSE,
                           3 * sizeof(GLfloat), (void *)0);
 
-    /* Buggy view: camera at (0,0,3) looking at origin.
-     * Correct forward = (0,0,-1); buggy_lookat produces (0,0,+1). */
+    /* View: camera at (0,0,3) looking at origin. */
     float view[16];
     buggy_lookat(view,
                  0.0f, 0.0f, 3.0f,  /* eye */
                  0.0f, 0.0f, 0.0f,  /* center */
                  0.0f, 1.0f, 0.0f); /* up */
 
-    /* Buggy projection: negated depth-range entries partially cancel view bug */
     float proj[16];
     buggy_perspective(proj, 60.0f, 400.0f / 300.0f, 0.1f, 100.0f);
 
@@ -283,11 +266,11 @@ int main(void)
         glUniformMatrix4fv(projLoc, 1, GL_FALSE, proj);
         glBindVertexArray(vao);
 
-        /* Quad A: green, centred — appears correct due to bug cancellation */
+        /* Quad A: green, centred */
         glUniform4f(colorLoc, 0.2f, 0.9f, 0.2f, 1.0f);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
-        /* Quad B: orange, off-centre right — BUG: appears on LEFT (X-mirrored) */
+        /* Quad B: orange, off-centre right */
         glUniform4f(colorLoc, 1.0f, 0.5f, 0.0f, 1.0f);
         glDrawArrays(GL_TRIANGLES, 6, 6);
 

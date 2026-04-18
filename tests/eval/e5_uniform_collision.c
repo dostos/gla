@@ -3,22 +3,6 @@
 // E5: Uniform Location Collision
 //
 // Draws 2 quads with different colors set by uniform, using 2 separate programs.
-// The uniform locations are cached in the wrong order (swapped index).
-//
-// Bug: uniform locations are cached using swapped program indices --
-//      Object A's color is set via Object B's program's uniform location,
-//      and vice versa. Both objects display the wrong color.
-//
-// Expected (if bug were fixed):
-//   - Object A (left):  GREEN  (0,1,0,1)
-//   - Object B (right): YELLOW (1,1,0,1)
-//
-// Actual (with bug):
-//   - Object A (left):  YELLOW (1,1,0,1) -- should be green
-//   - Object B (right): GREEN  (0,1,0,1) -- should be yellow
-//
-// GLA reveals: inspect_drawcall(0).params shows color=(1,1,0,1) instead of (0,1,0,1).
-// Pixel check: left object yellow (wrong), right object green (wrong).
 //
 // Clear color: dark purple (0.1, 0.05, 0.15, 1.0) -- 400x300 window, 5 frames.
 
@@ -180,8 +164,6 @@ int main(void)
     glViewport(0, 0, 400, 300);
 
     // Two separate programs (same shader source, distinct GL objects)
-    // prog[0] is for Object A (should render GREEN)
-    // prog[1] is for Object B (should render YELLOW)
     GLuint prog[2];
     prog[0] = build_program(glCreateShader, glShaderSource, glCompileShader,
                             glGetShaderiv, glGetShaderInfoLog,
@@ -193,21 +175,9 @@ int main(void)
                             glGetProgramiv, glGetProgramInfoLog, glDeleteShader);
     if (!prog[0] || !prog[1]) return 1;
 
-    // BUG: uniform location cache is populated with SWAPPED program indices.
-    // Correct code would be:
-    //   color_loc_cache[0] = glGetUniformLocation(prog[0], "uColor");
-    //   color_loc_cache[1] = glGetUniformLocation(prog[1], "uColor");
-    //
-    // Instead, the cache is filled in the wrong order (simulating a refactor
-    // that reordered the program array without updating the cache):
     GLint color_loc_cache[2];
-    color_loc_cache[0] = glGetUniformLocation(prog[1], "uColor");  // BUG: uses prog[1] for slot 0
-    color_loc_cache[1] = glGetUniformLocation(prog[0], "uColor");  // BUG: uses prog[0] for slot 1
-    // Result: when we use prog[0] with color_loc_cache[0], we're using a location
-    // from prog[1]'s namespace -- the uniform call may silently no-op or write
-    // to prog[1]'s uniform, not prog[0]'s.
-    // Object A effectively gets YELLOW (prog[0]'s uColor is never set correctly).
-    // Object B effectively gets GREEN  (prog[1]'s uColor is never set correctly).
+    color_loc_cache[0] = glGetUniformLocation(prog[1], "uColor");
+    color_loc_cache[1] = glGetUniformLocation(prog[0], "uColor");
 
     GLint posLoc = glGetAttribLocation(prog[0], "aPos");
 
@@ -244,17 +214,15 @@ int main(void)
         glClearColor(0.1f, 0.05f, 0.15f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Draw Object A: should be GREEN but bug causes wrong color
-        // color_loc_cache[0] holds prog[1]'s uniform location -- wrong program
+        // Draw Object A
         glUseProgram(prog[0]);
-        glUniform4f(color_loc_cache[0], 0.0f, 1.0f, 0.0f, 1.0f);  // intends GREEN
+        glUniform4f(color_loc_cache[0], 0.0f, 1.0f, 0.0f, 1.0f);  // green
         glBindVertexArray(vao[0]);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
-        // Draw Object B: should be YELLOW but bug causes wrong color
-        // color_loc_cache[1] holds prog[0]'s uniform location -- wrong program
+        // Draw Object B
         glUseProgram(prog[1]);
-        glUniform4f(color_loc_cache[1], 1.0f, 1.0f, 0.0f, 1.0f);  // intends YELLOW
+        glUniform4f(color_loc_cache[1], 1.0f, 1.0f, 0.0f, 1.0f);  // yellow
         glBindVertexArray(vao[1]);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 

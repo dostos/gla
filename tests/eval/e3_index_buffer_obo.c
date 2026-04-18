@@ -1,25 +1,8 @@
 // tests/eval/e3_index_buffer_obo.c
 //
-// E3: Index Buffer Off-by-One (sizeof pointer bug)
+// E3: Index Buffer Off-by-One
 //
 // Draws a hexagon (6 triangles = 18 indices) using glDrawElements.
-//
-// Bug: glBufferData size uses sizeof(indices) where `indices` is a pointer
-//      (GLushort *), not an array. On 64-bit: sizeof(GLushort *) = 8 bytes
-//      = only 4 uint16 indices uploaded. The full hexagon needs 18 indices
-//      = 36 bytes. Only the first triangle (indices 0,1,2) may render;
-//      remaining indices pull from uninitialized GPU memory.
-//
-// Expected (if bug were fixed):
-//   - Full hexagon fills the center of the screen in cyan
-//
-// Actual (with bug):
-//   - Only a small partial triangle (first 3-4 valid indices) renders;
-//     rest of the hexagon is missing or corrupted
-//
-// GLA reveals: vertex_count (18) in the draw call does not match the
-//              actual data uploaded (4 indices = 8 bytes).
-// Pixel check: only a small part of the hexagon renders near center.
 //
 // Clear color: near-black (0.08, 0.08, 0.08, 1.0) -- 400x300 window, 5 frames.
 
@@ -210,12 +193,9 @@ int main(void)
     glGenBuffers(1, &ebo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
 
-    // BUG: sizeof(indices) where `indices` is a pointer (GLushort *)
-    // On 64-bit: sizeof(GLushort *) = 8 bytes = only 4 uint16 values uploaded.
-    // Full hexagon needs n_indices * sizeof(GLushort) = 18 * 2 = 36 bytes.
     const GLushort *indices = indices_data;
     glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                 sizeof(indices),           // BUG: sizeof(pointer) = 8, not 36
+                 sizeof(indices),
                  indices, GL_STATIC_DRAW);
 
     for (int frame = 0; frame < 5; frame++) {
@@ -225,7 +205,6 @@ int main(void)
         glUseProgram(prog);
         glUniform4f(locColor, 0.0f, 0.9f, 0.9f, 1.0f);  // cyan
         glBindVertexArray(vao);
-        // Request all 18 indices; only 4 were actually uploaded
         glDrawElements(GL_TRIANGLES, n_indices, GL_UNSIGNED_SHORT, (void *)0);
 
         glXSwapBuffers(dpy, win);

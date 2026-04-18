@@ -1,13 +1,8 @@
 // tests/eval/e9_scissor_not_reset.c
 //
-// Adversarial Eval Scenario E9: Scissor Rect Not Reset Between Passes
+// E9: Scissor Rect Not Reset Between Passes
 //
-// Bug: Pass 1 (UI) enables GL_SCISSOR_TEST and sets glScissor(100,100,200,100).
-// A white quad is drawn (UI element). Pass 2 (3D) omits glDisable(GL_SCISSOR_TEST).
-// The large blue triangle is clipped to the UI scissor rectangle.
-//
-// GLA diagnosis:
-//   inspect_drawcall(1) pipeline -> scissor_enabled=true, rect=(100,100,200,100)
+// Draws a UI quad with scissor test, then draws a 3D triangle in a second pass.
 //
 // Clear color: dark red (0.15, 0.0, 0.0)
 
@@ -165,9 +160,7 @@ int main(void)
         -0.5f,  0.33f,
     };
 
-    /* 3D scene: large blue triangle intended to fill most of the screen.
-     * Due to the leaking scissor rect, only the part inside (100,100,200,100)
-     * is visible. */
+    /* 3D scene: large blue triangle. */
     static const GLfloat scene_verts[] = {
         -0.95f, -0.95f,
          0.95f, -0.95f,
@@ -209,9 +202,7 @@ int main(void)
         glBindVertexArray(vao_ui);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
-        /* === Pass 2: 3D scene ===
-         * BUG: glDisable(GL_SCISSOR_TEST) missing — scissor rect leaks.
-         * Fix: uncomment the line below. */
+        /* === Pass 2: 3D scene === */
         /* glDisable(GL_SCISSOR_TEST); */
 
         glUniform4f(colorLoc, 0.0f, 0.2f, 0.9f, 1.0f); /* blue 3D triangle */

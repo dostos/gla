@@ -68,16 +68,10 @@ int main(void){
     GLXContext ctx = glXCreateContextAttribsARB(dpy, config, 0, True, ctx_attribs);
     glXMakeCurrent(dpy, win, ctx);
 
-    // Port of three.js r164 regression (PR #28118). With preserveDrawingBuffer:true,
-    // the reordering placed the WebGLBackground clear *after* render-list insertion,
-    // so the intended per-frame color clear was effectively skipped and prior-frame
-    // pixels persisted as "trails".
-    //
-    // We mimic this by performing two logical frames back-to-back in one context:
+    // Port of three.js r164 render ordering change (PR #28118).
+    // Performs two logical frames back-to-back:
     //   Frame N-1: clear white, draw a RED quad on the left.
-    //   Frame N  : (BUG) skip the color clear; draw a GREEN quad on the right.
-    // The sole swapped frame should show only the green quad on a white background,
-    // but the red quad is still visible — the "trail" from the preserved buffer.
+    //   Frame N  : draw a GREEN quad on the right (no color clear).
 
     GLuint vs = compile(GL_VERTEX_SHADER, VS);
     GLuint fs = compile(GL_FRAGMENT_SHADER, FS);
@@ -118,8 +112,7 @@ int main(void){
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
-        // --- logical frame N: BUG — color clear omitted due to reordering regression ---
-        // glClear(GL_COLOR_BUFFER_BIT) intentionally NOT called here.
+        // --- logical frame N: color clear omitted ---
         glUniform3f(uColor, 0.0f, 1.0f, 0.0f); // green
         glBindBuffer(GL_ARRAY_BUFFER, vboR);
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);

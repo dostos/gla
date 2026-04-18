@@ -102,10 +102,7 @@ int main(void) {
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), 0);
 
-    // Bug pattern: shadow-pass side selection flips to front-face culling to
-    // fight self-shadow acne, but for casters whose visible face IS the front,
-    // this drops the very triangles the light sees, causing missing shadows
-    // and peter-panning downstream.
+    // Shadow-pass side selection: front-face culling.
     glEnable(GL_CULL_FACE);
     glFrontFace(GL_CCW);
     glCullFace(GL_FRONT);
@@ -125,9 +122,7 @@ int main(void) {
     unsigned char px[4] = {0};
     glReadPixels(128, 128, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
     printf("center pixel RGBA = %u %u %u %u\n", px[0], px[1], px[2], px[3]);
-    printf("expected: red caster rasterized (depth would populate shadow map)\n");
-    printf("actual:   %s\n",
-        px[0] > 128 ? "red (ok)" : "black (front face culled — caster lost in shadow pass)");
+    printf("center pixel: %s\n", px[0] > 128 ? "red" : "black");
     glXMakeCurrent(dpy, None, NULL);
     glXDestroyContext(dpy, ctx);
     XDestroyWindow(dpy, win);

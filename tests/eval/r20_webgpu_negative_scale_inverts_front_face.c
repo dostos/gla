@@ -103,10 +103,7 @@ int main(void) {
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), 0);
 
-    // Pipeline analogue of the WebGPU backend before the fix: cull back faces
-    // with front-face = CCW, and do NOT compensate for negative-determinant
-    // model transforms. A mesh with negative scale flips winding to CW in
-    // clip space, so the renderer silently culls its visible surface.
+    // Pipeline: cull back faces with front-face = CCW.
     glEnable(GL_CULL_FACE);
     glFrontFace(GL_CCW);
     glCullFace(GL_BACK);
@@ -120,9 +117,7 @@ int main(void) {
     float left[16] = {0};
     left[0]=1.0f; left[5]=1.0f; left[10]=1.0f; left[15]=1.0f; left[12]=-0.5f;
 
-    // Right: NEGATIVE Y scale (mirror), translated right. det(M) < 0, so the
-    // triangle's effective winding becomes CW. With frontFace=CCW + cull=BACK
-    // the renderer drops it entirely — the bug manifestation.
+    // Right: NEGATIVE Y scale (mirror), translated right.
     float right[16] = {0};
     right[0]=1.0f; right[5]=-1.0f; right[10]=1.0f; right[15]=1.0f; right[12]=0.5f;
 
@@ -144,10 +139,7 @@ int main(void) {
     glReadPixels(300, 100, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, right_px);
     printf("left  center RGBA = %u %u %u %u\n", left_px[0], left_px[1], left_px[2], left_px[3]);
     printf("right center RGBA = %u %u %u %u\n", right_px[0], right_px[1], right_px[2], right_px[3]);
-    printf("expected: both red (negative-scale mesh should still render, mirrored)\n");
-    printf("actual:   right %s\n",
-        right_px[0] > 128 ? "red (ok — winding compensated)"
-                          : "black (negative-det mesh culled — WebGPU-style bug)");
+    printf("right center: %s\n", right_px[0] > 128 ? "red" : "black");
     glXMakeCurrent(dpy, None, NULL);
     glXDestroyContext(dpy, ctx);
     XDestroyWindow(dpy, win);

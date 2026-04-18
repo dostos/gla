@@ -1,15 +1,9 @@
 // tests/eval/e6_depth_precision.c
 //
-// Adversarial Eval Scenario E6: Depth Buffer Precision
+// E6: Depth Buffer Precision
 //
-// Bug: near=0.001, far=100000 (ratio ~1e8) exhausts 24-bit depth buffer
-// precision at the scene's working depth. Two overlapping quads placed at
-// z=-0.5 and z=-0.500001 map to identical depth buffer values, causing
-// z-fighting (alternating colors per frame / random winner per draw).
-//
-// GLA diagnosis:
-//   inspect_drawcall(pipeline)  -> depth_test=true
-//   query_pixel at center       -> alternating green/red across frames
+// Two overlapping quads at z=-0.5 and z=-0.500001 rendered with a perspective
+// projection.
 //
 // Clear color: dark purple (0.15, 0.0, 0.15)
 
@@ -64,10 +58,7 @@ static const char *frag_src =
     "uniform vec4 uColor;\n"
     "void main() { gl_FragColor = uColor; }\n";
 
-/* Build column-major perspective matrix.
- * BUG: near=0.001, far=100000 => ratio ~1e8.
- * At z=-0.5 the depth precision is ~0.0001 per LSB, so a 0.000001 difference
- * rounds to the same depth value => z-fighting. */
+/* Build column-major perspective matrix. */
 static void make_perspective(float *m, float fovy_deg, float aspect,
                               float near_z, float far_z)
 {
@@ -181,18 +172,16 @@ int main(void)
     GLint colorLoc = glGetUniformLocation(prog, "uColor");
     GLint posLoc   = glGetAttribLocation(prog,  "aPos");
 
-    /* Quad A (green) at z=-0.5, Quad B (red) at z=-0.500001.
-     * With near=0.001 far=100000, depth precision is so coarse at z=-0.5 that
-     * both quads map to the same depth buffer value => z-fighting. */
+    /* Quad A (green) at z=-0.5, Quad B (red) at z=-0.500001. */
     static const GLfloat verts[] = {
-        /* Quad A at z = -0.5 (green — should be in front) */
+        /* Quad A at z = -0.5 (green) */
         -0.6f, -0.6f, -0.5f,
          0.6f, -0.6f, -0.5f,
          0.6f,  0.6f, -0.5f,
         -0.6f, -0.6f, -0.5f,
          0.6f,  0.6f, -0.5f,
         -0.6f,  0.6f, -0.5f,
-        /* Quad B at z = -0.500001 (red — should be hidden behind A) */
+        /* Quad B at z = -0.500001 (red) */
         -0.6f, -0.6f, -0.500001f,
          0.6f, -0.6f, -0.500001f,
          0.6f,  0.6f, -0.500001f,
@@ -211,8 +200,6 @@ int main(void)
     glVertexAttribPointer((GLuint)posLoc, 3, GL_FLOAT, GL_FALSE,
                           3 * sizeof(GLfloat), (void *)0);
 
-    /* BUG: near/far ratio of ~1e8 destroys depth precision.
-     * Use identity (no translation) — quads are in front of origin along -Z. */
     float mvp[16];
     make_perspective(mvp, 90.0f, 400.0f / 300.0f, 0.001f, 100000.0f);
 
@@ -225,11 +212,11 @@ int main(void)
         glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, mvp);
         glBindVertexArray(vao);
 
-        /* Draw Quad A (green) — should win depth test but z-fights */
+        /* Draw Quad A (green) */
         glUniform4f(colorLoc, 0.0f, 0.9f, 0.0f, 1.0f);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
-        /* Draw Quad B (red) — should lose depth test but z-fights */
+        /* Draw Quad B (red) */
         glUniform4f(colorLoc, 0.9f, 0.0f, 0.0f, 1.0f);
         glDrawArrays(GL_TRIANGLES, 6, 6);
 

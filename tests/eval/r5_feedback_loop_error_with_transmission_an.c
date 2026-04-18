@@ -1,10 +1,8 @@
 // SOURCE: https://github.com/mrdoob/three.js/issues/33060
-// Minimal reproduction of the r182 transmission feedback-loop bug:
+// Minimal reproduction of the r182 transmission render path:
 // when capabilities.samples == 0, the transmission render target's
 // texture is attached directly as COLOR_ATTACHMENT0 while the fragment
-// shader simultaneously samples that same texture via a uniform. This
-// is the exact "Feedback loop formed between Framebuffer and active
-// Texture" condition described in the upstream issue.
+// shader simultaneously samples that same texture via a uniform.
 
 #define GL_GLEXT_PROTOTYPES
 #include <GL/gl.h>
@@ -25,8 +23,7 @@ static const char* VS =
     "void main(){ uv = p*0.5+0.5; gl_Position = vec4(p,0,1); }\n";
 
 /* Fragment shader mimics the transmission pass: reads the transmission
- * texture (which, in the buggy path, IS the current color attachment)
- * and tints it -- exactly the DoubleSide/back-face pass from
+ * texture and tints it -- the DoubleSide/back-face pass from
  * WebGLRenderer.js lines 2016-2042. */
 static const char* FS =
     "#version 330 core\n"
@@ -130,28 +127,21 @@ int main(void) {
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        /* Bind the SAME texture that is currently COLOR_ATTACHMENT0 to the
-         * sampler unit the shader reads from. This is the feedback loop. */
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, transmissionTex);
 
-        /* The offending draw: back-face pass sampling the transmission RT. */
+        /* Back-face pass sampling the transmission RT. */
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glXSwapBuffers(dpy, win);
     }
 
-    /* On WebGL this raises GL_INVALID_OPERATION; on desktop GL the
-     * result is undefined per GL 3.3 spec sec 3.8.12 ("Texture Data
-     * Dependencies"). Either way, GLA can flag the state at draw time. */
+    /* Check for GL errors after the draw. */
     GLenum err;
     int reported = 0;
     while ((err = glGetError()) != GL_NO_ERROR && reported < 8) {
-        fprintf(stderr,
-                "GL error 0x%x during draw: texture %u is bound to unit 0 "
-                "AND attached to FBO %u COLOR_ATTACHMENT0\n",
-                err, transmissionTex, fbo);
+        fprintf(stderr, "GL error 0x%x\n", err);
         reported++;
     }
 

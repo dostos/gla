@@ -89,19 +89,13 @@ int main(void) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    // --- Godot compat renderer, 3D-scaling path (buggy):
-    // Non-scaling path creates the depth/stencil backbuffer with
-    // internalformat=GL_DEPTH24_STENCIL8, format=GL_DEPTH_STENCIL,
-    // type=GL_UNSIGNED_INT_24_8 (a valid combination).
-    // Scaling path uses a different `type` — here GL_FLOAT — which is
-    // NOT a legal pixel type for GL_DEPTH_STENCIL. glTexImage2D returns
-    // GL_INVALID_OPERATION and leaves the texture with no storage.
+    // Godot compat renderer, 3D-scaling path:
     GLuint ds_tex;
     glGenTextures(1, &ds_tex);
     glBindTexture(GL_TEXTURE_2D, ds_tex);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, W, H, 0,
                  GL_DEPTH_STENCIL,
-                 GL_FLOAT, /* BUG: should be GL_UNSIGNED_INT_24_8 */
+                 GL_FLOAT,
                  NULL);
     GLenum tex_err = glGetError();
     fprintf(stderr, "glTexImage2D(depth/stencil) err=0x%04X\n", tex_err);
