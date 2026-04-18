@@ -22,4 +22,5 @@ load("@rules_cc//cc:defs.bzl", "cc_binary")
     "r17_svg_path_seems_to_render_weird_in_some_c",
     "r20_webgpu_negative_scale_inverts_front_face",
     "r31_weird_r164_webgl_renderer_regression_wit",
+    "r36_opengl_proximity_fade_could_not_create_3",
 ]]
