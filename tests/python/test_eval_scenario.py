@@ -91,12 +91,15 @@ class TestScenarioLoader:
         assert len(scenario.adversarial_principles) >= 2
         assert len(scenario.gla_advantage) > 0
 
-    def test_load_all_returns_ten_scenarios(self):
-        """load_all() returns all 10 eval scenarios."""
+    def test_load_all_returns_synthetic_scenarios(self):
+        """load_all() returns all 10 synthetic (e-prefixed) scenarios; may include
+        additional real-world (r-prefixed) scenarios curated from upstream issues."""
         loader = ScenarioLoader(eval_dir=str(EVAL_DIR))
         scenarios = loader.load_all()
         ids = [s.id for s in scenarios]
-        assert len(scenarios) == 10
+        assert len(scenarios) >= 10
+        e_ids = [i for i in ids if i.startswith("e")]
+        assert len(e_ids) == 10
         assert "e1_state_leak" in ids
         assert "e10_compensating_vp" in ids
 
