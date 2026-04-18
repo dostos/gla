@@ -9,6 +9,7 @@
 
 #include <chrono>
 #include <cstring>
+#include <thread>
 #include <ctime>
 #include <stdexcept>
 #include <vector>
@@ -27,7 +28,11 @@ Engine::Engine(const std::string& socket_path, const std::string& shm_name,
 }
 
 Engine::~Engine() {
-    stop();
+    if (running_.load()) {
+        stop();
+        // Give the run() loop time to exit before closing shared resources
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
     for (int fd : client_fds_) {
         if (fd >= 0) ::close(fd);
     }

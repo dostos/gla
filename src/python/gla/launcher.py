@@ -10,6 +10,7 @@ The launcher prints environment variables needed to connect a shim:
     GLA_AUTH_TOKEN=<random token>
 """
 import argparse
+import atexit
 import secrets
 import signal
 import sys
@@ -49,6 +50,12 @@ def main():
         engine_thread = threading.Thread(target=engine.run, daemon=True, name="opengpa-engine")
         engine_thread.start()
 
+        def _shutdown():
+            engine.stop()
+            engine_thread.join(timeout=3)
+
+        atexit.register(_shutdown)
+
         # Create query engine
         normalizer = _gla_core.Normalizer()
         qe = _gla_core.QueryEngine(engine.frame_store(), normalizer)
@@ -84,6 +91,8 @@ def main():
     def shutdown(sig, frame):
         if engine is not None:
             engine.stop()
+            if engine_thread is not None:
+                engine_thread.join(timeout=3)
         sys.exit(0)
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
