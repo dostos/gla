@@ -54,7 +54,7 @@ def search_questions(tags: list[str], per_page: int = 30,
         "tagged": ";".join(tags),
         "site": "stackoverflow",
         "pagesize": str(per_page),
-        "filter": "!nNPvSNrYIM",  # withbody + accepted answer info
+        "filter": "withbody",  # withbody + accepted answer info
     }
     if accepted_only:
         params["accepted"] = "True"
@@ -105,7 +105,7 @@ def fetch_stackoverflow_thread(url: str):
     # Fetch the question (withbody)
     q_url = (
         f"{_API_BASE}/questions/{qid}"
-        f"?site=stackoverflow&filter=!nNPvSNrYIM{key_param}"
+        f"?site=stackoverflow&filter=withbody{key_param}"
     )
     q_data = _http_get_json(q_url) or {}
     items = q_data.get("items", [])
