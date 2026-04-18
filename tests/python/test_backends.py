@@ -150,7 +150,9 @@ class TestNativeBackend:
         dc = backend.get_draw_call(1, 7)
         assert isinstance(dc, DrawCallInfo)
         assert dc.id == 7
-        assert dc.params == [{"name": "uMVP", "type": "mat4", "data": list(range(16))}]
+        import base64
+        expected_data = base64.b64encode(bytes(range(16))).decode("ascii")
+        assert dc.params == [{"name": "uMVP", "type": "mat4", "data": expected_data}]
 
     def test_get_draw_call_none(self):
         qe = MagicMock()

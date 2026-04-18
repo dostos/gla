@@ -63,7 +63,8 @@ def _make_drawcall(dc_id: int = 0, frame_id: int = 1) -> MagicMock:
     param = MagicMock()
     param.name = "uColor"
     param.type = "vec4"
-    param.data = [1.0, 0.0, 0.0, 1.0]
+    # Use bytes instead of floats so that base64 encoding works
+    param.data = bytes([255, 0, 0, 255])
     dc.params = [param]
     # Texture bindings attached directly to the draw call
     tex = MagicMock()
