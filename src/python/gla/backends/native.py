@@ -72,9 +72,11 @@ class NativeBackend(FrameProvider):
 
     @staticmethod
     def _convert_drawcall(dc) -> DrawCallInfo:
+        import base64
         params = []
         for p in (dc.params or []):
-            params.append({"name": p.name, "type": p.type, "data": p.data})
+            raw = p.data if isinstance(p.data, bytes) else bytes(p.data) if p.data else b""
+            params.append({"name": p.name, "type": p.type, "data": base64.b64encode(raw).decode("ascii")})
 
         textures = []
         for t in (dc.textures or []):
