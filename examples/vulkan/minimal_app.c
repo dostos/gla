@@ -1,14 +1,14 @@
 /*
- * minimal_app.c — Minimal Vulkan application for testing the GLA layer.
+ * minimal_app.c — Minimal Vulkan application for testing the OpenGPA layer.
  *
  * This application creates a Vulkan instance and device, then presents
- * a simple colored triangle. It is designed to test the GLA layer's
+ * a simple colored triangle. It is designed to test the OpenGPA layer's
  * ability to intercept basic Vulkan calls.
  *
  * Build:
  *   gcc -o minimal_app minimal_app.c -lvulkan -lm
  *
- * Run with GLA layer:
+ * Run with OpenGPA layer:
  *   export VK_INSTANCE_LAYERS=VK_LAYER_GLA_capture
  *   ./minimal_app
  */
@@ -41,7 +41,7 @@ VulkanContext ctx = {0};
 static void create_instance(void) {
     VkApplicationInfo app_info = {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-        .pApplicationName = "GLA Minimal App",
+        .pApplicationName = "OpenGPA Minimal App",
         .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
         .pEngineName = "No Engine",
         .engineVersion = VK_MAKE_VERSION(1, 0, 0),
@@ -54,7 +54,7 @@ static void create_instance(void) {
     };
 
     CHECK_VK(vkCreateInstance(&create_info, NULL, &ctx.instance));
-    printf("[GLA] Created Vulkan instance\n");
+    printf("[OpenGPA] Created Vulkan instance\n");
 }
 
 static void enumerate_devices(void) {
@@ -74,7 +74,7 @@ static void enumerate_devices(void) {
 
     VkPhysicalDeviceProperties props;
     vkGetPhysicalDeviceProperties(ctx.physical_device, &props);
-    printf("[GLA] Using device: %s\n", props.deviceName);
+    printf("[OpenGPA] Using device: %s\n", props.deviceName);
 }
 
 static void create_device(void) {
@@ -109,7 +109,7 @@ static void create_device(void) {
 
     CHECK_VK(vkCreateDevice(ctx.physical_device, &device_create_info, NULL, &ctx.device));
     vkGetDeviceQueue(ctx.device, graphics_queue_family, 0, &ctx.queue);
-    printf("[GLA] Created Vulkan device and queue\n");
+    printf("[OpenGPA] Created Vulkan device and queue\n");
 }
 
 static void create_command_pool(void) {
@@ -120,7 +120,7 @@ static void create_command_pool(void) {
     };
 
     CHECK_VK(vkCreateCommandPool(ctx.device, &pool_info, NULL, &ctx.command_pool));
-    printf("[GLA] Created command pool\n");
+    printf("[OpenGPA] Created command pool\n");
 }
 
 static void allocate_command_buffer(void) {
@@ -132,7 +132,7 @@ static void allocate_command_buffer(void) {
     };
 
     CHECK_VK(vkAllocateCommandBuffers(ctx.device, &alloc_info, &ctx.command_buffer));
-    printf("[GLA] Allocated command buffer\n");
+    printf("[OpenGPA] Allocated command buffer\n");
 }
 
 static void record_simple_commands(void) {
@@ -142,13 +142,13 @@ static void record_simple_commands(void) {
     };
 
     CHECK_VK(vkBeginCommandBuffer(ctx.command_buffer, &begin_info));
-    printf("[GLA] Began recording command buffer\n");
+    printf("[OpenGPA] Began recording command buffer\n");
 
     /* In a real application, we'd bind pipelines, set render areas, etc.
      * For now, just demonstrate command buffer recording. */
 
     CHECK_VK(vkEndCommandBuffer(ctx.command_buffer));
-    printf("[GLA] Ended recording command buffer\n");
+    printf("[OpenGPA] Ended recording command buffer\n");
 }
 
 static void cleanup(void) {
@@ -162,11 +162,11 @@ static void cleanup(void) {
     if (ctx.instance) {
         vkDestroyInstance(ctx.instance, NULL);
     }
-    printf("[GLA] Cleanup complete\n");
+    printf("[OpenGPA] Cleanup complete\n");
 }
 
 int main(void) {
-    printf("=== GLA Minimal Vulkan App ===\n");
+    printf("=== OpenGPA Minimal Vulkan App ===\n");
     printf("This app tests basic Vulkan layer interception.\n\n");
 
     create_instance();
@@ -176,7 +176,7 @@ int main(void) {
     allocate_command_buffer();
     record_simple_commands();
 
-    printf("\n[GLA] Application ran successfully.\n");
+    printf("\n[OpenGPA] Application ran successfully.\n");
     printf("If VK_LAYER_GLA_capture was active, the layer should have\n");
     printf("intercepted all Vulkan calls above.\n\n");
 

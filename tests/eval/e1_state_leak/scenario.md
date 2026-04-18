@@ -52,13 +52,13 @@ than incorrect — readers tend to read what they expect to be there.
   source; understanding the bug requires knowing that `glBindTexture` is
   persistent.
 
-## How GLA Helps
+## How OpenGPA Helps
 
 ```
 inspect_drawcall(draw_id=2, query="textures")
 ```
 
-GLA captures the full texture-unit state at the moment of each draw call.
+OpenGPA captures the full texture-unit state at the moment of each draw call.
 The output for draw 2 (Quad B) would show:
 
 ```json

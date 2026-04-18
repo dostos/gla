@@ -2,7 +2,7 @@
 # Install Xvfb if not present, build everything with Bazel
 set -e
 
-echo "=== GLA Headless Setup ==="
+echo "=== OpenGPA Headless Setup ==="
 
 # Check/install Xvfb
 if ! command -v Xvfb &> /dev/null; then
@@ -17,7 +17,7 @@ if ! dpkg -l | grep -q libgl1-mesa-dev; then
 fi
 
 # Build everything
-echo "Building GLA..."
+echo "Building OpenGPA..."
 bazel build //...
 
 # Install Python deps

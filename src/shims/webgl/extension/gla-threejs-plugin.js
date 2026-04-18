@@ -1,16 +1,16 @@
 /**
- * GLA Three.js Plugin
+ * OpenGPA Three.js Plugin
  *
  * Captures scene graph data (objects, materials, hierarchy) and sends
- * it to the GLA engine's metadata endpoint after each render.
+ * it to the OpenGPA engine's metadata endpoint after each render.
  *
  * Usage:
- *   const gla = new GLAThreePlugin(renderer, 'http://127.0.0.1:18080', 'your-token');
+ *   const gpa = new OpenGPAThreePlugin(renderer, 'http://127.0.0.1:18080', 'your-token');
  *   // In your render loop:
  *   renderer.render(scene, camera);
- *   gla.capture(scene, camera);
+ *   gpa.capture(scene, camera);
  */
-class GLAThreePlugin {
+class OpenGPAThreePlugin {
   constructor(renderer, url = 'http://127.0.0.1:18080', token = '') {
     this.renderer = renderer;
     this.url = url.replace(/\/$/, '');
@@ -113,8 +113,8 @@ class GLAThreePlugin {
 
 // Export for both module and script tag usage
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = GLAThreePlugin;
+  module.exports = OpenGPAThreePlugin;
 }
 if (typeof window !== 'undefined') {
-  window.GLAThreePlugin = GLAThreePlugin;
+  window.OpenGPAThreePlugin = OpenGPAThreePlugin;
 }

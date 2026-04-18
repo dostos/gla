@@ -76,7 +76,7 @@ GlaVkCmdBufState *gla_capture_cmd_buf_begin(VkCommandBuffer cmd_buf) {
             return s;
         }
     }
-    fprintf(stderr, "[GLA-VK] cmd_buf table full\n");
+    fprintf(stderr, "[OpenGPA-VK] cmd_buf table full\n");
     pthread_mutex_unlock(&g_cmd_mutex);
     return NULL;
 }
@@ -273,7 +273,7 @@ void gla_capture_on_present(VkQueue        queue,
     uint32_t slot_index;
     void    *slot = gla_vk_ipc_claim_slot(&slot_index);
     if (!slot) {
-        fprintf(stderr, "[GLA-VK] SHM ring buffer full, skipping frame %llu\n",
+        fprintf(stderr, "[OpenGPA-VK] SHM ring buffer full, skipping frame %llu\n",
                 (unsigned long long)g_frame_id);
         goto reset_frame;
     }
@@ -322,7 +322,7 @@ void gla_capture_on_present(VkQueue        queue,
 
     VkResult res = dev_disp->CreateBuffer(device, &buf_info, NULL, &staging_buf);
     if (res != VK_SUCCESS) {
-        fprintf(stderr, "[GLA-VK] CreateBuffer failed (%d), skipping readback\n",
+        fprintf(stderr, "[OpenGPA-VK] CreateBuffer failed (%d), skipping readback\n",
                 res);
         goto write_metadata_only;
     }
@@ -343,7 +343,7 @@ void gla_capture_on_present(VkQueue        queue,
          * For M5 MVP, iterate device dispatch physical device handle. */
         VkPhysicalDevice phys = dev_disp->physical_device;
         if (phys == VK_NULL_HANDLE) {
-            fprintf(stderr, "[GLA-VK] no physical device in dispatch, skipping readback\n");
+            fprintf(stderr, "[OpenGPA-VK] no physical device in dispatch, skipping readback\n");
             dev_disp->DestroyBuffer(device, staging_buf, NULL);
             goto write_metadata_only;
         }
@@ -367,7 +367,7 @@ void gla_capture_on_present(VkQueue        queue,
             vkGetInstanceProcAddr(VK_NULL_HANDLE,
                                   "vkGetPhysicalDeviceMemoryProperties");
         if (!fn_get_props) {
-            fprintf(stderr, "[GLA-VK] cannot resolve GetPhysicalDeviceMemoryProperties\n");
+            fprintf(stderr, "[OpenGPA-VK] cannot resolve GetPhysicalDeviceMemoryProperties\n");
             dev_disp->DestroyBuffer(device, staging_buf, NULL);
             goto write_metadata_only;
         }
@@ -386,7 +386,7 @@ void gla_capture_on_present(VkQueue        queue,
         }
     }
     if (mem_type == UINT32_MAX) {
-        fprintf(stderr, "[GLA-VK] no host-visible memory type found\n");
+        fprintf(stderr, "[OpenGPA-VK] no host-visible memory type found\n");
         dev_disp->DestroyBuffer(device, staging_buf, NULL);
         goto write_metadata_only;
     }
@@ -398,7 +398,7 @@ void gla_capture_on_present(VkQueue        queue,
 
     res = dev_disp->AllocateMemory(device, &alloc_info, NULL, &staging_mem);
     if (res != VK_SUCCESS) {
-        fprintf(stderr, "[GLA-VK] AllocateMemory failed (%d)\n", res);
+        fprintf(stderr, "[OpenGPA-VK] AllocateMemory failed (%d)\n", res);
         dev_disp->DestroyBuffer(device, staging_buf, NULL);
         goto write_metadata_only;
     }
@@ -417,7 +417,7 @@ void gla_capture_on_present(VkQueue        queue,
 
     res = dev_disp->CreateCommandPool(device, &pool_info, NULL, &cmd_pool);
     if (res != VK_SUCCESS) {
-        fprintf(stderr, "[GLA-VK] CreateCommandPool failed (%d)\n", res);
+        fprintf(stderr, "[OpenGPA-VK] CreateCommandPool failed (%d)\n", res);
         goto cleanup_mem;
     }
 
@@ -429,7 +429,7 @@ void gla_capture_on_present(VkQueue        queue,
 
     res = dev_disp->AllocateCommandBuffers(device, &cb_alloc, &cmd_buf);
     if (res != VK_SUCCESS) {
-        fprintf(stderr, "[GLA-VK] AllocateCommandBuffers failed (%d)\n", res);
+        fprintf(stderr, "[OpenGPA-VK] AllocateCommandBuffers failed (%d)\n", res);
         goto cleanup_pool;
     }
 
@@ -513,7 +513,7 @@ void gla_capture_on_present(VkQueue        queue,
     if (res == VK_SUCCESS) {
         dev_disp->WaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
     } else {
-        fprintf(stderr, "[GLA-VK] readback QueueSubmit failed (%d)\n", res);
+        fprintf(stderr, "[OpenGPA-VK] readback QueueSubmit failed (%d)\n", res);
     }
 
     dev_disp->DestroyFence(device, fence, NULL);

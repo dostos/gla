@@ -17,6 +17,6 @@ JSON block with exactly these fields:
 {
   "category": "<one from above>",
   "suggested_new_category": null | "<snake_case>",
-  "details": "<1-2 sentence explanation referencing what GLA would need to expose>"
+  "details": "<1-2 sentence explanation referencing what OpenGPA would need to expose>"
 }
 ```

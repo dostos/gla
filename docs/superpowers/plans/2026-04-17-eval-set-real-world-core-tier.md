@@ -240,7 +240,7 @@ def test_parser_extracts_new_sections(tmp_path):
         ## Adversarial Principles
         - Stale state
 
-        ## How GLA Helps
+        ## How OpenGPA Helps
         inspect_drawcall exposes the binding.
 
         ## Source
@@ -268,7 +268,7 @@ def test_parser_extracts_new_sections(tmp_path):
           tolerance: 0.1
         ```
 
-        ## Predicted GLA Helpfulness
+        ## Predicted OpenGPA Helpfulness
         - **Verdict**: yes
         - **Reasoning**: The binding is visible via inspect_drawcall.
     ''').strip()
@@ -699,7 +699,7 @@ class CoverageLog:
         )
 
         lines: list[str] = []
-        lines.append("# GLA Coverage Gaps")
+        lines.append("# OpenGPA Coverage Gaps")
         lines.append("")
         lines.append(f"*Regenerated: {datetime.now(timezone.utc).isoformat()}*")
         lines.append("")
@@ -1275,7 +1275,7 @@ git commit -m "feat(curation): Discoverer orchestrates queries + dedupes"
 Create `src/python/gla/eval/curation/prompts/triage_system.md`:
 
 ```markdown
-You are a triage agent for the GLA eval-set curation pipeline. Your job is to classify an upstream graphics-bug issue or commit by whether it describes a rendering bug reproducible as a minimal OpenGL program.
+You are a triage agent for the OpenGPA eval-set curation pipeline. Your job is to classify an upstream graphics-bug issue or commit by whether it describes a rendering bug reproducible as a minimal OpenGL program.
 
 ## Input
 You receive an issue thread or commit diff (title, body, comments, or message + diff).
@@ -1555,7 +1555,7 @@ git commit -m "feat(curation): fetch issue threads via gh api"
 Create `src/python/gla/eval/curation/prompts/draft_core_system.md`:
 
 ```markdown
-You draft GLA eval scenarios from upstream graphics-bug reports. Your output is a single minimal OpenGL C program that reproduces the bug pattern, plus a structured Markdown description.
+You draft OpenGPA eval scenarios from upstream graphics-bug reports. Your output is a single minimal OpenGL C program that reproduces the bug pattern, plus a structured Markdown description.
 
 ## Input
 You receive the issue title, body, comments, and a triage summary identifying the bug pattern.
@@ -1596,8 +1596,8 @@ Respond with exactly two fenced blocks, in this order and no other text:
 ## Adversarial Principles
 - <principle name>
 
-## How GLA Helps
-<1-3 sentences on which GLA query reveals the bug>
+## How OpenGPA Helps
+<1-3 sentences on which OpenGPA query reveals the bug>
 
 ## Source
 - **URL**: <issue_url>
@@ -1622,7 +1622,7 @@ spec:
   <type-specific fields>
 ```
 
-## Predicted GLA Helpfulness
+## Predicted OpenGPA Helpfulness
 - **Verdict**: yes | no | ambiguous
 - **Reasoning**: <why>
 ```
@@ -1674,7 +1674,7 @@ The issue is ...
 ## Adversarial Principles
 - Stale state
 
-## How GLA Helps
+## How OpenGPA Helps
 inspect_drawcall exposes the wrong binding.
 
 ## Source
@@ -1702,7 +1702,7 @@ spec:
   tolerance: 0.1
 ```
 
-## Predicted GLA Helpfulness
+## Predicted OpenGPA Helpfulness
 - **Verdict**: yes
 - **Reasoning**: inspect_drawcall exposes it.
 """
@@ -2059,7 +2059,7 @@ git commit -m "feat(curation): color_histogram_in_region matcher"
 - Modify: `src/python/gla/eval/curation/signature_matchers.py`
 - Test: `tests/python/test_curation_signature_matchers.py`
 
-These matchers consume GLA capture *metadata* (draw call list, pipeline state, uniform values) in addition to the framebuffer PNG. Extend the matcher signature to accept an optional `metadata` dict.
+These matchers consume OpenGPA capture *metadata* (draw call list, pipeline state, uniform values) in addition to the framebuffer PNG. Extend the matcher signature to accept an optional `metadata` dict.
 
 - [ ] **Step 1: Failing tests**
 
@@ -2208,7 +2208,7 @@ git commit -m "feat(curation): metadata-driven signature matchers"
 - Create: `src/python/gla/eval/curation/validate.py`
 - Test: `tests/python/test_curation_validate.py`
 
-The stage's responsibilities: write the drafted C source into `tests/eval/`, build via Bazel, run under Xvfb with the existing GLA shim+engine, fetch the captured framebuffer + metadata via the REST API (or the in-process `ScenarioRunner` already used by the eval harness), and invoke `match_signature`.
+The stage's responsibilities: write the drafted C source into `tests/eval/`, build via Bazel, run under Xvfb with the existing OpenGPA shim+engine, fetch the captured framebuffer + metadata via the REST API (or the in-process `ScenarioRunner` already used by the eval harness), and invoke `match_signature`.
 
 - [ ] **Step 1: Failing test**
 
@@ -2234,7 +2234,7 @@ def test_validator_builds_runs_and_signature_matches(tmp_path):
             "## Ground Truth Diagnosis\n> quote\ndiag\n"
             "## Difficulty Rating\n3/5\n"
             "## Adversarial Principles\n- p\n"
-            "## How GLA Helps\nh\n"
+            "## How OpenGPA Helps\nh\n"
             "## Source\n- **URL**: https://x/1\n"
             "## Tier\ncore\n"
             "## API\nopengl\n"
@@ -2243,7 +2243,7 @@ def test_validator_builds_runs_and_signature_matches(tmp_path):
             "type: framebuffer_dominant_color\n"
             "spec:\n  color: [1.0, 0.0, 0.0, 1.0]\n  tolerance: 0.1\n"
             "```\n"
-            "## Predicted GLA Helpfulness\n- **Verdict**: yes\n"
+            "## Predicted OpenGPA Helpfulness\n- **Verdict**: yes\n"
             "- **Reasoning**: x\n"
         ),
     )
@@ -2357,7 +2357,7 @@ git commit -m "feat(curation): validate stage builds, runs, matches signature"
 - Modify: `src/python/gla/eval/runner.py` (add `build_and_capture`)
 - Test: `tests/python/test_eval_runner.py` (new)
 
-The validate stage needs a runner that builds the scenario via Bazel, starts it under Xvfb with the GLA shim, waits for frame capture, and returns the framebuffer PNG + metadata dict.
+The validate stage needs a runner that builds the scenario via Bazel, starts it under Xvfb with the OpenGPA shim, waits for frame capture, and returns the framebuffer PNG + metadata dict.
 
 - [ ] **Step 1: Examine existing runner — record the constructor signature**
 
@@ -2440,7 +2440,7 @@ class ScenarioRunner:
     # ... existing code ...
 
     def build_and_capture(self, scenario_id: str) -> dict:
-        """Build the scenario via Bazel, run it under Xvfb with GLA shim, capture frame."""
+        """Build the scenario via Bazel, run it under Xvfb with OpenGPA shim, capture frame."""
         # 1. Build
         subprocess.run(
             [self._bazel, "build", f"//tests/eval:{scenario_id}"],
@@ -2459,7 +2459,7 @@ class ScenarioRunner:
             env=env,
         )
         try:
-            # Wait for first capture (poll GLA for a frame)
+            # Wait for first capture (poll OpenGPA for a frame)
             # For tests, this is stubbed by patching _capture_via_rest.
             return _capture_via_rest(self._gla_base_url, self._gla_token)
         finally:
@@ -2642,7 +2642,7 @@ def classify_observed_helps(
     # Rule 2
     if not with_gla.correct_diagnosis and code_only.correct_diagnosis:
         return ObservedClassification("no",
-            f"GLA regressed vs code_only")
+            f"OpenGPA regressed vs code_only")
     # Rule 3: both wrong
     if not with_gla.correct_diagnosis and not code_only.correct_diagnosis:
         return ObservedClassification("no",
@@ -2707,7 +2707,7 @@ JSON block with exactly these fields:
 {
   "category": "<one from above>",
   "suggested_new_category": null | "<snake_case>",
-  "details": "<1-2 sentence explanation referencing what GLA would need to expose>"
+  "details": "<1-2 sentence explanation referencing what OpenGPA would need to expose>"
 }
 ```
 ```
@@ -2729,7 +2729,7 @@ def test_attribute_failure_mode_parses_json():
     llm.complete.return_value = _fake_response(
         '```json\n{"category":"shader_compile_not_exposed",'
         '"suggested_new_category":null,'
-        '"details":"GLA does not expose compile logs per draw call."}\n```'
+        '"details":"OpenGPA does not expose compile logs per draw call."}\n```'
     )
     r = attribute_failure_mode(
         llm_client=llm,
@@ -3010,12 +3010,12 @@ def test_pipeline_happy_path_commits_one_scenario(tmp_path):
                              "## Ground Truth Diagnosis\n> q\nd\n"
                              "## Difficulty Rating\n3/5\n"
                              "## Adversarial Principles\n- p\n"
-                             "## How GLA Helps\nh\n"
+                             "## How OpenGPA Helps\nh\n"
                              "## Source\n- **URL**: https://github.com/x/y/issues/1\n"
                              "## Tier\ncore\n## API\nopengl\n## Framework\nnone\n"
                              "## Bug Signature\n```yaml\ntype: framebuffer_dominant_color\n"
                              "spec:\n  color: [1.0, 0.0, 0.0, 1.0]\n  tolerance: 0.1\n```\n"
-                             "## Predicted GLA Helpfulness\n- **Verdict**: yes\n"
+                             "## Predicted OpenGPA Helpfulness\n- **Verdict**: yes\n"
                              "- **Reasoning**: x\n"
                          ))
 
@@ -3309,7 +3309,7 @@ class CurationPipeline:
                                    failure_category: Optional[str],
                                    failure_details: Optional[str]) -> str:
         obs_section = (
-            "\n## Observed GLA Helpfulness\n"
+            "\n## Observed OpenGPA Helpfulness\n"
             f"- **Verdict**: {observed.verdict}\n"
             f"- **Evidence**: {observed.evidence}\n"
         )
@@ -3369,7 +3369,7 @@ Add to `pipeline.py`:
 import argparse
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="GLA eval-set curation pipeline")
+    parser = argparse.ArgumentParser(description="OpenGPA eval-set curation pipeline")
     parser.add_argument("--eval-dir", default="tests/eval")
     parser.add_argument("--workdir", default=".eval-pipeline")
     parser.add_argument("--log", default="docs/superpowers/eval/coverage-log.jsonl")
@@ -3534,7 +3534,7 @@ def test_pipeline_end_to_end_with_fixture(tmp_path):
         '(from upstream maintainer)\n\n'
         "## Difficulty Rating\n3/5\n\n"
         "## Adversarial Principles\n- Stale state\n\n"
-        "## How GLA Helps\ninspect_drawcall exposes the stale binding.\n\n"
+        "## How OpenGPA Helps\ninspect_drawcall exposes the stale binding.\n\n"
         "## Source\n"
         f"- **URL**: {fixture['url']}\n"
         "- **Type**: issue\n"
@@ -3544,7 +3544,7 @@ def test_pipeline_end_to_end_with_fixture(tmp_path):
         "## Tier\ncore\n\n## API\nopengl\n\n## Framework\nnone\n\n"
         "## Bug Signature\n```yaml\ntype: framebuffer_dominant_color\n"
         "spec:\n  color: [1.0, 0.0, 0.0, 1.0]\n  tolerance: 0.1\n```\n\n"
-        "## Predicted GLA Helpfulness\n- **Verdict**: yes\n"
+        "## Predicted OpenGPA Helpfulness\n- **Verdict**: yes\n"
         "- **Reasoning**: inspect_drawcall exposes the stale binding.\n"
     )
     draft_resp = f"```c\n{c_src}```\n\n```markdown\n{md_body}```"
@@ -3610,7 +3610,7 @@ def test_pipeline_end_to_end_with_fixture(tmp_path):
     committed = list((tmp_path / "eval").glob("r1_*.c"))
     assert len(committed) == 1
     md_text = committed[0].with_suffix(".md").read_text()
-    assert "Observed GLA Helpfulness" in md_text
+    assert "Observed OpenGPA Helpfulness" in md_text
     assert "**Verdict**: yes" in md_text
     summary = (tmp_path / "gaps.md").read_text()
     assert "Scenarios committed: 1" in summary
@@ -3736,10 +3736,10 @@ def test_validator_uses_llm_fallback_on_ambiguous(tmp_path):
         "# R_X\n## Bug\nb\n## Expected Correct Output\ne\n"
         "## Actual Broken Output\na\n## Ground Truth Diagnosis\n> q\nd\n"
         "## Difficulty Rating\n3/5\n## Adversarial Principles\n- p\n"
-        "## How GLA Helps\nh\n## Source\n- **URL**: https://x/1\n"
+        "## How OpenGPA Helps\nh\n## Source\n- **URL**: https://x/1\n"
         "## Tier\ncore\n## API\nopengl\n## Framework\nnone\n"
         "## Bug Signature\n```yaml\ntype: unknown_custom\nspec: {}\n```\n"
-        "## Predicted GLA Helpfulness\n- **Verdict**: yes\n- **Reasoning**: r\n"
+        "## Predicted OpenGPA Helpfulness\n- **Verdict**: yes\n- **Reasoning**: r\n"
     )
     draft = DraftResult(scenario_id="r_x",
                          c_source="// SOURCE: https://x/1\nint main(){}",
@@ -3858,7 +3858,7 @@ For each:
 - Does the C file actually reproduce something resembling the upstream issue?
 - Does the `Ground Truth Diagnosis` cite the upstream thread?
 - Is the Bug Signature matcher actually detecting the symptom, or did it match accidentally?
-- Is `Observed GLA Helpfulness` plausible given the eval results?
+- Is `Observed OpenGPA Helpfulness` plausible given the eval results?
 
 - [ ] **Step 4: Iterate on prompts if quality is poor**
 
@@ -3909,7 +3909,7 @@ Run: `python -c "from gla.eval.curation.coverage_log import CoverageLog; Coverag
 
 - [ ] **Step 5: Review coverage-gaps and derive feature backlog**
 
-If the failure-mode taxonomy has entries like `shader_compile_not_exposed` with 3+ scenarios, that's a GLA feature request. Log them in a new doc (not part of this plan's scope — just note them for a follow-up issue).
+If the failure-mode taxonomy has entries like `shader_compile_not_exposed` with 3+ scenarios, that's an OpenGPA feature request. Log them in a new doc (not part of this plan's scope — just note them for a follow-up issue).
 
 - [ ] **Step 6: Commit the first real batch**
 

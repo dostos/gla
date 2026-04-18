@@ -1,1 +1,1 @@
-# GLA Python package
+# OpenGPA Python package

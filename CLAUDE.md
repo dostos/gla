@@ -1,8 +1,8 @@
-# GLA — Project Instructions
+# OpenGPA — Project Instructions
 
 ## What This Is
 
-GLA (Graphics Library for Agents) — a live graphics debugger for AI agents. Intercepts GL/Vulkan calls, captures frame state, exposes via REST API + MCP tools.
+OpenGPA (Open Graphics Profiler for Agents) — a live graphics debugger for AI agents. Intercepts GL/Vulkan calls, captures frame state, exposes via REST API + MCP tools.
 
 ## Build & Test
 
@@ -56,7 +56,7 @@ curl -H "Authorization: Bearer TOKEN" localhost:18080/api/v1/frames/current/over
 ## Eval-Driven Development Loop
 
 1. **Mine** — Find real-world graphics bugs from GitHub issues
-2. **Evaluate** — Run with/without GLA, compare accuracy and tool usage
+2. **Evaluate** — Run with/without OpenGPA, compare accuracy and tool usage
 3. **Improve** — Fix capture bugs or add new capabilities based on eval gaps
 
 Eval scenarios live in `tests/eval/`. Each has a `.c` file (GL app) and `.md` file (description). Source files must NOT contain hint comments (// BUG, // should be, etc.)

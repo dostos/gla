@@ -1,4 +1,4 @@
-"""GLA evaluation harness — public API."""
+"""OpenGPA evaluation harness — public API."""
 from gla.eval.harness import EvalHarness
 from gla.eval.metrics import DiagnosisScorer, EvalResult, ReportGenerator
 from gla.eval.runner import ScenarioRunner

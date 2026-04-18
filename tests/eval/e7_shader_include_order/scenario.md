@@ -53,7 +53,7 @@ alternative and recognizing that `max(x, 0)` is not a complete `saturate`.
 - **Comment noise**: The correct implementation is visibly present but marked
   as inactive, creating confusion about intent.
 
-## GLA Advantage
+## OpenGPA Advantage
 
 `query_pixel` at the highlight area returns a raw color channel value > 1.0,
 immediately indicating that shader output is exceeding the normalised range.

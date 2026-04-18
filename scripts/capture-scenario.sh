@@ -20,7 +20,7 @@ if [ ! -f "$BINARY" ]; then
     bazel build "//tests/eval:${SCENARIO}"
 fi
 
-echo "Running ${SCENARIO} under GLA capture..."
+echo "Running ${SCENARIO} under OpenGPA capture..."
 LD_PRELOAD="${REPO_ROOT}/bazel-bin/src/shims/gl/libgla_gl.so" \
     GLA_SOCKET_PATH="${SOCKET_PATH}" \
     GLA_SHM_NAME="${SHM_NAME}" \

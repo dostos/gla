@@ -2,7 +2,7 @@
 #define VK_CAPTURE_H
 
 /*
- * vk_capture.h — Frame capture and draw call recording for the GLA Vulkan
+ * vk_capture.h — Frame capture and draw call recording for the OpenGPA Vulkan
  * layer.
  *
  * At vkQueuePresentKHR the layer:

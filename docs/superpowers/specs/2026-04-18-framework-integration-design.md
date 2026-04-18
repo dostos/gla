@@ -1,12 +1,12 @@
-# GLA Framework Integration — Design Specification
+# OpenGPA Framework Integration — Design Specification
 
 ## 1. Overview
 
-Extends GLA from raw GL/Vulkan debugging to high-level framework debugging (Unity, Unreal, Three.js, scientific visualization, etc.). Bridges the semantic gap between "glDrawArrays(36 verts)" and "PlayerCharacter mesh with PBR material" through a three-layer data model: GL capture (existing), debug markers (free baseline), and framework metadata (opt-in enrichment).
+Extends OpenGPA from raw GL/Vulkan debugging to high-level framework debugging (Unity, Unreal, Three.js, scientific visualization, etc.). Bridges the semantic gap between "glDrawArrays(36 verts)" and "PlayerCharacter mesh with PBR material" through a three-layer data model: GL capture (existing), debug markers (free baseline), and framework metadata (opt-in enrichment).
 
 ## 2. Problem Statement
 
-GLA currently operates at the graphics API level:
+OpenGPA currently operates at the graphics API level:
 - Draw calls, shader uniforms, pipeline state, pixel data
 - No concept of "objects", "materials", "render passes" as named entities
 
@@ -16,20 +16,20 @@ Developers and LLM agents think in framework-level concepts:
 - "What render pass produces the bloom?"
 - "Why does this UI overlap the 3D scene?"
 
-The gap makes GLA useful for raw GL apps but insufficient for real-world framework-based applications.
+The gap makes OpenGPA useful for raw GL apps but insufficient for real-world framework-based applications.
 
 ## 3. Design Principles
 
 - **Query-first**: Define what questions the system answers, then fill in data sources
 - **Graceful degradation**: Every query works at some fidelity with just GL capture. Debug markers add structure. Metadata adds names. Each layer enriches, none is required.
-- **Framework-agnostic core**: GLA's query engine is not framework-specific. Framework knowledge lives only in plugins.
-- **Simple plugins**: The complexity is in GLA's correlation engine, not in per-framework adapters. Plugins just traverse a scene graph and POST JSON.
+- **Framework-agnostic core**: OpenGPA's query engine is not framework-specific. Framework knowledge lives only in plugins.
+- **Simple plugins**: The complexity is in OpenGPA's correlation engine, not in per-framework adapters. Plugins just traverse a scene graph and POST JSON.
 
 ## 4. High-Level Query Model
 
 ### 4.1 New Query Categories
 
-Three new query types on top of existing GLA queries:
+Three new query types on top of existing OpenGPA queries:
 
 **Object Queries** — "What is this thing?"
 ```
@@ -438,7 +438,7 @@ def gla_capture(scene, frame_id, url="http://127.0.0.1:18080", token=""):
 
 ### 9.4 Generic (no plugin)
 
-No plugin needed. GLA works with:
+No plugin needed. OpenGPA works with:
 - Debug markers (if framework emits them) → pass structure, object grouping
 - Heuristic reconstruction from M3 → camera, transforms, object grouping by shared matrix
 - Raw GL capture → draw calls, uniforms, pixels

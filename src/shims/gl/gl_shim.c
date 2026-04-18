@@ -32,7 +32,7 @@ void gla_ensure_ipc(void) {
     if (gla_ipc_ready) return;
     gla_ipc_ready = 1;
     gla_ipc_connect();
-    fprintf(stderr, "[GLA] Shim active (pid=%d)\n", getpid());
+    fprintf(stderr, "[OpenGPA] Shim active (pid=%d)\n", getpid());
 }
 
 /* NO constructor — init is lazy on first GL call.

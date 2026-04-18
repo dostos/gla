@@ -1,8 +1,8 @@
-# GLA Framework Debugging — Tier Model
+# OpenGPA Framework Debugging — Tier Model
 
 ## Overview
 
-GLA supports three tiers of framework integration, each adding richer data with increasing setup cost. Every tier is additive — higher tiers enrich, never replace, lower-tier data.
+OpenGPA supports three tiers of framework integration, each adding richer data with increasing setup cost. Every tier is additive — higher tiers enrich, never replace, lower-tier data.
 
 ```
 Tier 3: Metadata Sidecar (per-framework plugin, ~100 LOC)
@@ -44,7 +44,7 @@ Tier 1: Raw Capture (zero injection, works on any GL/VK app)
 
 ## Tier 2: Debug Markers (Free Baseline)
 
-**Setup**: None if the framework already emits `GL_KHR_debug` markers. GLA intercepts them automatically via the shim.
+**Setup**: None if the framework already emits `GL_KHR_debug` markers. OpenGPA intercepts them automatically via the shim.
 
 **Frameworks that emit markers by default**:
 - Unity (Development builds)
@@ -79,7 +79,7 @@ Tier 1: Raw Capture (zero injection, works on any GL/VK app)
 
 ## Tier 3: Metadata Sidecar (Per-Framework Plugin)
 
-**Setup**: Add a small plugin (~50-150 LOC) to the application. The plugin traverses the framework's scene graph and POSTs JSON to GLA's metadata endpoint.
+**Setup**: Add a small plugin (~50-150 LOC) to the application. The plugin traverses the framework's scene graph and POSTs JSON to OpenGPA's metadata endpoint.
 
 **Protocol**:
 ```
@@ -208,7 +208,7 @@ Two approaches to get Tier 3-quality data without per-framework plugins:
 ### LLM-as-Adapter
 Give the agent the framework source code + Tier 1 capture data. The agent correlates:
 - Reads Three.js source, sees `scene.add(playerMesh)`
-- Queries GLA: "draw call 7 has shader_id=3, uniforms include uModelMatrix"
+- Queries OpenGPA: "draw call 7 has shader_id=3, uniforms include uModelMatrix"
 - Infers: draw call 7 = playerMesh
 
 **Pro**: No plugin code. **Con**: Token-expensive, unreliable for complex scenes.

@@ -73,14 +73,14 @@ visible in the current diff.
   `glUseProgram` ordering, shader compilation, or an off-by-one in the
   draw call's VAO binding.
 
-## How GLA Helps
+## How OpenGPA Helps
 
 ```
 inspect_drawcall(draw_id=1, query="shader")
 inspect_drawcall(draw_id=2, query="shader")
 ```
 
-GLA captures the active program and all uniform values at each draw call:
+OpenGPA captures the active program and all uniform values at each draw call:
 
 ```json
 // Draw 1 (left quad, intended MAT_RED)

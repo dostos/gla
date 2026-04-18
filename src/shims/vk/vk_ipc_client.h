@@ -2,7 +2,7 @@
 #define VK_IPC_CLIENT_H
 
 /*
- * vk_ipc_client.h — IPC client for the GLA Vulkan layer.
+ * vk_ipc_client.h — IPC client for the OpenGPA Vulkan layer.
  *
  * Implements the same SHM ring buffer + Unix socket protocol as the GL shim
  * (src/shims/gl/ipc_client.c).  The only difference is the api_type field
@@ -16,7 +16,7 @@ extern "C" {
 #endif
 
 /*
- * Connect to the GLA engine.
+ * Connect to the OpenGPA engine.
  * Reads GLA_SOCKET_PATH and GLA_SHM_NAME from the environment.
  * Returns 0 on success, -1 if the engine is not running (passthrough mode).
  */

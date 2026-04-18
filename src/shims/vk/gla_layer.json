@@ -6,6 +6,6 @@
         "library_path": "./libVkLayer_gla_capture.so",
         "api_version": "1.0.0",
         "implementation_version": "1",
-        "description": "GLA frame capture layer for graphics debugging"
+        "description": "OpenGPA frame capture layer for graphics debugging"
     }
 }

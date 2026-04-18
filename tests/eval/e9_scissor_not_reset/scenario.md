@@ -50,7 +50,7 @@ time of the 3D draw call, not just at the start of the frame.
   frustum error.
 - **No error signal**: GL happily clips geometry; no warning is issued.
 
-## GLA Advantage
+## OpenGPA Advantage
 
 `inspect_drawcall(pipeline)` for the 3D draw call reports
 `scissor_enabled=true` and the exact rectangle `(100, 100, 200×100)`. This

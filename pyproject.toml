@@ -5,7 +5,7 @@ build-backend = "setuptools.backends.legacy:build"
 [project]
 name = "gla"
 version = "0.0.1"
-description = "Graphics Library for Agents - live graphics debugger"
+description = "Open Graphics Profiler for Agents - live graphics debugger"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.111",

@@ -1,1 +1,1 @@
-# GLA API package
+# OpenGPA API package

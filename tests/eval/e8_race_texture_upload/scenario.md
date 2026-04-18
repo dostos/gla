@@ -47,7 +47,7 @@ for `GL_TEXTURE_WIDTH` at the right time requires knowing to look.
 - **Visually benign placeholder**: a 1×1 white texture looks like an
   intentional design choice.
 
-## GLA Advantage
+## OpenGPA Advantage
 
 `inspect_drawcall(textures)` directly reports the bound texture dimensions as
 `1×1` instead of `64×64`, pinpointing that the real upload never occurred

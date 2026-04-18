@@ -82,13 +82,13 @@ discourages deep investigation. Finding the root cause requires:
   different bugs (wrong normals, wrong depth test, wrong indices, wrong
   matrices).
 
-## How GLA Helps
+## How OpenGPA Helps
 
 ```
 inspect_drawcall(draw_id=1, query="pipeline")
 ```
 
-GLA surfaces the complete pipeline state at draw time:
+OpenGPA surfaces the complete pipeline state at draw time:
 
 ```json
 {
@@ -102,6 +102,6 @@ GLA surfaces the complete pipeline state at draw time:
 ```
 
 The combination of `GL_FRONT_FACE: GL_CW` and a negative-determinant model
-matrix is a known-bad pattern. GLA can flag this directly. A code-only
+matrix is a known-bad pattern. OpenGPA can flag this directly. A code-only
 agent must mentally trace `glFrontFace`, the matrix construction, and their
 interaction — which spans multiple functions and files in real codebases.

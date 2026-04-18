@@ -1,4 +1,4 @@
-"""Scenario loader for GLA evaluation harness.
+"""Scenario loader for OpenGPA evaluation harness.
 
 Parses adversarial eval scenario .md files and provides structured
 metadata for use by the evaluation harness.
@@ -194,7 +194,7 @@ def _extract_fix(diagnosis_text: str) -> str:
 
 
 class ScenarioLoader:
-    """Loads GLA evaluation scenarios from the tests/eval directory."""
+    """Loads OpenGPA evaluation scenarios from the tests/eval directory."""
 
     def __init__(self, eval_dir: str = "tests/eval"):
         # Allow both relative (resolved from cwd) and absolute paths

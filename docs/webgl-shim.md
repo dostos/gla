@@ -1,4 +1,4 @@
-# GLA WebGL Shim — M6
+# OpenGPA WebGL Shim — M6
 
 WebGL interception via a Chromium browser extension + a Node.js WebSocket bridge.
 
@@ -14,7 +14,7 @@ Browser (page context)
        |
        | Unix domain socket  /tmp/gla.sock
        v
-  GLA engine
+  OpenGPA engine
 ```
 
 The content script (`content.js`) injects `interceptor.js` into the page context at
@@ -30,18 +30,18 @@ The content script (`content.js`) injects `interceptor.js` into the page context
 
 ### Step 3: Load Unpacked Extension
 1. Click **Load unpacked**
-2. Navigate to the GLA repository and select `src/shims/webgl/extension/`
-3. The extension will appear in your extensions list as "GLA WebGL Debugger"
+2. Navigate to the OpenGPA repository and select `src/shims/webgl/extension/`
+3. The extension will appear in your extensions list as "OpenGPA WebGL Debugger"
 
 The extension patches all WebGL contexts in every tab automatically once loaded.
 
 ### Step 4: Verify Extension is Running
-- You should see "GLA WebGL Debugger (0.1.0)" in your extensions list
+- You should see "OpenGPA WebGL Debugger (0.1.0)" in your extensions list
 - Look for the extension icon in your toolbar (or in the extension menu)
 
 ## Starting the Bridge
 
-The bridge is a Node.js service that relays WebGL interception data from the browser to the GLA engine.
+The bridge is a Node.js service that relays WebGL interception data from the browser to the OpenGPA engine.
 
 ### Prerequisites
 - Node.js 14+ installed
@@ -61,14 +61,14 @@ Bridge listening on ws://127.0.0.1:18081
 Bridge connected to IPC socket at /tmp/gla.sock
 ```
 
-**Important**: The bridge must be running **before** the GLA engine (or at least before the first
+**Important**: The bridge must be running **before** the OpenGPA engine (or at least before the first
 WebGL frame is rendered in the browser).
 
 ## Environment Variables
 
 | Variable          | Default          | Description                              |
 |-------------------|------------------|------------------------------------------|
-| `GLA_SOCKET_PATH` | `/tmp/gla.sock`  | Unix socket path to the GLA engine       |
+| `GLA_SOCKET_PATH` | `/tmp/gla.sock`  | Unix socket path to the OpenGPA engine   |
 | `GLA_WS_PORT`     | `18081`          | WebSocket port the bridge listens on     |
 
 ## Known Limitations (v1)

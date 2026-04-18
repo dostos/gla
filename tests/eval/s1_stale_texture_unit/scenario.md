@@ -42,13 +42,13 @@ missing `glActiveTexture(GL_TEXTURE0)` call before Draw 2.
 - **Multi-draw interaction**: The bug only manifests across draw call
   boundaries; inspecting either draw in isolation reveals nothing wrong.
 
-## How GLA Helps
+## How OpenGPA Helps
 
 ```
 inspect_drawcall(draw_id=2, query="textures")
 ```
 
-GLA captures the full per-unit texture binding at each draw. The output
+OpenGPA captures the full per-unit texture binding at each draw. The output
 for draw 2 would show which texture object is bound to the active unit
 at the moment of the draw call, immediately revealing whether tex_A or
 tex_B is being sampled and on which unit:

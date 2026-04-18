@@ -65,13 +65,13 @@ frames away from the original array declaration.
   `indices_data` is declared with the correct size, but a pointer alias
   `indices` is created before the buggy `sizeof`.
 
-## How GLA Helps
+## How OpenGPA Helps
 
 ```
 inspect_drawcall(draw_id=1, query="vertices")
 ```
 
-GLA records the byte length of each bound buffer object at draw time:
+OpenGPA records the byte length of each bound buffer object at draw time:
 
 ```json
 {

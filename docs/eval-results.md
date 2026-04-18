@@ -3,9 +3,9 @@
 ## Methodology
 
 - 18 scenarios: 10 synthetic (e1-e10) + 8 real-world (r-prefix, from Three.js/Godot GitHub issues)
-- Two modes: **Code-Only** (source + description) and **With GLA** (source + description + live REST API)
+- Two modes: **Code-Only** (source + description) and **With OpenGPA** (source + description + live REST API)
 - Agent: Claude Sonnet, non-directive prompts ("use whatever approach you think is best")
-- Tracked: accuracy, tool sequence, unique GLA insights
+- Tracked: accuracy, tool sequence, unique OpenGPA insights
 
 ## Round 1: Synthetic Scenarios (e1-e10) — WITH hint comments
 
@@ -19,11 +19,11 @@ Both modes: 7/7 correct, high confidence. Again, comments made it too easy.
 
 Comments stripped. The bugs are structurally present but not self-documented. This is the fair comparison. **Not yet run.**
 
-## GLA Unique Insights (from Round 2)
+## OpenGPA Unique Insights (from Round 2)
 
-Even when both modes get the right answer, GLA provides **runtime evidence** that code-only cannot:
+Even when both modes get the right answer, OpenGPA provides **runtime evidence** that code-only cannot:
 
-| Scenario | GLA Signal | Why Code-Only Can't See It |
+| Scenario | OpenGPA Signal | Why Code-Only Can't See It |
 |----------|-----------|---------------------------|
 | r16 shadow cull | cull_mode=GL_FRONT (1028) | Distinguishes from r14's GL_BACK — same visual symptom, different root cause |
 | r20 neg scale | det(model_matrix)=-1 from captured mat4 | Need to compute 4x4 determinant mentally from code |
@@ -35,7 +35,7 @@ Even when both modes get the right answer, GLA provides **runtime evidence** tha
 
 ## Tool Usage Patterns
 
-**With GLA mode tool sequence (consistent across all scenarios):**
+**With OpenGPA mode tool sequence (consistent across all scenarios):**
 ```
 read_source → query_drawcalls → inspect_drawcall → query_pixel
 ```
@@ -45,7 +45,7 @@ read_source → query_drawcalls → inspect_drawcall → query_pixel
 - **Texture queries**: Used when textures relevant (r5, e8)
 - **Scene queries**: 0% — not useful without Tier 3 metadata
 
-## GLA Capture Limitations Found
+## OpenGPA Capture Limitations Found
 
 | Limitation | Impact | Fix Needed |
 |-----------|--------|-----------|
@@ -63,16 +63,16 @@ Several scenarios (r17, e10) depend on reading vec3/vec4 uniform values. Current
 `explain_pixel` is the most powerful query but currently can't map pixel → draw call.
 
 ### P2: Add glClear interception
-r31 (missing clear) would be immediately diagnosable if GLA tracked clear calls between draw calls.
+r31 (missing clear) would be immediately diagnosable if OpenGPA tracked clear calls between draw calls.
 
 ### P3: Track FBO attachments in shadow state
 r5 (feedback loop) requires knowing which texture is attached to the current FBO. Currently not captured.
 
 ## Conclusions
 
-1. **GLA's primary value is distinguishing bugs with identical symptoms.** r14 and r16 both produce black screens from culling. Code analysis can find both, but GLA instantly distinguishes them via `cull_mode` (1028 vs 1029).
+1. **OpenGPA's primary value is distinguishing bugs with identical symptoms.** r14 and r16 both produce black screens from culling. Code analysis can find both, but OpenGPA instantly distinguishes them via `cull_mode` (1028 vs 1029).
 
-2. **GLA detects silent/compensating bugs.** e5's uniform collision doesn't manifest at runtime. Only GLA can confirm this (code-only reports a false positive).
+2. **OpenGPA detects silent/compensating bugs.** e5's uniform collision doesn't manifest at runtime. Only OpenGPA can confirm this (code-only reports a false positive).
 
 3. **The eval scenarios need hint-stripped code** for a fair comparison. Round 3 (pending) will show the real accuracy gap.
 

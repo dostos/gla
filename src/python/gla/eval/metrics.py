@@ -1,4 +1,4 @@
-"""Scoring and reporting metrics for GLA evaluation harness."""
+"""Scoring and reporting metrics for OpenGPA evaluation harness."""
 from __future__ import annotations
 
 import json
@@ -173,7 +173,7 @@ class ReportGenerator:
         summary = self.generate_summary(results)
         lines: list[str] = []
 
-        lines.append("# GLA Evaluation Report")
+        lines.append("# OpenGPA Evaluation Report")
         lines.append("")
         lines.append(
             f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"

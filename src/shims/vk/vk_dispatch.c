@@ -42,7 +42,7 @@ void gla_instance_dispatch_store(VkInstance instance, GlaInstanceDispatch *disp)
             return;
         }
     }
-    fprintf(stderr, "[GLA-VK] instance dispatch table full!\n");
+    fprintf(stderr, "[OpenGPA-VK] instance dispatch table full!\n");
     pthread_mutex_unlock(&g_inst_mutex);
 }
 
@@ -106,7 +106,7 @@ void gla_device_dispatch_store(VkDevice device, GlaDeviceDispatch *disp) {
             return;
         }
     }
-    fprintf(stderr, "[GLA-VK] device dispatch table full!\n");
+    fprintf(stderr, "[OpenGPA-VK] device dispatch table full!\n");
     pthread_mutex_unlock(&g_dev_mutex);
 }
 

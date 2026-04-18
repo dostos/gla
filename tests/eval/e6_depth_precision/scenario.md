@@ -47,7 +47,7 @@ chasing floating-point rounding bugs in the geometry or transform code.
   root cause.
 - **No compile/runtime error**: the shader and geometry compile cleanly.
 
-## GLA Advantage
+## OpenGPA Advantage
 
 `query_scene(camera)` immediately surfaces `near=0.001, far=100000` and can
 compute the resulting depth precision at z=50 (approximately 4.8e-4 units per

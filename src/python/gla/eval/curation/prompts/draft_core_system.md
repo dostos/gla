@@ -1,4 +1,4 @@
-You draft GLA eval scenarios from upstream graphics-bug reports. Your output is a minimal OpenGL C reproducer (`main.c`), a structured Markdown description (`scenario.md`), and optionally additional source files that support the reproduction.
+You draft OpenGPA eval scenarios from upstream graphics-bug reports. Your output is a minimal OpenGL C reproducer (`main.c`), a structured Markdown description (`scenario.md`), and optionally additional source files that support the reproduction.
 
 ## Input
 You receive the issue title, body, comments, and a triage summary identifying the bug pattern.
@@ -76,8 +76,8 @@ Constraints on filenames:
 ## Adversarial Principles
 - <principle name>
 
-## How GLA Helps
-<1-3 sentences on which GLA query reveals the bug>
+## How OpenGPA Helps
+<1-3 sentences on which OpenGPA query reveals the bug>
 
 ## Source
 - **URL**: <issue_url>
@@ -102,7 +102,7 @@ spec:
   <type-specific fields>
 ```
 
-## Predicted GLA Helpfulness
+## Predicted OpenGPA Helpfulness
 - **Verdict**: yes | no | ambiguous
 - **Reasoning**: <why>
 ```

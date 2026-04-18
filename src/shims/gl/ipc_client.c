@@ -207,7 +207,7 @@ int gla_ipc_connect(void) {
     /* Open shared memory */
     int shm_fd = shm_open(shm_name, O_RDWR, 0);
     if (shm_fd < 0) {
-        fprintf(stderr, "[GLA] shm_open(%s) failed: %s\n", shm_name, strerror(errno));
+        fprintf(stderr, "[OpenGPA] shm_open(%s) failed: %s\n", shm_name, strerror(errno));
         return -1;
     }
 
@@ -215,7 +215,7 @@ int gla_ipc_connect(void) {
     void* hdr_map = mmap(NULL, sizeof(RingHeader), PROT_READ | PROT_WRITE,
                          MAP_SHARED, shm_fd, 0);
     if (hdr_map == MAP_FAILED) {
-        fprintf(stderr, "[GLA] mmap header failed: %s\n", strerror(errno));
+        fprintf(stderr, "[OpenGPA] mmap header failed: %s\n", strerror(errno));
         close(shm_fd);
         return -1;
     }
@@ -224,7 +224,7 @@ int gla_ipc_connect(void) {
     munmap(hdr_map, sizeof(RingHeader));
 
     if (hdr.magic != GLA_SHM_MAGIC) {
-        fprintf(stderr, "[GLA] shm magic mismatch (got 0x%llx)\n",
+        fprintf(stderr, "[OpenGPA] shm magic mismatch (got 0x%llx)\n",
                 (unsigned long long)hdr.magic);
         close(shm_fd);
         return -1;
@@ -239,14 +239,14 @@ int gla_ipc_connect(void) {
     close(shm_fd);
     if (g_shm_base == MAP_FAILED) {
         g_shm_base = NULL;
-        fprintf(stderr, "[GLA] mmap full shm failed: %s\n", strerror(errno));
+        fprintf(stderr, "[OpenGPA] mmap full shm failed: %s\n", strerror(errno));
         return -1;
     }
 
     /* Connect Unix socket */
     g_sock_fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (g_sock_fd < 0) {
-        fprintf(stderr, "[GLA] socket() failed: %s\n", strerror(errno));
+        fprintf(stderr, "[OpenGPA] socket() failed: %s\n", strerror(errno));
         munmap(g_shm_base, g_shm_size);
         g_shm_base = NULL;
         return -1;
@@ -258,7 +258,7 @@ int gla_ipc_connect(void) {
     strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
 
     if (connect(g_sock_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        fprintf(stderr, "[GLA] connect(%s) failed: %s\n", socket_path, strerror(errno));
+        fprintf(stderr, "[OpenGPA] connect(%s) failed: %s\n", socket_path, strerror(errno));
         close(g_sock_fd);
         g_sock_fd = -1;
         munmap(g_shm_base, g_shm_size);
@@ -273,7 +273,7 @@ int gla_ipc_connect(void) {
     hs.pid              = htonl((uint32_t)getpid());
 
     if (send_msg(MSG_HANDSHAKE, &hs, sizeof(hs)) != 0) {
-        fprintf(stderr, "[GLA] handshake send failed\n");
+        fprintf(stderr, "[OpenGPA] handshake send failed\n");
         close(g_sock_fd);
         g_sock_fd = -1;
         munmap(g_shm_base, g_shm_size);
@@ -285,7 +285,7 @@ int gla_ipc_connect(void) {
     uint8_t response_buf[16];
     int rtype = recv_msg(response_buf, sizeof(response_buf), 0);
     if (rtype != MSG_HANDSHAKE_OK) {
-        fprintf(stderr, "[GLA] handshake rejected (type=%d)\n", rtype);
+        fprintf(stderr, "[OpenGPA] handshake rejected (type=%d)\n", rtype);
         close(g_sock_fd);
         g_sock_fd = -1;
         munmap(g_shm_base, g_shm_size);
@@ -293,7 +293,7 @@ int gla_ipc_connect(void) {
         return -1;
     }
 
-    fprintf(stderr, "[GLA] IPC connected: shm=%s socket=%s slots=%u slot_size=%llu\n",
+    fprintf(stderr, "[OpenGPA] IPC connected: shm=%s socket=%s slots=%u slot_size=%llu\n",
             shm_name, socket_path, g_num_slots, (unsigned long long)g_slot_size);
     return 0;
 }
@@ -337,7 +337,7 @@ void gla_ipc_send_frame_ready(uint64_t frame_id, uint32_t slot_index) {
     fr.shm_slot_index = slot_index;
 
     if (send_msg(MSG_FRAME_READY, &fr, sizeof(fr)) != 0) {
-        fprintf(stderr, "[GLA] send FRAME_READY failed, disconnecting\n");
+        fprintf(stderr, "[OpenGPA] send FRAME_READY failed, disconnecting\n");
         gla_ipc_disconnect();
     }
 }

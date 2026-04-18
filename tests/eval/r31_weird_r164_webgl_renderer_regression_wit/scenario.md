@@ -30,8 +30,8 @@ The root cause is a framework-internal ordering issue: the GL-level symptom is s
 - missing_color_buffer_clear
 - preserve_drawing_buffer_semantics
 
-## How GLA Helps
-A GLA query over the command stream for frame N can report that between the two logical "render" passes no `glClear` with `GL_COLOR_BUFFER_BIT` is issued, while `glDrawArrays` writes new content into the same default framebuffer — directly flagging the missing clear that causes the trails.
+## How OpenGPA Helps
+An OpenGPA query over the command stream for frame N can report that between the two logical "render" passes no `glClear` with `GL_COLOR_BUFFER_BIT` is issued, while `glDrawArrays` writes new content into the same default framebuffer — directly flagging the missing clear that causes the trails.
 
 ## Source
 - **URL**: https://github.com/mrdoob/three.js/issues/28420
@@ -63,10 +63,10 @@ spec:
   forbidden_fraction_max: 0.01
 ```
 
-## Predicted GLA Helpfulness
+## Predicted OpenGPA Helpfulness
 - **Verdict**: yes
-- **Reasoning**: The bug reduces to a missing `glClear(GL_COLOR_BUFFER_BIT)` call between two draw sequences on the default framebuffer. A GLA trace of the frame makes the absence of that clear, and the persistence of the prior draw's pixels, trivially inspectable — turning an opaque "trails" symptom into an explicit state-leak diagnosis.
+- **Reasoning**: The bug reduces to a missing `glClear(GL_COLOR_BUFFER_BIT)` call between two draw sequences on the default framebuffer. An OpenGPA trace of the frame makes the absence of that clear, and the persistence of the prior draw's pixels, trivially inspectable — turning an opaque "trails" symptom into an explicit state-leak diagnosis.
 
-## Observed GLA Helpfulness
+## Observed OpenGPA Helpfulness
 - **Verdict**: ambiguous
 - **Evidence**: validation skipped (--no-validate)

@@ -26,7 +26,7 @@ The reporter confirmed the fix empirically by offsetting the shape along Z:
 - shared_plane_two_meshes
 - visually_subtle_root_cause
 
-## How GLA Helps
+## How OpenGPA Helps
 A query over the draw calls targeting the center fragment would expose two draw calls writing to the same pixel with identical NDC `z` values. Surfacing the per-draw depth (or the overlap of the two bounding boxes on the depth axis) makes the coplanarity obvious where the pixel color alone only shows "speckle".
 
 ## Source
@@ -58,10 +58,10 @@ spec:
   background_color: [0, 30, 15]
 ```
 
-## Predicted GLA Helpfulness
+## Predicted OpenGPA Helpfulness
 - **Verdict**: yes
-- **Reasoning**: Z-fighting between two specific draws is a structural fact (two draw calls, equal depth in the overlapping region) that a GLA query over per-draw depth ranges or per-pixel draw-call attribution exposes directly, whereas staring at the framebuffer only shows noise.
+- **Reasoning**: Z-fighting between two specific draws is a structural fact (two draw calls, equal depth in the overlapping region) that an OpenGPA query over per-draw depth ranges or per-pixel draw-call attribution exposes directly, whereas staring at the framebuffer only shows noise.
 
-## Observed GLA Helpfulness
+## Observed OpenGPA Helpfulness
 - **Verdict**: ambiguous
 - **Evidence**: validation skipped (--no-validate)

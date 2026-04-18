@@ -1,4 +1,4 @@
-# GLA Coverage Gaps
+# OpenGPA Coverage Gaps
 
 *Regenerated: 2026-04-18T06:08:24.767381+00:00*
 

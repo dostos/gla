@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "GLA WebGL Debugger",
+  "name": "OpenGPA WebGL Debugger",
   "version": "0.1.0",
-  "description": "Graphics Library for Agents - WebGL interception",
+  "description": "Open Graphics Profiler for Agents - WebGL interception",
   "permissions": ["activeTab"],
   "content_scripts": [{
     "matches": ["<all_urls>"],

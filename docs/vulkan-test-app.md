@@ -1,6 +1,6 @@
-# GLA Vulkan Test App
+# OpenGPA Vulkan Test App
 
-This guide explains how to build and run the minimal Vulkan test application that validates the GLA layer's interception capabilities.
+This guide explains how to build and run the minimal Vulkan test application that validates the OpenGPA layer's interception capabilities.
 
 ## Overview
 
@@ -11,7 +11,7 @@ The test app (`examples/vulkan/minimal_app.c`) demonstrates:
 - Creating a command pool
 - Recording simple command buffers
 
-It serves as a minimal, reproducible example for testing GLA layer installation and functionality.
+It serves as a minimal, reproducible example for testing OpenGPA layer installation and functionality.
 
 ## Requirements
 
@@ -19,7 +19,7 @@ It serves as a minimal, reproducible example for testing GLA layer installation 
   - Linux: `libvulkan-dev` and `libvulkan1` packages
   - Or install the [Vulkan SDK](https://vulkan.lunarg.com/sdk/home)
 - **C Compiler**: GCC or Clang with C11 support
-- **GLA Layer**: Built and installed (see [vulkan-layer.md](./vulkan-layer.md))
+- **OpenGPA Layer**: Built and installed (see [vulkan-layer.md](./vulkan-layer.md))
 
 ## Verify Vulkan SDK
 
@@ -61,7 +61,7 @@ If Makefile doesn't work:
 gcc -o minimal_app minimal_app.c -lvulkan -lm
 ```
 
-## Running Without the GLA Layer
+## Running Without the OpenGPA Layer
 
 To verify the app runs without the layer:
 
@@ -72,26 +72,26 @@ cd examples/vulkan
 
 Expected output:
 ```
-=== GLA Minimal Vulkan App ===
+=== OpenGPA Minimal Vulkan App ===
 This app tests basic Vulkan layer interception.
 
-[GLA] Created Vulkan instance
-[GLA] Using device: <your GPU name>
-[GLA] Created Vulkan device and queue
-[GLA] Created command pool
-[GLA] Allocated command buffer
-[GLA] Ended recording command buffer
+[OpenGPA] Created Vulkan instance
+[OpenGPA] Using device: <your GPU name>
+[OpenGPA] Created Vulkan device and queue
+[OpenGPA] Created command pool
+[OpenGPA] Allocated command buffer
+[OpenGPA] Ended recording command buffer
 
-[GLA] Application ran successfully.
+[OpenGPA] Application ran successfully.
 If VK_LAYER_GLA_capture was active, the layer should have
 intercepted all Vulkan calls above.
 
-[GLA] Cleanup complete
+[OpenGPA] Cleanup complete
 ```
 
-## Running With the GLA Layer
+## Running With the OpenGPA Layer
 
-First, ensure the GLA layer is installed (see [vulkan-layer.md](./vulkan-layer.md) installation section).
+First, ensure the OpenGPA layer is installed (see [vulkan-layer.md](./vulkan-layer.md) installation section).
 
 ### Using Make Target
 
@@ -127,13 +127,13 @@ export VK_LOADER_DEBUG=all
 ./minimal_app 2>&1 | grep -i gla
 ```
 
-This enables Vulkan loader debug output and filters for GLA-related messages.
+This enables Vulkan loader debug output and filters for OpenGPA-related messages.
 
 ## Interpreting Results
 
 ### Success Indicators
 - App runs without errors
-- All `[GLA]` tagged output lines appear
+- All `[OpenGPA]` tagged output lines appear
 - No "layer not found" or "symbol not found" errors
 
 ### Common Issues
@@ -153,7 +153,7 @@ ldd ~/.config/vulkan/implicit_layer.d/libVkLayer_gla_capture.so
 vulkaninfo | grep deviceName
 ```
 
-## Expected GLA Layer Behavior
+## Expected OpenGPA Layer Behavior
 
 When the layer is active, it should intercept and log:
 - `vkCreateInstance`
@@ -169,7 +169,7 @@ When the layer is active, it should intercept and log:
 - `vkDestroyDevice`
 - `vkDestroyInstance`
 
-The layer should relay frame metadata and capture state to the GLA engine via IPC (Unix socket by default).
+The layer should relay frame metadata and capture state to the OpenGPA engine via IPC (Unix socket by default).
 
 ## Extending the Test App
 
@@ -183,13 +183,13 @@ To add more functionality:
 
 See the [Vulkan specification](https://registry.khronos.org/vulkan/) and [Khronos tutorials](https://vulkan-tutorial.com/) for deeper examples.
 
-## Integration with GLA Engine
+## Integration with OpenGPA Engine
 
 To validate full integration:
 
-1. Start the GLA engine listening on `/tmp/gla.sock`
-2. Ensure GLA core services are running
+1. Start the OpenGPA engine listening on `/tmp/gla.sock`
+2. Ensure OpenGPA core services are running
 3. Run the test app with the layer enabled
 4. Check engine logs for captured frame data
 
-Refer to the [GLA engine documentation](../README.md) for engine setup.
+Refer to the [OpenGPA engine documentation](../README.md) for engine setup.

@@ -47,13 +47,13 @@ provenance is very difficult from source code alone.
 - **Absence-of-evidence**: The missing `glBindTexture` call is invisible;
   there is no incorrect call at the bug site.
 
-## How GLA Helps
+## How OpenGPA Helps
 
 ```
 inspect_drawcall(draw_id=2, query="textures")
 ```
 
-GLA captures the texture unit state at every draw call, including the
+OpenGPA captures the texture unit state at every draw call, including the
 source texture object ID and its pixel content. For pass 2 draw the output
 would show:
 

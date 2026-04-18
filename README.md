@@ -1,4 +1,4 @@
-# GLA — Graphics Library for Agents
+# OpenGPA — Open Graphics Profiler for Agents
 
 A live graphics debugger designed for AI agents. Intercepts OpenGL/Vulkan/WebGL
 calls, captures frame state, and exposes it via REST API and MCP tools so LLMs
@@ -15,7 +15,7 @@ bazel build //...
 # Install Python dependencies
 pip install -e ".[dev]"
 
-# Start GLA engine (native capture mode)
+# Start OpenGPA engine (native capture mode)
 python -m gla.launcher --port 18080
 # Prints:
 #   GLA_SOCKET_PATH=/tmp/gla.sock
@@ -55,7 +55,7 @@ python -m gla.launcher --backend renderdoc --capture-file trace.rdc --port 18080
      | shm+socket     | shm+socket    | websocket
      v                v               v
 +---------------------------------------------+
-|          GLA Core Engine (C++)              |
+|          OpenGPA Core Engine (C++)          |
 |                                             |
 |  Capture       State Store    Semantic      |
 |  Ingestion     (ring buffer,  Reconstructor |
@@ -67,7 +67,7 @@ python -m gla.launcher --backend renderdoc --capture-file trace.rdc --port 18080
                       | pybind11
                       v
 +---------------------------------------------+
-|         GLA Python Interface                |
+|         OpenGPA Python Interface            |
 |                                             |
 |  REST API (FastAPI)    MCP Server (stdio)   |
 +---------------------------------------------+
@@ -165,8 +165,8 @@ Six tools optimized for LLM interaction:
 
 ## MCP Integration (Claude Code)
 
-Add to your project's `.mcp.json` to use GLA tools directly from Claude Code.
-Start GLA first, then note the printed `GLA_AUTH_TOKEN`.
+Add to your project's `.mcp.json` to use OpenGPA tools directly from Claude Code.
+Start OpenGPA first, then note the printed `GLA_AUTH_TOKEN`.
 
 ```json
 {
@@ -189,9 +189,9 @@ The MCP server uses stdio transport and makes no outbound network connections.
 
 ## Eval Suite
 
-GLA ships with an adversarial evaluation suite of intentionally broken OpenGL
+OpenGPA ships with an adversarial evaluation suite of intentionally broken OpenGL
 scenes. Each scenario is designed so that code inspection alone scales poorly
-while 1-3 GLA queries expose the root cause directly.
+while 1-3 OpenGPA queries expose the root cause directly.
 
 **10 adversarial scenarios (Category E):**
 
@@ -220,7 +220,7 @@ python -m gla.eval.cli run --category E
 # Run a single scenario
 python -m gla.eval.cli run --scenario e1_state_leak
 
-# Print metrics (token cost, tool calls, accuracy)
+# Print metrics (token cost, tool calls, accuracy — with vs. without OpenGPA)
 python -m gla.eval.cli report
 ```
 

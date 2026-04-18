@@ -33,8 +33,8 @@ Root cause: the depth pass unconditionally enables front-face culling (a common 
 - plausible-default-wrong-for-case
 - no-gl-error-silent-cull
 
-## How GLA Helps
-A GLA query like "what was `GL_CULL_FACE_MODE` during the depth-only draw into the shadow FBO, and how many primitives survived clipping vs. were culled?" immediately surfaces `GL_FRONT` with zero surviving primitives for the caster. That is directly diagnostic of wrong-side selection — far faster than guessing between bias, orientation, or matrix mistakes.
+## How OpenGPA Helps
+An OpenGPA query like "what was `GL_CULL_FACE_MODE` during the depth-only draw into the shadow FBO, and how many primitives survived clipping vs. were culled?" immediately surfaces `GL_FRONT` with zero surviving primitives for the caster. That is directly diagnostic of wrong-side selection — far faster than guessing between bias, orientation, or matrix mistakes.
 
 ## Source
 - **URL**: https://github.com/mrdoob/three.js/issues/33172
@@ -62,10 +62,10 @@ spec:
   tolerance: "red channel > 128 ⇒ correct; red channel ~0 ⇒ bug"
 ```
 
-## Predicted GLA Helpfulness
+## Predicted OpenGPA Helpfulness
 - **Verdict**: yes
-- **Reasoning**: The bug is a single piece of pipeline state (`GL_CULL_FACE_MODE = GL_FRONT`) causing silent primitive loss during a specific pass. GLA's per-draw state + primitive-count inspection reveals both the offending state and its downstream effect (zero depth writes from a caster expected to write many), without requiring the user to guess the culprit among bias, winding, or matrix candidates.
+- **Reasoning**: The bug is a single piece of pipeline state (`GL_CULL_FACE_MODE = GL_FRONT`) causing silent primitive loss during a specific pass. OpenGPA's per-draw state + primitive-count inspection reveals both the offending state and its downstream effect (zero depth writes from a caster expected to write many), without requiring the user to guess the culprit among bias, winding, or matrix candidates.
 
-## Observed GLA Helpfulness
+## Observed OpenGPA Helpfulness
 - **Verdict**: ambiguous
 - **Evidence**: validation skipped (--no-validate)

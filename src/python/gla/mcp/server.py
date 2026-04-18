@@ -1,4 +1,4 @@
-"""Minimal stdio-based MCP tool server for GLA.
+"""Minimal stdio-based MCP tool server for OpenGPA.
 
 Implements the Model Context Protocol (MCP) tool-call protocol over stdin/stdout
 using JSON-RPC 2.0.  The `mcp` Python SDK is not required.
@@ -135,7 +135,7 @@ TOOLS: List[Dict[str, Any]] = [
     },
     {
         "name": "control_capture",
-        "description": "Pause, resume, or step the GLA capture engine.",
+        "description": "Pause, resume, or step the OpenGPA capture engine.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -450,7 +450,7 @@ def run(base_url: str, token: str) -> None:
             _write(_response(req_id, {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "gla-mcp", "version": "0.1.0"},
+                "serverInfo": {"name": "opengpa-mcp", "version": "0.1.0"},
             }))
             continue
 
@@ -491,16 +491,16 @@ def run(base_url: str, token: str) -> None:
 def main() -> None:
     import os
 
-    parser = argparse.ArgumentParser(description="GLA MCP stdio server")
+    parser = argparse.ArgumentParser(description="OpenGPA MCP stdio server")
     parser.add_argument(
         "--base-url",
         default=None,
-        help="GLA REST API base URL (default: GLA_BASE_URL env or http://127.0.0.1:8080/api/v1)",
+        help="OpenGPA REST API base URL (default: GLA_BASE_URL env or http://127.0.0.1:8080/api/v1)",
     )
     parser.add_argument(
         "--token",
         default=None,
-        help="Bearer token for the GLA REST API (default: GLA_TOKEN env)",
+        help="Bearer token for the OpenGPA REST API (default: GLA_TOKEN env)",
     )
     args = parser.parse_args()
 

@@ -52,7 +52,7 @@ class GlaBridge {
 
     this.engineSocket.on('connect', () => {
       this.connected = true;
-      console.log('[bridge] Connected to GLA engine');
+      console.log('[bridge] Connected to OpenGPA engine');
       this.sendHandshake();
     });
 

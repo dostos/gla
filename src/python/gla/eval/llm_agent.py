@@ -1,4 +1,4 @@
-"""LLM agent for eval harness — invokes Claude API with/without GLA tools."""
+"""LLM agent for eval harness — invokes Claude API with/without OpenGPA tools."""
 
 import time
 import json
@@ -25,7 +25,7 @@ class AgentResult:
 
 
 class GlaToolExecutor:
-    """Executes GLA tool calls by proxying to the REST API."""
+    """Executes OpenGPA tool calls by proxying to the REST API."""
 
     def __init__(self, base_url: str, token: str, frame_id: int):
         self.base_url = base_url.rstrip("/")
@@ -34,7 +34,7 @@ class GlaToolExecutor:
         self.headers = {"Authorization": f"Bearer {token}"}
 
     def execute(self, tool_name: str, tool_input: dict) -> str:
-        """Execute a GLA tool and return the result as a string."""
+        """Execute an OpenGPA tool and return the result as a string."""
         if tool_name == "query_frame":
             return self._query_frame(tool_input)
         elif tool_name == "inspect_drawcall":
@@ -267,7 +267,7 @@ class EvalAgent:
         source_path: str,
         tool_executor: GlaToolExecutor,
     ) -> AgentResult:
-        """Run the agent WITH GLA tools available."""
+        """Run the agent WITH OpenGPA tools available."""
         return self._run(
             scenario_description=scenario_description,
             source_code=source_code,
@@ -426,6 +426,7 @@ class EvalAgent:
                 "- query_pixel: Get color/depth at a pixel coordinate\n"
                 "- query_scene: Get scene info (requires framework metadata plugin)\n"
                 "- compare_frames: Diff two frames\n\n"
+                "These tools are provided by OpenGPA (Open Graphics Profiler for Agents).\n"
                 "Use whatever approach you think is best.\n\n"
                 "End your response with:\n"
                 "DIAGNOSIS: <one-sentence root cause>\n"
@@ -469,7 +470,7 @@ def build_agent_fn(
              tool_calls, num_turns, time_seconds)
     matching `gla.eval.harness.AgentFn`.
 
-    In "with_gla" mode the agent is given the full GLA tool set plus the
+    In "with_gla" mode the agent is given the full OpenGPA tool set plus the
     source reader and is driven by a `GlaToolExecutor` pointed at the
     captured frame. In "code_only" mode the agent only has `read_source_file`.
     """

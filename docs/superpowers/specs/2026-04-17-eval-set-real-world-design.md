@@ -1,14 +1,14 @@
-# GLA Real-World Evaluation Set — Design Specification
+# OpenGPA Real-World Evaluation Set — Design Specification
 
 ## 1. Overview
 
-This document specifies an expansion of GLA's evaluation set. The existing eval suite (`tests/eval/e1_state_leak.{c,md}` … `e10_compensating_vp.{c,md}`) is a hand-authored synthetic adversarial collection. It is small (10 scenarios), hand-invented (not grounded in reported bugs), and exercises only the minimal-OpenGL-C repro form.
+This document specifies an expansion of OpenGPA's evaluation set. The existing eval suite (`tests/eval/e1_state_leak.{c,md}` … `e10_compensating_vp.{c,md}`) is a hand-authored synthetic adversarial collection. It is small (10 scenarios), hand-invented (not grounded in reported bugs), and exercises only the minimal-OpenGL-C repro form.
 
 The expansion adds:
 
 1. A **core tier** of 30-40 additional scenarios, each ported from a real issue or fix commit in an OSS graphics project. Same minimal-C repro format as `e1`-`e10`; the difference is that the bug pattern is sourced from a real upstream report rather than invented.
-2. A **showcase tier** of 6-10 scenarios authored as real framework apps (three.js, Babylon.js, PlayCanvas) running under the WebGL shim. These exist to validate that GLA's value extends through high-level framework abstractions, not only to raw OpenGL programs.
-3. A **coverage log** that records every upstream issue the pipeline reviewed — included and excluded — with a helpfulness classification and, for non-helped cases, an attributed failure mode. The log is the feedback loop: it tells the GLA team which real-world bug classes current GLA covers and which require new features.
+2. A **showcase tier** of 6-10 scenarios authored as real framework apps (three.js, Babylon.js, PlayCanvas) running under the WebGL shim. These exist to validate that OpenGPA's value extends through high-level framework abstractions, not only to raw OpenGL programs.
+3. A **coverage log** that records every upstream issue the pipeline reviewed — included and excluded — with a helpfulness classification and, for non-helped cases, an attributed failure mode. The log is the feedback loop: it tells the OpenGPA team which real-world bug classes current OpenGPA covers and which require new features.
 
 All new artifacts are produced by an automated curation pipeline (discover → triage → draft → validate → run eval → classify → commit). The existing `e1`-`e10` scenarios remain untouched.
 
@@ -20,22 +20,22 @@ All new artifacts are produced by an automated curation pipeline (discover → t
 
 **FR-2: Two-tier structure.**
 - **Core tier**: 30-40 scenarios. Repro form is a minimal single-file OpenGL C application compiled via `cc_binary` Bazel targets, identical to the existing `e1`-`e10` structure. Files live in `tests/eval/r<N>_<slug>.{c,md}`.
-- **Showcase tier**: 6-10 scenarios. Repro form is a three.js / Babylon.js / PlayCanvas application with `index.html`, `app.js`, `package.json`, and `scenario.md`. Runs in headless Chromium under the GLA WebGL extension. Files live in `tests/eval/showcase/s<N>_<framework>_<slug>/`.
+- **Showcase tier**: 6-10 scenarios. Repro form is a three.js / Babylon.js / PlayCanvas application with `index.html`, `app.js`, `package.json`, and `scenario.md`. Runs in headless Chromium under the OpenGPA WebGL extension. Files live in `tests/eval/showcase/s<N>_<framework>_<slug>/`.
 
-**FR-3: Representative admission.** The pipeline does not filter upstream issues by whether GLA appears likely to help. Any in-scope rendering bug (with a reproducible pattern and clear ground-truth diagnosis) is admitted. The helpfulness determination is recorded on the scenario, not used as an admission filter.
+**FR-3: Representative admission.** The pipeline does not filter upstream issues by whether OpenGPA appears likely to help. Any in-scope rendering bug (with a reproducible pattern and clear ground-truth diagnosis) is admitted. The helpfulness determination is recorded on the scenario, not used as an admission filter.
 
 **FR-4: Coverage log.** For each upstream issue the pipeline reviews (whether admitted, rejected at triage, rejected at validate, or rejected at eval), an entry is appended to `docs/superpowers/eval/coverage-log.jsonl`. The human-readable summary `docs/superpowers/eval/coverage-gaps.md` is regenerated from the log after each pipeline run.
 
 **FR-5: Helpfulness classification.** Every committed scenario has three helpfulness-related fields:
 - `predicted_helps` — set by the drafting agent based on whether runtime GPU-state inspection plausibly diagnoses the bug.
-- `observed_helps` — derived post-eval from the scores (GLA mode correct and code-only wrong → yes; both correct with GLA tokens ≤ 0.5× code-only → yes; both wrong → no; else ambiguous).
+- `observed_helps` — derived post-eval from the scores (OpenGPA mode correct and code-only wrong → yes; both correct with OpenGPA tokens ≤ 0.5× code-only → yes; both wrong → no; else ambiguous).
 - `failure_mode` — populated when `observed_helps=no`; a categorical label (e.g., `shader_compile_not_exposed`, `framework_internal_state`, `needs_temporal_diff`, `driver_specific`) with 1-2 sentences of detail.
 
 **FR-6: Reuse of existing eval harness.** The new scenarios are consumed by the existing `EvalHarness` (`src/python/gla/eval/harness.py`) without changes to its public API. The `ScenarioLoader` is extended to discover scenarios in subdirectories (showcase tier) in addition to the top-level glob.
 
 **FR-7: Automated pipeline.** A Python script `src/python/gla/eval/curation/pipeline.py` orchestrates all stages. Each stage is idempotent per issue URL; re-running the pipeline on a partially-processed issue resumes from the failed stage. The pipeline runs in batches, not continuously.
 
-**FR-8: Validation gate.** Before a scenario commits, a validation stage (a) builds it, (b) runs it headless, (c) captures a frame via GLA, (d) confirms the frame exhibits the symptom described in the `.md`'s `Actual Broken Output` section. Failure logs `rejection_reason: symptom_mismatch_at_validation`.
+**FR-8: Validation gate.** Before a scenario commits, a validation stage (a) builds it, (b) runs it headless, (c) captures a frame via OpenGPA, (d) confirms the frame exhibits the symptom described in the `.md`'s `Actual Broken Output` section. Failure logs `rejection_reason: symptom_mismatch_at_validation`.
 
 **FR-9: Eval-in-the-loop acceptance.** A scenario is committed only if the eval harness runs cleanly on it (both modes produce a diagnosis that the scorer can interpret). Scorer-ambiguous scenarios are held for manual review.
 
@@ -49,13 +49,13 @@ All new artifacts are produced by an automated curation pipeline (discover → t
 
 **NFR-4: Licensing safety.** Showcase-tier apps consume frameworks as npm dependencies; the scenario code itself is authored by the pipeline (not copy-pasted from upstream repos). Source issues are cited but not inlined.
 
-**NFR-5: CI compatibility.** Core tier scenarios run in existing Bazel-based CI. Showcase tier runs on demand (Chromium + GLA stack is too expensive for default CI), gated by a workflow flag.
+**NFR-5: CI compatibility.** Core tier scenarios run in existing Bazel-based CI. Showcase tier runs on demand (Chromium + OpenGPA stack is too expensive for default CI), gated by a workflow flag.
 
 ### 2.3 Out of scope (v1)
 
 - **Vulkan** scenarios (defer until VK shim stabilizes and Vulkan bug volume justifies the eval infrastructure).
 - **Continuous / scheduled discovery**. Pipeline runs in batches on demand; no background service.
-- **Auto-generating GLA feature PRs** from coverage gaps. Coverage gap categories inform human-authored feature work; they don't automate it.
+- **Auto-generating OpenGPA feature PRs** from coverage gaps. Coverage gap categories inform human-authored feature work; they don't automate it.
 - **Non-English upstream issues.** Pipeline skips at discovery.
 - **Real-time dashboard.** `coverage-gaps.md` is the dashboard.
 - **Migrating existing `e1`-`e10`** into the new schema. They remain as-is; the new schema is a superset so downstream consumers handle both.
@@ -105,7 +105,7 @@ Dedupes by `root_cause_fingerprint` (LLM-generated short key representing the bu
 
 Drafting prompts require citing the upstream thread or commit for every diagnostic claim in the `.md`. Scenarios without citations fail validation.
 
-**Validate** — Builds the scenario (Bazel for core, `npm install && npm run build` for showcase). Runs it headless (Xvfb for core, Puppeteer for showcase). Captures a frame via the appropriate GLA shim. Checks the captured frame against the scenario's declared `## Bug Signature` (§3.4) using either a heuristic comparator (6-8 signature types) or, as fallback, an LLM visual check. Failure logs `rejection_reason: symptom_mismatch_at_validation`.
+**Validate** — Builds the scenario (Bazel for core, `npm install && npm run build` for showcase). Runs it headless (Xvfb for core, Puppeteer for showcase). Captures a frame via the appropriate OpenGPA shim. Checks the captured frame against the scenario's declared `## Bug Signature` (§3.4) using either a heuristic comparator (6-8 signature types) or, as fallback, an LLM visual check. Failure logs `rejection_reason: symptom_mismatch_at_validation`.
 
 **Run Eval** — Invokes `EvalHarness.run_scenario(scenario_id, mode, agent_fn)` for `mode in {"with_gla", "code_only"}`. Records `correct_diagnosis`, `correct_fix`, `input_tokens`, `output_tokens`, `tool_calls`, `num_turns`, `time_seconds` for each mode. This is also the eval-in-the-loop gate: if the scorer cannot interpret either mode's output, the scenario is held for manual review (`rejection_reason: eval_scorer_ambiguous`).
 
@@ -113,7 +113,7 @@ Drafting prompts require citing the upstream thread or commit for every diagnost
 - `predicted_helps` — already set by the drafting agent.
 - `observed_helps` — derived from eval scores. Let `ratio = with_gla_total_tokens / code_only_total_tokens`. Rules evaluated in order; first match wins:
   1. `correct_with_gla AND NOT correct_code_only` → `yes`.
-  2. `NOT correct_with_gla AND correct_code_only` → `no` (GLA caused regression).
+  2. `NOT correct_with_gla AND correct_code_only` → `no` (OpenGPA caused regression).
   3. `both_wrong` → `no`.
   4. `both_correct AND ratio < 0.5` → `yes`.
   5. `both_correct AND ratio > 0.8` → `no`.
@@ -150,7 +150,7 @@ Weights are soft targets, not hard quotas. If fix-commit mining produces higher-
 
 ### 3.4 Scenario `.md` schema
 
-The schema extends the current `ScenarioMetadata` dataclass. New sections are **Source**, **Tier**, **API**, **Framework**, **Predicted GLA Helpfulness**, **Observed GLA Helpfulness**, **Failure Mode**, **Bug Signature**.
+The schema extends the current `ScenarioMetadata` dataclass. New sections are **Source**, **Tier**, **API**, **Framework**, **Predicted OpenGPA Helpfulness**, **Observed OpenGPA Helpfulness**, **Failure Mode**, **Bug Signature**.
 
 ```markdown
 # R12: Material Clone Uniform Loss
@@ -189,7 +189,7 @@ none  # (the core-tier port uses raw OpenGL to exhibit the same pattern)
 ## Adversarial Principles
 [existing format]
 
-## How GLA Helps
+## How OpenGPA Helps
 [existing format]
 
 ## Bug Signature
@@ -201,12 +201,12 @@ spec:
   tolerance: 0.1
 ```
 
-## Predicted GLA Helpfulness
+## Predicted OpenGPA Helpfulness
 - **Verdict**: yes
 - **Reasoning**: The bug manifests as a shader uniform not being updated between draw calls.
   `inspect_drawcall(dc_id, include=["shader"])` directly exposes the stale uniform value.
 
-## Observed GLA Helpfulness
+## Observed OpenGPA Helpfulness
 *(populated post-eval)*
 - **Verdict**: yes
 - **Evidence**: correct_with_gla=True, correct_code_only=False, token_ratio=0.31
@@ -257,7 +257,7 @@ Rejected entries use the same schema with `scenario_id: null` and a populated `r
 `docs/superpowers/eval/coverage-gaps.md` — human-readable, regenerated from the JSONL log:
 
 ```markdown
-# GLA Coverage Gaps
+# OpenGPA Coverage Gaps
 
 *Last regenerated: 2026-04-17 by pipeline run batch-2026-04-17a*
 
@@ -280,7 +280,7 @@ Rejected entries use the same schema with `scenario_id: null` and a populated `r
 ### shader_compile_not_exposed (count: 3)
 Scenarios where the bug is a silent shader compile/link failure...
 **Example scenarios**: r18, r24, r31
-**Suggested GLA feature**: expose glGetShaderInfoLog / glGetProgramInfoLog
+**Suggested OpenGPA feature**: expose glGetShaderInfoLog / glGetProgramInfoLog
 results per draw call's shader program.
 
 ### framework_internal_state (count: 2)
@@ -302,16 +302,16 @@ results per draw call's shader program.
 ```
 Pipeline (Python)
   │
-  ├─► Puppeteer driver (Node.js) ──► Chromium (headless) + GLA WebGL extension
+  ├─► Puppeteer driver (Node.js) ──► Chromium (headless) + OpenGPA WebGL extension
   │                                        │
   │                                        ▼  (target app)
   │                                    three.js app running
   │                                        │
   │                                        ▼
-  │                                   GLA WebGL shim
+  │                                   OpenGPA WebGL shim
   │                                        │ WebSocket
   │                                        ▼
-  └─► GLA Node.js bridge ──► Unix socket ──► GLA core engine
+  └─► OpenGPA Node.js bridge ──► Unix socket ──► OpenGPA core engine
                                                   │
                                                   ▼
                                           REST API + MCP
@@ -319,7 +319,7 @@ Pipeline (Python)
 
 New components:
 
-- `src/python/gla/eval/curation/showcase_runner.py` — launches the Puppeteer + GLA stack, waits for the "frame captured" signal from the shim, hands off the running session to the eval agent (which queries GLA via MCP).
+- `src/python/gla/eval/curation/showcase_runner.py` — launches the Puppeteer + OpenGPA stack, waits for the "frame captured" signal from the shim, hands off the running session to the eval agent (which queries OpenGPA via MCP).
 - `tests/eval/showcase/_harness/run.js` — reusable Puppeteer boilerplate: `chromium.launch({ args: ['--load-extension=<gla-webgl-ext-path>'] })` → loads the showcase app from a local file:// URL → waits for `window.__GLA_READY__` (set by the shim after first frame capture) → signals pipeline over stdout → keeps Chromium alive for the duration of the eval session.
 - `tests/eval/showcase/_harness/package.json` — shared Puppeteer dependency; each showcase scenario directory has its own `package.json` for the framework dependency.
 
@@ -327,7 +327,7 @@ New components:
 
 Enforcement mechanism: the `code_only` mode's `read_source` tool (in `EvalHarness._build_tools`) is scoped to the showcase scenario's own directory (`tests/eval/showcase/<id>/`), excluding `node_modules/`. The agent may read `app.js`, `index.html`, `package.json`, and `scenario.md`, but `read_source` rejects any path under `node_modules/`. The agent is informed of this restriction in its system prompt ("You may not read the framework's source. Treat the framework as a black-box library."). No filesystem sandboxing is required beyond the tool-level check.
 
-With GLA enabled, the agent can query actual GL calls the framework generated — exactly where GLA's value proposition lives for framework users.
+With OpenGPA enabled, the agent can query actual GL calls the framework generated — exactly where OpenGPA's value proposition lives for framework users.
 
 ### 3.8 Symptom-match validation
 
@@ -345,7 +345,7 @@ The weakest link in the pipeline. Concrete approach:
 | `unexpected_state_in_draw` | pipeline state field, expected vs actual | scissor leak |
 | `framebuffer_dominant_color` | overall framebuffer dominant color | solid-color failures (e.g., all black) |
 
-**Heuristic comparators** — one Python function per signature type. Operates on the captured framebuffer PNG + GLA's draw-call metadata.
+**Heuristic comparators** — one Python function per signature type. Operates on the captured framebuffer PNG + OpenGPA's draw-call metadata.
 
 **LLM fallback** — for signatures not covered by heuristics, or when the heuristic returns ambiguous, a small LLM call judges: "Given the scenario's `Actual Broken Output` description and this captured framebuffer, does the frame exhibit the described bug?"
 
@@ -478,15 +478,15 @@ A human-authored equivalent is ~60-80 hours of skilled graphics-developer work. 
 5. **M-EV5**: Full core-tier batch (target 30-40 scenarios committed).
 6. **M-EV6**: Showcase runtime (Puppeteer + WebGL extension integration).
 7. **M-EV7**: Drafting stage for showcase tier. First 2 showcase scenarios end-to-end.
-8. **M-EV8**: Full showcase batch (target 6-10 scenarios committed) + coverage-gaps.md generation + first GLA feature requests derived from failure modes.
+8. **M-EV8**: Full showcase batch (target 6-10 scenarios committed) + coverage-gaps.md generation + first OpenGPA feature requests derived from failure modes.
 
 ## 11. Key design decisions
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Two tiers | Core (minimal C) + Showcase (framework apps) | Keeps quantitative eval cheap to run; showcase demonstrates the framework-debugging value proposition where GLA's abstraction-bridging matters most. |
+| Two tiers | Core (minimal C) + Showcase (framework apps) | Keeps quantitative eval cheap to run; showcase demonstrates the framework-debugging value proposition where OpenGPA's abstraction-bridging matters most. |
 | Admission filter | Representative sampling (no helpfulness filter) | Honest benchmarking; rejection stats become a contribution themselves. |
-| Helpfulness classification | Predicted + observed + failure-mode attribution | Makes the feedback loop actionable — we can identify specific GLA feature gaps rather than just reporting a helpfulness percentage. |
+| Helpfulness classification | Predicted + observed + failure-mode attribution | Makes the feedback loop actionable — we can identify specific OpenGPA feature gaps rather than just reporting a helpfulness percentage. |
 | Pipeline structure | Multi-stage with eval-in-the-loop gate | Reliable; stages are independently rerunnable; eval validation catches non-reproducible scenarios. |
 | Seeding | Declared queries run by agent | Prevents agent drift into irrelevant sources while keeping the per-issue processing autonomous. |
 | Sources | Framework trackers (70%) + fix commits (20%) + SO (10%) | Framework trackers have the best signal-to-noise for visual bugs; fix commits give uniquely reliable ground truth; SO covers the tail. |

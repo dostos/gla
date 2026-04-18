@@ -67,11 +67,11 @@ isolate individually.
 - **Deep pipeline knowledge required**: diagnosing this requires understanding
   the interaction between view and projection matrix handedness conventions.
 
-## GLA Advantage
+## OpenGPA Advantage
 
 `query_scene(camera)` exposes the raw view matrix and derived camera vectors.
 It shows `forward = (0, 0, +1)` instead of `(0, 0, -1)`, which directly
 indicates the lookAt sign error. Separately, displaying the raw projection
 matrix (or its derived near/far/depth-range parameters) reveals the negated
-depth range. GLA surfaces both errors independently, rather than leaving the
+depth range. OpenGPA surfaces both errors independently, rather than leaving the
 developer to deduce them from a "mostly correct" visual output.

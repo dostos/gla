@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GLA Launcher — runs engine + REST API in one process.
+"""OpenGPA Launcher — runs engine + REST API in one process.
 
 Usage:
     python -m gla.launcher [options]
@@ -16,7 +16,7 @@ import sys
 import threading
 
 def main():
-    parser = argparse.ArgumentParser(description="GLA Engine + REST API")
+    parser = argparse.ArgumentParser(description="OpenGPA Engine + REST API")
     parser.add_argument("--backend", default="native",
                         choices=["native", "renderdoc"],
                         help="Capture backend to use (default: native)")
@@ -46,7 +46,7 @@ def main():
         engine = _gla_core.Engine(args.socket, args.shm, args.shm_slots, args.slot_size)
 
         # Start engine in background thread
-        engine_thread = threading.Thread(target=engine.run, daemon=True, name="gla-engine")
+        engine_thread = threading.Thread(target=engine.run, daemon=True, name="opengpa-engine")
         engine_thread.start()
 
         # Create query engine
@@ -77,7 +77,7 @@ def main():
         print(f"GLA_SOCKET_PATH={args.socket}")
         print(f"GLA_SHM_NAME={args.shm}")
     print(f"GLA_AUTH_TOKEN={token}")
-    print(f"GLA listening on http://127.0.0.1:{args.port}")
+    print(f"OpenGPA listening on http://127.0.0.1:{args.port}")
     sys.stdout.flush()
 
     # Handle SIGTERM gracefully

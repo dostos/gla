@@ -64,13 +64,13 @@ and knowing IEEE 754 NaN semantics in GLSL.
 - **Plausible intent**: "Flatten a mesh for a shadow" is a legitimate use
   case, making the zero scale look intentional.
 
-## How GLA Helps
+## How OpenGPA Helps
 
 ```
 inspect_drawcall(draw_id=1, query="shader")
 ```
 
-GLA captures uniform values at draw time. The output would show:
+OpenGPA captures uniform values at draw time. The output would show:
 
 ```json
 {

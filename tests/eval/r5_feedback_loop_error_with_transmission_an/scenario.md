@@ -70,8 +70,8 @@ A maintainer confirmed the root fix in comment 1:
 - MSAA previously acted as an accidental guardrail; removing it
   exposed a pre-existing invariant violation
 
-## How GLA Helps
-At the offending `glDrawArrays`, GLA can inspect live GL state and
+## How OpenGPA Helps
+At the offending `glDrawArrays`, OpenGPA can inspect live GL state and
 observe that the texture bound to sampler unit 0 is also the current
 framebuffer's `COLOR_ATTACHMENT0` — the exact invariant the spec
 forbids. A single state query at draw time pinpoints the feedback
@@ -106,15 +106,15 @@ spec:
     - framebuffer_attachment_object(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0)
 ```
 
-## Predicted GLA Helpfulness
+## Predicted OpenGPA Helpfulness
 - **Verdict**: yes
 - **Reasoning**: The failure mode is a single-draw state invariant
-  (sampler texture name == current color attachment name). GLA's
+  (sampler texture name == current color attachment name). OpenGPA's
   draw-time state inspection directly surfaces this equality, whereas
   purely visual diffs are fragile because the bug manifests as
   dropped draws plus an error flood rather than a deterministic
   pixel change.
 
-## Observed GLA Helpfulness
+## Observed OpenGPA Helpfulness
 - **Verdict**: ambiguous
 - **Evidence**: validation skipped (--no-validate)

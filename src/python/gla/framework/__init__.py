@@ -1,4 +1,4 @@
-"""GLA framework integration package.
+"""OpenGPA framework integration package.
 
 Provides types and storage for framework plugins to supply scene graph metadata
 alongside captured GPU frames.

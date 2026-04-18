@@ -1,4 +1,4 @@
-"""Classify observed helpfulness of GLA vs code-only from two EvalResult objects.
+"""Classify observed helpfulness of OpenGPA vs code-only from two EvalResult objects.
 
 6-rule decision table (first match wins):
   Rule 1: correct_with_gla AND NOT correct_code_only  -> yes
@@ -55,7 +55,7 @@ def classify_observed_helps(
     if not with_gla.correct_diagnosis and code_only.correct_diagnosis:
         return ObservedClassification(
             "no",
-            "GLA regressed vs code_only",
+            "OpenGPA regressed vs code_only",
         )
     # Rule 3: both wrong
     if not with_gla.correct_diagnosis and not code_only.correct_diagnosis:
@@ -96,7 +96,7 @@ def attribute_failure_mode(
     code_only_diagnosis: str,
     ground_truth: str,
 ) -> FailureModeResult:
-    """Call the LLM to categorize WHY GLA did not help in a given scenario."""
+    """Call the LLM to categorize WHY OpenGPA did not help in a given scenario."""
     system = load_prompt("classify_failure_mode_system")
     user = (
         f"SCENARIO_MD:\n{scenario_md}\n\n"

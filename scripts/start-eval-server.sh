@@ -1,5 +1,5 @@
 #!/bin/bash
-# Starts Xvfb, GLA engine, and captures frames from eval scenarios
+# Starts Xvfb, OpenGPA engine, and captures frames from eval scenarios
 set -e
 
 DISPLAY_NUM=${GLA_DISPLAY:-99}
@@ -17,8 +17,8 @@ if ! pgrep -f "Xvfb :${DISPLAY_NUM}" > /dev/null; then
 fi
 export DISPLAY=:${DISPLAY_NUM}
 
-# Start GLA engine + API
-echo "Starting GLA engine..."
+# Start OpenGPA engine + API
+echo "Starting OpenGPA engine..."
 PYTHONPATH="${REPO_ROOT}/src/python:${REPO_ROOT}/bazel-bin/src/bindings" \
     python3 -m gla.launcher \
     --socket "${SOCKET_PATH}" \
@@ -30,7 +30,7 @@ sleep 2
 
 echo ""
 echo "========================================="
-echo "GLA Eval Server Running"
+echo "OpenGPA Eval Server Running"
 echo "========================================="
 echo "API:    http://127.0.0.1:${PORT}"
 echo "Token:  ${TOKEN}"
@@ -61,5 +61,5 @@ cat > "${REPO_ROOT}/.mcp.json" << MCPEOF
 }
 MCPEOF
 
-# Wait for GLA engine
+# Wait for OpenGPA engine
 wait $GLA_PID

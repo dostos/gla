@@ -26,8 +26,8 @@ The regression was bisected to commit `7f1863f83d` (PR #86809), which tuned TAA 
 - post_pass_corrupting_intermediate_buffer
 - latent_bug_unmasked_by_tuning_change
 
-## How GLA Helps
-GLA can sample the motion-vector color attachment after each draw call. After the scene draw the attachment contains varying per-pixel data; after the post draw it collapses to a single dominant color. That before/after comparison points directly at the offending draw call without requiring a TAA-aware visualizer.
+## How OpenGPA Helps
+OpenGPA can sample the motion-vector color attachment after each draw call. After the scene draw the attachment contains varying per-pixel data; after the post draw it collapses to a single dominant color. That before/after comparison points directly at the offending draw call without requiring a TAA-aware visualizer.
 
 ## Source
 - **URL**: https://github.com/godotengine/godot/issues/103629
@@ -56,10 +56,10 @@ spec:
   expected_varying: true
 ```
 
-## Predicted GLA Helpfulness
+## Predicted OpenGPA Helpfulness
 - **Verdict**: yes
 - **Reasoning**: A per-draw-call read of color attachment 1 reveals that draw call 1 (scene) leaves it varying while draw call 2 (post) collapses it to uniform zero — the bug is one query away.
 
-## Observed GLA Helpfulness
+## Observed OpenGPA Helpfulness
 - **Verdict**: ambiguous
 - **Evidence**: validation skipped (--no-validate)

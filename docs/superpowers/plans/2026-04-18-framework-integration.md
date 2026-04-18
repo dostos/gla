@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Extend GLA to debug high-level frameworks by intercepting GL debug markers, accepting framework metadata via HTTP POST, and providing object/pass/material/pixel-explanation queries.
+**Goal:** Extend OpenGPA to debug high-level frameworks by intercepting GL debug markers, accepting framework metadata via HTTP POST, and providing object/pass/material/pixel-explanation queries.
 
 **Architecture:** Three data layers — GL capture (existing), debug markers (free baseline from glPushDebugGroup), and metadata sidecar (framework plugins POST scene graph via HTTP). A correlation engine joins all three via draw call IDs. New REST endpoints and MCP tools expose the joined data.
 
@@ -779,7 +779,7 @@ feat: Three.js scene graph capture plugin
 - [ ] **Step 1: Write integration test**
 
 Test that:
-1. Start GLA engine
+1. Start OpenGPA engine
 2. POST mock Three.js metadata to `/frames/0/metadata`
 3. Query `/frames/0/objects` → returns objects from metadata
 4. Query `/frames/0/explain/200/150` → returns explanation with object + material

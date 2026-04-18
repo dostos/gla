@@ -1,4 +1,4 @@
-"""Capture backend abstraction for GLA.
+"""Capture backend abstraction for OpenGPA.
 
 All capture backends implement :class:`FrameProvider`.  The REST API,
 MCP server, and eval harness work through this interface only.
