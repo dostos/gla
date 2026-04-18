@@ -824,3 +824,144 @@ def test_pipeline_gives_up_after_second_draft_failure(tmp_path):
     assert len(entries) == 1
     assert entries[0].outcome == "rejected"
     assert entries[0].rejection_reason == "not_reproducible"
+
+
+def test_check_c_compiles_returns_none_for_valid_c():
+    from gla.eval.curation.pipeline import _check_c_compiles
+    files = {
+        "main.c": "int main() { return 0; }",
+        "scenario.md": "# x",
+    }
+    assert _check_c_compiles(files, "test") is None
+
+
+def test_check_c_compiles_returns_error_for_invalid_c():
+    from gla.eval.curation.pipeline import _check_c_compiles
+    files = {
+        # `#error` directive always fails compilation with that message on stderr
+        "main.c": "#error forced compile error\nint main(){return 0;}",
+        "scenario.md": "# x",
+    }
+    err = _check_c_compiles(files, "test")
+    assert err is not None
+    assert "error" in err.lower() or "expected" in err.lower()
+
+
+def test_check_c_compiles_skips_when_no_c_files():
+    from gla.eval.curation.pipeline import _check_c_compiles
+    files = {"scenario.md": "# snapshot-only scenario"}
+    assert _check_c_compiles(files, "test") is None
+
+
+def test_pipeline_retries_draft_on_compile_error(tmp_path):
+    """When gcc can't compile the draft's C source, pipeline retries once
+    with the gcc stderr fed back as previous_error."""
+    candidate = DiscoveryCandidate(
+        url="https://github.com/x/y/issues/1", source_type="issue", title="t",
+    )
+    triage = TriageResult(
+        verdict="in_scope", fingerprint="state_leak:unique_key",
+        rejection_reason=None, summary="s",
+    )
+
+    # First draft has broken C (always-fail #error directive); second is valid
+    first_draft = DraftResult(
+        scenario_id="r1_fake",
+        files={
+            "main.c": "// SOURCE: https://github.com/x/y/issues/1\n"
+                      "#error forced compile error\nint main(){return 0;}",
+            "scenario.md": _draft_md(),
+        },
+    )
+    second_draft = DraftResult(
+        scenario_id="r1_fake",
+        files={
+            "main.c": "// SOURCE: https://github.com/x/y/issues/1\nint main(){ return 0; }",
+            "scenario.md": _draft_md(),
+        },
+    )
+    drafter = MagicMock()
+    drafter.draft.side_effect = [first_draft, second_draft]
+
+    discoverer = MagicMock(); discoverer.run.return_value = [candidate]
+    fetch_fn = MagicMock()
+    fetch_fn.return_value = IssueThread(url=candidate.url, title="t", body="b")
+    triager = MagicMock(); triager.triage.return_value = triage
+    validator = MagicMock()
+    validator.validate.return_value = ValidationResult(
+        ok=True, reason="ok", framebuffer_png=b"x",
+        metadata={"draw_call_count": 1, "draw_calls": []},
+    )
+    run_eval = MagicMock()
+    run_eval.run.return_value = RunEvalResult(
+        with_gla=_eval_result("with_gla", True, 1000),
+        code_only=_eval_result("code_only", False, 4000),
+        scorer_ambiguous=False,
+    )
+
+    p = CurationPipeline(
+        discoverer=discoverer, fetch_thread=fetch_fn, triager=triager,
+        drafter=drafter, validator=validator, run_eval=run_eval,
+        failure_mode_fn=MagicMock(),
+        eval_dir=tmp_path / "eval", workdir_root=tmp_path / ".wd",
+        coverage_log_path=tmp_path / "log.jsonl",
+        summary_path=tmp_path / "gaps.md",
+    )
+    p.run_batch()
+
+    # Drafter called twice (first produced bad C, second good)
+    assert drafter.draft.call_count == 2
+    second_kwargs = drafter.draft.call_args_list[1].kwargs
+    # The retry fed back the gcc stderr via previous_error
+    assert second_kwargs.get("previous_error") is not None
+    feedback = second_kwargs["previous_error"].lower()
+    assert "gcc" in feedback or "compile" in feedback or "error" in feedback
+    # Scenario committed
+    assert (tmp_path / "eval" / "r1_fake" / "main.c").exists()
+
+
+def test_pipeline_gives_up_after_second_c_compile_failure(tmp_path):
+    """If both draft attempts produce broken C, pipeline logs not_reproducible."""
+    from gla.eval.curation.coverage_log import CoverageLog
+
+    candidate = DiscoveryCandidate(
+        url="https://github.com/x/y/issues/1", source_type="issue", title="t",
+    )
+    triage = TriageResult(
+        verdict="in_scope", fingerprint="state_leak:x",
+        rejection_reason=None, summary="s",
+    )
+
+    broken = DraftResult(
+        scenario_id="r1_fake",
+        files={
+            "main.c": "// SOURCE: https://github.com/x/y/issues/1\n"
+                      "#error forced compile error\nint main(){return 0;}",
+            "scenario.md": _draft_md(),
+        },
+    )
+    drafter = MagicMock()
+    drafter.draft.side_effect = [broken, broken]  # both bad
+    discoverer = MagicMock(); discoverer.run.return_value = [candidate]
+    fetch_fn = MagicMock()
+    fetch_fn.return_value = IssueThread(url=candidate.url, title="t", body="b")
+    triager = MagicMock(); triager.triage.return_value = triage
+    validator = MagicMock(); run_eval = MagicMock()
+
+    p = CurationPipeline(
+        discoverer=discoverer, fetch_thread=fetch_fn, triager=triager,
+        drafter=drafter, validator=validator, run_eval=run_eval,
+        failure_mode_fn=MagicMock(),
+        eval_dir=tmp_path / "eval", workdir_root=tmp_path / ".wd",
+        coverage_log_path=tmp_path / "log.jsonl",
+        summary_path=tmp_path / "gaps.md",
+    )
+    p.run_batch()
+
+    assert drafter.draft.call_count == 2
+    assert validator.validate.call_count == 0
+    log = CoverageLog(tmp_path / "log.jsonl")
+    entries = log.read_all()
+    assert len(entries) == 1
+    assert entries[0].outcome == "rejected"
+    assert entries[0].rejection_reason == "not_reproducible"

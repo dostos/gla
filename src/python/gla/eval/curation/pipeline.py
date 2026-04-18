@@ -102,6 +102,49 @@ def _resolve_snapshot_sha(md_body: str, default_owner: str, default_repo: str) -
     return out
 
 
+def _check_c_compiles(files: dict[str, str], scenario_id: str) -> Optional[str]:
+    """Attempt to compile the C source in ``files`` (keys ending ``.c`` or ``.h``).
+
+    Returns None on success, or a string with the gcc stderr on failure.
+    Uses a temp dir so we don't pollute tests/eval.
+
+    Uses ``gcc -c -Wall -std=gnu11 -fsyntax-only`` (no linking, no codegen).
+    This is the minimum check — we're verifying the drafter's C is syntactically
+    valid before committing. Full Bazel build happens later in validate stage
+    when that's enabled.
+    """
+    import subprocess
+    import tempfile
+
+    # Only check if we have at least one .c file
+    c_files = {name: content for name, content in files.items()
+               if name.endswith(".c")}
+    if not c_files:
+        return None
+
+    with tempfile.TemporaryDirectory(prefix=f"gla_compile_check_{scenario_id}_") as td:
+        td_path = Path(td)
+        # Write all files (c, h, glsl etc.) so includes resolve
+        for name, content in files.items():
+            if "/" in name:
+                continue  # skip upstream_snapshot/* and nested dirs for compile check
+            (td_path / name).write_text(content)
+
+        errors: list[str] = []
+        for cname in c_files:
+            proc = subprocess.run(
+                ["gcc", "-c", "-Wall", "-std=gnu11", "-fsyntax-only",
+                 "-I.", cname],
+                cwd=str(td_path),
+                capture_output=True, text=True, timeout=30,
+            )
+            if proc.returncode != 0:
+                errors.append(f"--- {cname} ---\n{proc.stderr.strip()}")
+        if errors:
+            return "\n".join(errors)
+    return None
+
+
 def _extract_default_repo(url: str) -> tuple[str, str]:
     """Parse ``owner``/``repo`` from a GitHub URL; returns ``("", "")`` on failure."""
     m = re.search(r"github\.com/([^/]+)/([^/]+)/", url)
@@ -350,6 +393,53 @@ class CurationPipeline:
         # Trust the drafter's scenario_id — it is baked into the generated C
         # source and md. The proposed_scenario_id is only a hint to the drafter.
         scenario_id = draft.scenario_id
+
+        # C compile-check with one retry. If gcc can't parse the drafter's C
+        # source, feed the stderr back via `previous_error` and let the drafter
+        # try once more. Snapshot-only scenarios (no main.c) skip this check.
+        compile_err = _check_c_compiles(draft.files, scenario_id)
+        if compile_err:
+            try:
+                draft = self._drafter.draft(
+                    thread, triage,
+                    scenario_id=proposed_scenario_id,
+                    previous_error=(
+                        "The C source failed to compile. gcc output:\n\n"
+                        f"{compile_err}\n\n"
+                        "Please fix the compilation errors."
+                    ),
+                )
+            except Exception:
+                log_rejection(
+                    coverage_log=self._log,
+                    summary_path=self._summary,
+                    issue_url=cand.url,
+                    source_type=cand.source_type,
+                    triage_verdict=triage.verdict,
+                    fingerprint=triage.fingerprint,
+                    rejection_reason="not_reproducible",
+                )
+                return
+            # Resolve any auto-resolve SHA placeholders in the retry draft too
+            if owner and repo and "scenario.md" in draft.files:
+                resolved_md = _resolve_snapshot_sha(
+                    draft.files["scenario.md"], owner, repo
+                )
+                if resolved_md != draft.files["scenario.md"]:
+                    draft.files["scenario.md"] = resolved_md
+            scenario_id = draft.scenario_id
+            compile_err = _check_c_compiles(draft.files, scenario_id)
+            if compile_err:
+                log_rejection(
+                    coverage_log=self._log,
+                    summary_path=self._summary,
+                    issue_url=cand.url,
+                    source_type=cand.source_type,
+                    triage_verdict=triage.verdict,
+                    fingerprint=triage.fingerprint,
+                    rejection_reason="not_reproducible",
+                )
+                return
 
         if not self._skip_validate:
             vres = self._validator.validate(draft)

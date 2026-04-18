@@ -124,7 +124,7 @@ _VALID_CATEGORIES = {
 _VALID_VERDICTS = {"in_scope", "out_of_scope", "ambiguous"}
 
 _VALID_REJECTIONS = {
-    None, "out_of_scope_not_rendering_bug",
+    None, "out_of_scope_compile_error", "out_of_scope_not_rendering_bug",
     "out_of_scope_insufficient_info", "not_reproducible", "non_english",
 }
 
@@ -182,17 +182,6 @@ class Triage:
         fp = f"{category}:{spec or 'unknown'}"
 
         reason = d.get("rejection_reason")
-        # LEGACY MAPPING: shader-compile bugs are now admitted as rendering
-        # bugs. If a triage response still uses the deprecated
-        # `out_of_scope_compile_error` rejection, override the verdict to
-        # `in_scope` and coerce a generic fingerprint into shader_compile.
-        if reason == "out_of_scope_compile_error":
-            verdict = "in_scope"
-            reason = None
-            if category == "other":
-                category, spec = "shader_compile", spec or "compile_failure"
-                fp = f"{category}:{spec}"
-
         if reason not in _VALID_REJECTIONS:
             reason = None
         return TriageResult(verdict=verdict, fingerprint=fp,

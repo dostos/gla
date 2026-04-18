@@ -40,13 +40,14 @@ def test_triage_parses_out_of_scope_response():
     assert result.verdict == "out_of_scope"
     assert result.rejection_reason == "out_of_scope_not_rendering_bug"
 
-def test_triage_maps_deprecated_compile_error_to_in_scope():
-    """Backward-compat: if the LLM returns out_of_scope_compile_error
-    (deprecated), triage normalizes to in_scope with shader_compile fingerprint."""
+def test_triage_respects_compile_error_rejection():
+    """Shader-compile bugs are explicitly out-of-scope for the corpus. If the
+    LLM returns out_of_scope_compile_error, the verdict and reason are kept
+    verbatim (no rewriting to in_scope)."""
     llm = MagicMock()
     llm.complete.return_value = _fake_response(
         '```json\n{"triage_verdict":"out_of_scope",'
-        '"root_cause_fingerprint":"other:n_a",'
+        '"root_cause_fingerprint":"shader_compile:glsl_syntax",'
         '"rejection_reason":"out_of_scope_compile_error",'
         '"summary":"GLSL syntax error"}\n```'
     )
@@ -54,15 +55,8 @@ def test_triage_maps_deprecated_compile_error_to_in_scope():
     thread = IssueThread(url="https://x/1", title="compile fail",
                          body="GLSL error", comments=[])
     result = t.triage(thread)
-    assert result.verdict == "in_scope"
-    assert result.rejection_reason is None
-    assert result.fingerprint.startswith("shader_compile:")
-
-
-def test_triage_rejects_compile_error_value_in_valid_set():
-    """out_of_scope_compile_error removed from _VALID_REJECTIONS."""
-    from gla.eval.curation.triage import _VALID_REJECTIONS
-    assert "out_of_scope_compile_error" not in _VALID_REJECTIONS
+    assert result.verdict == "out_of_scope"
+    assert result.rejection_reason == "out_of_scope_compile_error"
 
 
 def test_fetch_issue_thread_calls_gh_api():
