@@ -25,11 +25,7 @@ Tier 1: Raw Capture (zero injection, works on any GL/VK app)
 - Pipeline state (depth, blend, cull, scissor, viewport)
 - Framebuffer pixels (color, depth, stencil)
 
-**Heuristic reconstruction (M3)**:
-- Camera extraction from view/projection matrices
-- Object grouping by shared model matrix
-- Bounding boxes from vertex data
-- Matrix classification (model/view/projection) via name matching + structural analysis
+**No scene reconstruction**: Scene queries require Tier 3 framework metadata. Use `query_scene` only after a framework plugin has POSTed metadata.
 
 **Queries available**:
 
@@ -38,11 +34,9 @@ Tier 1: Raw Capture (zero injection, works on any GL/VK app)
 | `query_frame(overview)` | Draw call count, framebuffer size | No named passes |
 | `inspect_drawcall(id)` | Full shader params, pipeline state | No object name |
 | `query_pixel(x, y)` | RGBA, depth, stencil | No "which object" |
-| `query_scene(camera)` | Position, FOV, near/far (if detectable) | Confidence-dependent |
-| `query_scene(objects)` | Grouped by shared matrix, with AABB | No names, low confidence |
 | `compare_frames(a, b)` | Draw call + pixel diff | Full capability |
 
-**MCP tools**: 6 (query_frame, inspect_drawcall, query_pixel, query_scene, compare_frames, control_capture)
+**MCP tools**: 5 (query_frame, inspect_drawcall, query_pixel, compare_frames, control_capture)
 
 **Best for**: Raw GL/Vulkan apps, unknown frameworks, quick first look.
 
@@ -140,9 +134,9 @@ Content-Type: application/json
 | Draw call inspection | Full | Full | Full |
 | Pixel queries | RGBA + depth | RGBA + depth | RGBA + depth + "which object" |
 | Render pass structure | Heuristic (FBO changes) | Named (debug groups) | Named + input/output tracking |
-| Object identification | By shared matrix (unnamed) | By debug label | By name, with hierarchy |
+| Object identification | Not available (needs Tier 3) | By debug label | By name, with hierarchy |
 | Material properties | Raw uniform bytes | Raw uniform bytes | Named: albedo, metallic, ... |
-| Camera info | From matrix decomposition | From matrix decomposition | Framework's own camera data |
+| Camera info | Not available (needs Tier 3) | Not available (needs Tier 3) | Framework's own camera data |
 | Scene hierarchy | Flat list | Debug group tree | Full parent/child tree |
 | "Why is this pixel this color?" | Draw call + pipeline state | + render pass name | + object + material + full chain |
 | Works on unknown apps | Yes | If markers emitted | No (needs plugin) |
@@ -161,8 +155,6 @@ GET /frames/{id}/drawcalls/{dc}
 GET /frames/{id}/drawcalls/{dc}/shader
 GET /frames/{id}/drawcalls/{dc}/textures
 GET /frames/{id}/pixel/{x}/{y}
-GET /frames/{id}/scene/camera
-GET /frames/{id}/scene/objects
 GET /frames/{id}/framebuffer
 GET /diff/{a}/{b}
 POST /control/pause|resume|step
@@ -185,19 +177,20 @@ GET  /frames/{id}/explain/{x}/{y}   # full pixel explanation
 
 ### MCP Tools by Tier
 
-**Tier 1** (6 tools):
+**Tier 1** (5 tools):
 1. `query_frame` — overview, draw call list, framebuffer
 2. `inspect_drawcall` — shader params, textures, pipeline state
 3. `query_pixel` — color/depth at coordinates
-4. `query_scene` — camera, objects (heuristic)
-5. `compare_frames` — frame diff
-6. `control_capture` — pause/resume/step
+4. `compare_frames` — frame diff
+5. `control_capture` — pause/resume/step
 
-**Tier 3** adds (4 tools, total 10):
+**Tier 3** adds (5 tools, total 10):
+6. `query_scene` — camera, objects (requires framework metadata)
 7. `query_object` — named object with material and transform
 8. `explain_pixel` — full pixel → object → material → pass chain
 9. `list_render_passes` — named pass structure
 10. `query_material` — material properties and textures
+
 
 ### Capture Backends
 

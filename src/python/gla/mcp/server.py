@@ -100,7 +100,7 @@ TOOLS: List[Dict[str, Any]] = [
     },
     {
         "name": "query_scene",
-        "description": "Query semantic scene information: camera, objects, or full scene.",
+        "description": "Query scene information from framework metadata. Requires a framework plugin to POST metadata.",
         "inputSchema": {
             "type": "object",
             "properties": {

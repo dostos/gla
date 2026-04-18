@@ -8,7 +8,6 @@ from gla.backends.base import (
     FrameOverview,
     FrameProvider,
     PixelResult,
-    SceneInfo,
 )
 from gla.backends.native import NativeBackend
 
@@ -31,7 +30,6 @@ class TestFrameProviderABC:
             def list_draw_calls(self, fid, limit=50, offset=0): return []
             def get_draw_call(self, fid, dcid): return None
             def get_pixel(self, fid, x, y): return None
-            def get_scene(self, fid): return None
             def compare_frames(self, fa, fb, depth="summary"): return None
 
         stub = Stub()
@@ -621,56 +619,6 @@ class TestRenderDocBackend:
         assert result.g == 0
         assert result.b == 0
         assert result.a == 255
-
-    # ------------------------------------------------------------------ #
-    # get_scene
-    # ------------------------------------------------------------------ #
-
-    def test_get_scene_wrong_frame_returns_none(self):
-        b = self._make_backend()
-        assert b.get_scene(5) is None
-
-    def test_get_scene_empty_draws_returns_raw_only(self):
-        b = self._make_backend(actions=[])
-        scene = b.get_scene(0)
-        assert isinstance(scene, SceneInfo)
-        assert scene.reconstruction_quality == "raw_only"
-        assert scene.objects == []
-        assert scene.camera is None
-
-    def test_get_scene_returns_objects_per_draw(self):
-        rd = _make_rd_module()
-        draws = [_make_mock_action(event_id=i, flags=rd.ActionFlags.Drawcall)
-                 for i in range(3)]
-        b = self._make_backend(actions=draws)
-        scene = b.get_scene(0)
-        assert isinstance(scene, SceneInfo)
-        assert len(scene.objects) == 3
-
-    # ------------------------------------------------------------------ #
-    # _try_extract_camera
-    # ------------------------------------------------------------------ #
-
-    def test_try_extract_camera_finds_mvp(self):
-        b = self._make_backend()
-        mat4 = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
-        params = [{"name": "uMVP", "type": "mat4", "data": mat4}]
-        cam = b._try_extract_camera(params)
-        assert cam is not None
-        assert cam["source_uniform"] == "uMVP"
-        assert cam["matrix"] == mat4
-        assert cam["confidence"] == 0.5
-
-    def test_try_extract_camera_misses_non_matrix(self):
-        b = self._make_backend()
-        params = [{"name": "uMVP", "type": "float", "data": 1.0}]
-        assert b._try_extract_camera(params) is None
-
-    def test_try_extract_camera_misses_unknown_name(self):
-        b = self._make_backend()
-        mat4 = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
-        params = [{"name": "someRandomUniform", "type": "mat4", "data": mat4}]
-        assert b._try_extract_camera(params) is None
 
     # ------------------------------------------------------------------ #
     # _shader_var_to_python

@@ -39,7 +39,6 @@ from .base import (
     FrameOverview,
     FrameProvider,
     PixelResult,
-    SceneInfo,
 )
 
 
@@ -250,55 +249,6 @@ class RenderDocBackend(FrameProvider):
             return PixelResult(r=r, g=g, b=b, a=a, depth=depth, stencil=stencil)
         except Exception:
             return None
-
-    def get_scene(self, frame_id: int) -> Optional[SceneInfo]:
-        """Extract a best-effort scene description from shader uniforms.
-
-        We scan every draw call's constant-buffer uniforms looking for
-        standard camera-matrix names (``uViewProj``, ``uMVP``, ``view``,
-        ``proj``, etc.) and return the first credible match as the camera.
-        All draw calls are listed as raw objects.
-        """
-        if frame_id != self.FRAME_ID:
-            return None
-
-        camera: Optional[Dict[str, Any]] = None
-        objects: List[Dict[str, Any]] = []
-
-        all_draws = list(self._iter_draws())
-        for idx, action in enumerate(all_draws):
-            try:
-                self._controller.SetFrameEvent(action.eventId, True)
-                pipe = self._controller.GetPipelineState()
-                params = self._extract_shader_params(pipe)
-                textures = self._extract_textures(pipe)
-
-                obj: Dict[str, Any] = {
-                    "id": idx,
-                    "draw_call_id": idx,
-                    "event_id": int(action.eventId),
-                    "name": (
-                        str(action.name)
-                        if hasattr(action, "name")
-                        else f"draw_{idx}"
-                    ),
-                    "params": params,
-                    "textures": textures,
-                }
-                objects.append(obj)
-
-                if camera is None:
-                    camera = self._try_extract_camera(params)
-            except Exception:
-                continue
-
-        quality = "raw_only" if not objects else "partial"
-
-        return SceneInfo(
-            camera=camera,
-            objects=objects,
-            reconstruction_quality=quality,
-        )
 
     def compare_frames(
         self, frame_a: int, frame_b: int, depth: str = "summary"
@@ -569,35 +519,3 @@ class RenderDocBackend(FrameProvider):
             except Exception:
                 return None
 
-    def _try_extract_camera(
-        self, params: List[Dict[str, Any]]
-    ) -> Optional[Dict[str, Any]]:
-        """Heuristic: look for a 4x4 MVP / ViewProj matrix in shader params."""
-        _CAMERA_NAMES = {
-            "uMVP",
-            "MVP",
-            "uViewProj",
-            "viewProj",
-            "ViewProj",
-            "uView",
-            "uProjection",
-            "view",
-            "proj",
-            "projection",
-            "modelViewProjection",
-            "g_mWorldViewProj",
-        }
-        for p in params:
-            name = p.get("name", "")
-            data = p.get("data")
-            if name in _CAMERA_NAMES and isinstance(data, list) and len(data) == 4:
-                if all(isinstance(row, list) and len(row) == 4 for row in data):
-                    return {
-                        "summary": (
-                            f"Camera extracted from shader uniform '{name}'"
-                        ),
-                        "matrix": data,
-                        "source_uniform": name,
-                        "confidence": 0.5,
-                    }
-        return None

@@ -47,13 +47,6 @@ class DrawCallInfo:
     textures: List[Dict[str, Any]] = field(default_factory=list)
 
 
-@dataclass
-class SceneInfo:
-    camera: Optional[Dict[str, Any]]  # serialisable dict or None
-    objects: List[Dict[str, Any]]
-    reconstruction_quality: str  # "full", "partial", "raw_only"
-
-
 # ---------------------------------------------------------------------------
 # Abstract base
 # ---------------------------------------------------------------------------
@@ -94,13 +87,6 @@ class FrameProvider(ABC):
     @abstractmethod
     def get_pixel(self, frame_id: int, x: int, y: int) -> Optional[PixelResult]:
         """Get colour/depth/stencil at a pixel coordinate."""
-        ...
-
-    # -- Scene reconstruction -----------------------------------------------
-
-    @abstractmethod
-    def get_scene(self, frame_id: int) -> Optional[SceneInfo]:
-        """Get semantic scene reconstruction."""
         ...
 
     # -- Frame diff ---------------------------------------------------------

@@ -9,7 +9,6 @@ from .base import (
     FrameOverview,
     FrameProvider,
     PixelResult,
-    SceneInfo,
 )
 from .native import NativeBackend
 from .renderdoc import RenderDocBackend
@@ -21,5 +20,4 @@ __all__ = [
     "NativeBackend",
     "PixelResult",
     "RenderDocBackend",
-    "SceneInfo",
 ]

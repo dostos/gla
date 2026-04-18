@@ -131,11 +131,6 @@ class NativeBackend(FrameProvider):
             depth=result.depth, stencil=result.stencil,
         )
 
-    def get_scene(self, frame_id: int) -> Optional[SceneInfo]:
-        # Tier 1 is raw capture only — no heuristic reconstruction.
-        # Scene queries require Tier 3 framework metadata.
-        return None
-
     def compare_frames(self, frame_a: int, frame_b: int, depth: str = "summary") -> Optional[Any]:
         return self._qe.compare_frames(frame_a, frame_b, depth)
 

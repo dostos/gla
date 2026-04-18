@@ -190,11 +190,7 @@ GLA_TOOLS = [
     },
     {
         "name": "query_scene",
-        "description": (
-            "Get semantic scene information: camera parameters (position, FOV, "
-            "near/far), scene objects with transforms and bounding boxes, or "
-            "full scene reconstruction."
-        ),
+        "description": "Get scene info (requires framework metadata plugin).",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -428,7 +424,7 @@ class EvalAgent:
                 "- inspect_drawcall: Inspect a draw call's shader params, "
                 "textures, pipeline state, or vertex data\n"
                 "- query_pixel: Get color/depth at a pixel coordinate\n"
-                "- query_scene: Get camera and object information\n"
+                "- query_scene: Get scene info (requires framework metadata plugin)\n"
                 "- compare_frames: Diff two frames\n\n"
                 "Use whatever approach you think is best.\n\n"
                 "End your response with:\n"
