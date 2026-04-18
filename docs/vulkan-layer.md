@@ -125,3 +125,77 @@ To integrate, ensure the engine is listening on the configured IPC endpoint (def
 ## Testing
 
 See the [Vulkan test app guide](./vulkan-test-app.md) for how to build and run a minimal Vulkan application with the OpenGPA layer.
+
+## E2E Validation Results (2026-04-16)
+
+### Environment
+
+- OS: Ubuntu 22.04 (Linux 5.15)
+- GPU: NVIDIA TITAN RTX
+- Vulkan SDK: 1.3.204.1
+- Vulkan drivers: `libGLX_nvidia.so.0`, Mesa Vulkan
+
+### Test Setup
+
+```bash
+# Build layer
+bazel build //src/shims/vk:VkLayer_gla_capture
+
+# Symlink .so into the layer path directory (for manifest-relative resolution)
+ln -sf $(pwd)/bazel-bin/src/shims/vk/libVkLayer_gla_capture.so \
+       src/shims/vk/libVkLayer_gla_capture.so
+
+# Passthrough mode (no engine)
+export VK_LAYER_PATH=$(pwd)/src/shims/vk
+export VK_INSTANCE_LAYERS=VK_LAYER_GLA_capture
+./examples/vulkan/minimal_app
+
+# With engine
+./bazel-bin/src/core/gla_engine /tmp/gla_eval.sock /gla_eval &
+export GLA_SOCKET_PATH=/tmp/gla_eval.sock
+export GLA_SHM_NAME=/gla_eval
+./examples/vulkan/minimal_app
+```
+
+### Results
+
+| Test | Result |
+|------|--------|
+| Layer builds (`bazel build //src/shims/vk:VkLayer_gla_capture`) | PASS |
+| Layer loads (VK_LOADER_DEBUG shows it in callstack) | PASS |
+| Instance + device intercepts active | PASS |
+| Passthrough mode (no engine, GLA_SOCKET_PATH unset) | PASS |
+| IPC connect to engine (handshake MSG_HANDSHAKE_OK) | PASS |
+| App runs cleanly with layer active | PASS |
+| Frame capture via `vkQueuePresentKHR` | N/A (minimal_app has no swapchain/present) |
+
+### Bugs Fixed
+
+Three bugs were found and fixed during E2E validation:
+
+1. **NULL deref in `gla_vkGetDeviceProcAddr`** (`gla_layer.c`):
+   The function was passed `VK_NULL_HANDLE` by `gla_vkGetInstanceProcAddr`
+   during instance setup. `gla_dispatch_key()` dereferenced it unconditionally.
+   Fix: guard against `device == VK_NULL_HANDLE` before the hash table lookup.
+
+2. **`gla_dispatch_init()` called after `gla_instance_dispatch_store()`** (`gla_layer.c`):
+   `gla_dispatch_init()` zeroes the instance dispatch hash table. It was called
+   *after* storing the newly-created instance entry, destroying the entry
+   immediately. Subsequent lookups returned NULL, causing
+   `vkEnumeratePhysicalDevices` to fail with `VK_ERROR_INITIALIZATION_FAILED`.
+   Fix: move the `g_inited` block before `gla_instance_dispatch_store()`.
+
+3. **Missing `vkEnumeratePhysicalDevices` passthrough in `gla_vkGetInstanceProcAddr`**:
+   The MESA device_select implicit layer queries our `GetInstanceProcAddr` for
+   `vkEnumeratePhysicalDevices`. Without an explicit passthrough intercept, the
+   function fell through to a chain lookup that could return NULL (before the
+   dispatch table was populated). Fix: add a `gla_EnumeratePhysicalDevices`
+   passthrough function and register it in `gla_vkGetInstanceProcAddr`.
+
+### Limitations Observed
+
+- The `minimal_app` does not create a swapchain or call `vkQueuePresentKHR`,
+  so the capture path (`gla_capture_on_present`) is never exercised end-to-end.
+  A window-system integration test (XCB/Wayland surface + swapchain) is needed
+  to fully validate frame readback and IPC frame delivery.
+- Engine reports `frames stored: 0` for headless apps — this is correct behavior.
