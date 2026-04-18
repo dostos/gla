@@ -90,7 +90,6 @@ void gla_frame_record_draw_call(const GlaShadowState* shadow,
                                  uint32_t vertex_count,
                                  uint32_t index_count,
                                  uint32_t instance_count) {
-    if (!gla_ipc_is_connected()) return;
     if (gla_draw_call_count >= GLA_MAX_DRAW_CALLS_PER_FRAME) return;
 
     GlaDrawCallSnapshot* s = &gla_draw_call_buf[gla_draw_call_count];

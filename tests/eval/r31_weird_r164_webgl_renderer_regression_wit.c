@@ -109,22 +109,24 @@ int main(void){
 
     glViewport(0, 0, 256, 256);
 
-    // --- logical frame N-1 (content that would normally be cleared on next frame) ---
-    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glUniform3f(uColor, 1.0f, 0.0f, 0.0f); // red
-    glBindBuffer(GL_ARRAY_BUFFER, vboL);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+    for (int frame = 0; frame < 5; frame++) {
+        // --- logical frame N-1 (content that would normally be cleared on next frame) ---
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glUniform3f(uColor, 1.0f, 0.0f, 0.0f); // red
+        glBindBuffer(GL_ARRAY_BUFFER, vboL);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
 
-    // --- logical frame N: BUG — color clear omitted due to reordering regression ---
-    // glClear(GL_COLOR_BUFFER_BIT) intentionally NOT called here.
-    glUniform3f(uColor, 0.0f, 1.0f, 0.0f); // green
-    glBindBuffer(GL_ARRAY_BUFFER, vboR);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+        // --- logical frame N: BUG — color clear omitted due to reordering regression ---
+        // glClear(GL_COLOR_BUFFER_BIT) intentionally NOT called here.
+        glUniform3f(uColor, 0.0f, 1.0f, 0.0f); // green
+        glBindBuffer(GL_ARRAY_BUFFER, vboR);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
 
-    glXSwapBuffers(dpy, win);
+        glXSwapBuffers(dpy, win);
+    }
     glFinish();
     XSync(dpy, False);
 

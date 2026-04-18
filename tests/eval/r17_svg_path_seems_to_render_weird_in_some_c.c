@@ -94,26 +94,29 @@ int main(void){
     glDepthFunc(GL_LESS);
     glViewport(0,0,512,512);
     glClearColor(0,0,0,1);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     glUseProgram(prog);
     GLint uZ = glGetUniformLocation(prog,"uZ");
     GLint uC = glGetUniformLocation(prog,"uColor");
 
-    // Draw water at z=0 (dark teal, the ocean)
-    glUniform1f(uZ, 0.0f);
-    glUniform3f(uC, 0.0f, 0.12f, 0.06f);
-    glBindVertexArray(vao[0]);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+    for (int frame = 0; frame < 5; frame++) {
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // Draw shape at z=0 (red, the SVG fill) — coplanar with water
-    glUniform1f(uZ, 0.0f);
-    glUniform3f(uC, 0.9f, 0.1f, 0.1f);
-    glBindVertexArray(vao[1]);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+        // Draw water at z=0 (dark teal, the ocean)
+        glUniform1f(uZ, 0.0f);
+        glUniform3f(uC, 0.0f, 0.12f, 0.06f);
+        glBindVertexArray(vao[0]);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
 
-    glFinish();
-    glXSwapBuffers(dpy, win);
+        // Draw shape at z=0 (red, the SVG fill) — coplanar with water
+        glUniform1f(uZ, 0.0f);
+        glUniform3f(uC, 0.9f, 0.1f, 0.1f);
+        glBindVertexArray(vao[1]);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        glFinish();
+        glXSwapBuffers(dpy, win);
+    }
 
     // Capture center pixel; z-fighting makes center-quad region a speckled
     // mix rather than solid red.

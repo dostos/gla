@@ -112,10 +112,15 @@ int main(void) {
 
     glViewport(0, 0, 256, 256);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glUseProgram(prog);
-    glBindVertexArray(vao);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+
+    for (int frame = 0; frame < 5; frame++) {
+        glClear(GL_COLOR_BUFFER_BIT);
+        glUseProgram(prog);
+        glBindVertexArray(vao);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+
+        glXSwapBuffers(dpy, win);
+    }
 
     unsigned char px[4] = {0};
     glReadPixels(128, 128, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
@@ -123,8 +128,6 @@ int main(void) {
     printf("expected: red caster rasterized (depth would populate shadow map)\n");
     printf("actual:   %s\n",
         px[0] > 128 ? "red (ok)" : "black (front face culled — caster lost in shadow pass)");
-
-    glXSwapBuffers(dpy, win);
     glXMakeCurrent(dpy, None, NULL);
     glXDestroyContext(dpy, ctx);
     XDestroyWindow(dpy, win);

@@ -125,15 +125,22 @@ int main(void) {
 
     glViewport(0, 0, W, H);
     glClearColor(0.2f, 0.4f, 0.8f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
 
-    /* Bind the SAME texture that is currently COLOR_ATTACHMENT0 to the
-     * sampler unit the shader reads from. This is the feedback loop. */
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, transmissionTex);
+    for (int frame = 0; frame < 5; frame++) {
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glClear(GL_COLOR_BUFFER_BIT);
 
-    /* The offending draw: back-face pass sampling the transmission RT. */
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+        /* Bind the SAME texture that is currently COLOR_ATTACHMENT0 to the
+         * sampler unit the shader reads from. This is the feedback loop. */
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, transmissionTex);
+
+        /* The offending draw: back-face pass sampling the transmission RT. */
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glXSwapBuffers(dpy, win);
+    }
 
     /* On WebGL this raises GL_INVALID_OPERATION; on desktop GL the
      * result is undefined per GL 3.3 spec sec 3.8.12 ("Texture Data
@@ -147,9 +154,6 @@ int main(void) {
                 err, transmissionTex, fbo);
         reported++;
     }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glXSwapBuffers(dpy, win);
 
     glXMakeCurrent(dpy, None, NULL);
     glXDestroyContext(dpy, ctx);

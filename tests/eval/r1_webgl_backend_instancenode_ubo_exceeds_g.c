@@ -130,16 +130,19 @@ int main(void){
 
     glViewport(0, 0, 256, 256);
     glClearColor(0.0f, 0.2f, 0.4f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glUseProgram(prog);
-    glDrawArraysInstanced(GL_TRIANGLES, 0, 3, 8);
+    for (int frame = 0; frame < 5; frame++) {
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glUseProgram(prog);
+        glDrawArraysInstanced(GL_TRIANGLES, 0, 3, 8);
+
+        glXSwapBuffers(dpy, win);
+    }
 
     unsigned char px[4] = {0};
     glReadPixels(128, 128, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
     fprintf(stderr, "center pixel = (%u,%u,%u,%u)\n", px[0], px[1], px[2], px[3]);
-
-    glXSwapBuffers(dpy, win);
 
     glXMakeCurrent(dpy, None, NULL);
     glXDestroyContext(dpy, ctx);

@@ -107,13 +107,16 @@ int main(void) {
 
     glViewport(0, 0, 256, 256);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
 
-    glUseProgram(prog);
-    glBindVertexArray(vao);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    for (int frame = 0; frame < 5; frame++) {
+        glClear(GL_COLOR_BUFFER_BIT);
 
-    glXSwapBuffers(dpy, win);
+        glUseProgram(prog);
+        glBindVertexArray(vao);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+
+        glXSwapBuffers(dpy, win);
+    }
     glFinish();
 
     glDeleteBuffers(1, &vbo);

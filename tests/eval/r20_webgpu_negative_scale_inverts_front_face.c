@@ -113,23 +113,30 @@ int main(void) {
 
     glViewport(0, 0, 400, 200);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
     glUseProgram(prog);
     glBindVertexArray(vao);
 
     // Left: identity scale, translated left. Winding stays CCW — drawn as red.
     float left[16] = {0};
     left[0]=1.0f; left[5]=1.0f; left[10]=1.0f; left[15]=1.0f; left[12]=-0.5f;
-    glUniformMatrix4fv(u_model, 1, GL_FALSE, left);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
 
     // Right: NEGATIVE Y scale (mirror), translated right. det(M) < 0, so the
     // triangle's effective winding becomes CW. With frontFace=CCW + cull=BACK
     // the renderer drops it entirely — the bug manifestation.
     float right[16] = {0};
     right[0]=1.0f; right[5]=-1.0f; right[10]=1.0f; right[15]=1.0f; right[12]=0.5f;
-    glUniformMatrix4fv(u_model, 1, GL_FALSE, right);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+
+    for (int frame = 0; frame < 5; frame++) {
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glUniformMatrix4fv(u_model, 1, GL_FALSE, left);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+
+        glUniformMatrix4fv(u_model, 1, GL_FALSE, right);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+
+        glXSwapBuffers(dpy, win);
+    }
 
     unsigned char left_px[4]  = {0};
     unsigned char right_px[4] = {0};
@@ -141,8 +148,6 @@ int main(void) {
     printf("actual:   right %s\n",
         right_px[0] > 128 ? "red (ok — winding compensated)"
                           : "black (negative-det mesh culled — WebGPU-style bug)");
-
-    glXSwapBuffers(dpy, win);
     glXMakeCurrent(dpy, None, NULL);
     glXDestroyContext(dpy, ctx);
     XDestroyWindow(dpy, win);
