@@ -45,10 +45,32 @@ DEFAULT_QUERIES: dict[str, list[str]] = {
     # SO queries are lists of tags combined AND-wise (SO search restricts
     # to questions tagged with ALL provided tags).
     "stackoverflow": [
-        ["three.js"],
+        # Framework consumers — rendering bugs from misusing APIs
+        ["three.js", "rendering"],
+        ["three.js", "texture"],
+        ["three.js", "transparency"],
+        ["three.js", "shader-material"],
         ["webgl", "glsl"],
+        ["webgl", "framebuffer"],
+        ["webgl", "depth-buffer"],
+        ["webgl", "blending"],
         ["godot", "shader"],
+        ["godot", "rendering"],
+        ["godot4", "visual-shader"],
+        ["babylon.js", "rendering"],
+        ["babylon.js", "shader"],
+        ["open3d", "visualization"],
         ["opengl", "debug"],
+        ["opengl", "texture"],
+        ["opengl", "framebuffer-object"],
+        ["opengl", "depth-testing"],
+        ["opengl", "face-culling"],
+        ["vulkan", "rendering"],
+        ["vulkan", "descriptor-set"],
+        ["p5.js", "webgl"],
+        ["unity3d", "shader"],
+        ["unity3d", "rendering"],
+        ["unreal-engine4", "rendering"],
     ],
 }
 

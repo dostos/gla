@@ -1,0 +1,9 @@
+{
+  "input_hash": "fc7a46dbe821bcd5",
+  "output": {
+    "verdict": "in_scope",
+    "fingerprint": "bind_point_collision:framebuffer_color_attachment_sampled_as_texture",
+    "rejection_reason": null,
+    "summary": "With antialias:false the transmission render target is created with samples=0, so its texture is attached directly as COLOR_ATTACHMENT0 and simultaneously sampled as transmissionSamplerMap during the "
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "input_hash": "edf8037c92e2374e",
+  "output": {
+    "verdict": "out_of_scope",
+    "fingerprint": "other:n_a",
+    "rejection_reason": "out_of_scope_not_rendering_bug",
+    "summary": "HLSL compiler warnings (X4008/X4122) emitted by ANGLE when translating three.js's PMREMGGXConvolution GLSL on Windows; maintainer confirms no visual impact and decides to live with the warning."
+  }
+}

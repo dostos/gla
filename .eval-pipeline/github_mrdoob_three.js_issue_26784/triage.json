@@ -1,0 +1,9 @@
+{
+  "input_hash": "958c85626fbea895",
+  "output": {
+    "verdict": "in_scope",
+    "fingerprint": "winding_culling:bevel_linejoin_backface",
+    "rejection_reason": null,
+    "summary": "SVGLoader.pointsToStroke emits bevel-join triangles with reversed winding, so they are culled as backfaces and appear missing unless DoubleSide is used."
+  }
+}

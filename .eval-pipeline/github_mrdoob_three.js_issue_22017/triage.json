@@ -1,0 +1,9 @@
+{
+  "input_hash": "221e59e352cdc433",
+  "output": {
+    "verdict": "in_scope",
+    "fingerprint": "other:gl_fragdepth_disables_msaa",
+    "rejection_reason": null,
+    "summary": "Writing to gl_FragDepth in the logarithmic depth buffer shader forces per-pixel (not per-sample) fragment execution, disabling MSAA coverage and producing aliased edges where geometry intersects."
+  }
+}

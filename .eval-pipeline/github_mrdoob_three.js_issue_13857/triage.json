@@ -1,0 +1,9 @@
+{
+  "input_hash": "590747030c9f9c60",
+  "output": {
+    "verdict": "in_scope",
+    "fingerprint": "other:transparent_depth_sort_uses_object_origin_not_bounding_sphere_center",
+    "rejection_reason": null,
+    "summary": "Transparent objects render in wrong order because the renderer sorts draw calls by object origin rather than bounding-sphere center, causing incorrect overdraw when modelers apply/freeze transforms."
+  }
+}

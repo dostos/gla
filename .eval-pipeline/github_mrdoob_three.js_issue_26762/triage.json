@@ -1,0 +1,9 @@
+{
+  "input_hash": "fb4dcb03f2e4442b",
+  "output": {
+    "verdict": "in_scope",
+    "fingerprint": "other:depthwrite_disabled_causes_zfighting",
+    "rejection_reason": null,
+    "summary": "Z-fighting/stitching on overlapping model geometry caused by depthWrite being disabled on the affected materials; enabling depthWrite resolves the artifacts."
+  }
+}

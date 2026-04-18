@@ -1,0 +1,9 @@
+{
+  "input_hash": "5dcf24b9f0d02c8d",
+  "output": {
+    "verdict": "in_scope",
+    "fingerprint": "shader_compile:ubo_exceeds_max_uniform_block_size",
+    "rejection_reason": null,
+    "summary": "Hardcoded 1000-instance UBO threshold in InstanceNode assumes 64KB UBO, but Chrome/ANGLE reports the 16KB WebGL2 minimum, causing shader link failure (UBO > GL_MAX_UNIFORM_BLOCK_SIZE) for InstancedMes"
+  }
+}

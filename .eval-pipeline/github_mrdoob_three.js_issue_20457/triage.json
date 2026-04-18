@@ -1,0 +1,9 @@
+{
+  "input_hash": "8dec61149c8dd5c2",
+  "output": {
+    "verdict": "out_of_scope",
+    "fingerprint": "other:n_a",
+    "rejection_reason": "out_of_scope_not_rendering_bug",
+    "summary": "Feature request to expose renderer internals and add onProject/onRender/onRenderShadow callbacks; not a rendering bug."
+  }
+}

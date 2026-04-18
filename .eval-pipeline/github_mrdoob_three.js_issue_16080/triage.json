@@ -1,0 +1,9 @@
+{
+  "input_hash": "0e0526f9337f0ee5",
+  "output": {
+    "verdict": "out_of_scope",
+    "fingerprint": "other:n_a",
+    "rejection_reason": "out_of_scope_not_rendering_bug",
+    "summary": "three.js JavaScript-level bug where UniformsUtils.clone() shallow-copies arrays of Vector/Color/Matrix objects, causing shared references between materials; not reproducible as a minimal OpenGL progra"
+  }
+}
