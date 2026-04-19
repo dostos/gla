@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <cstdint>
 #include <vector>
 #include <string>
@@ -55,8 +56,14 @@ struct RawDrawCall {
 
     std::string debug_group_path;
 
-    // FBO attachment info (color attachment texture ID at time of draw)
+    // FBO attachment info (color attachment texture ID at time of draw).
+    // `fbo_color_attachment_tex` is kept equal to fbo_color_attachments[0]
+    // for backward compatibility with existing consumers.
     uint32_t fbo_color_attachment_tex = 0;
+
+    // Full MRT color-attachment table (GL_COLOR_ATTACHMENT0..7).
+    // Entries are 0 when the slot is unbound.
+    std::array<uint32_t, 8> fbo_color_attachments{};
 
     // GL index type enum for indexed draws (GL_UNSIGNED_SHORT/INT/BYTE); 0 for glDrawArrays*
     uint32_t index_type = 0;

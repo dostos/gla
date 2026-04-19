@@ -496,7 +496,7 @@ void Engine::ingest_frame(const void* shm_data, uint64_t data_size,
                     }
                 }
 
-                // FBO color attachment texture (uint32)
+                // FBO color attachment texture (uint32) — backward-compat scalar
                 if (dc_ptr + 4 <= dc_end) {
                     std::memcpy(&dc.fbo_color_attachment_tex, dc_ptr, 4);
                     dc_ptr += 4;
@@ -506,6 +506,16 @@ void Engine::ingest_frame(const void* shm_data, uint64_t data_size,
                 if (dc_ptr + 4 <= dc_end) {
                     std::memcpy(&dc.index_type, dc_ptr, 4);
                     dc_ptr += 4;
+                }
+
+                // Full MRT attachment table (8 * uint32 = 32 bytes)
+                if (dc_ptr + 32 <= dc_end) {
+                    std::memcpy(dc.fbo_color_attachments.data(), dc_ptr, 32);
+                    dc_ptr += 32;
+                } else {
+                    // Older shim without MRT array: mirror scalar into slot 0
+                    dc.fbo_color_attachments.fill(0);
+                    dc.fbo_color_attachments[0] = dc.fbo_color_attachment_tex;
                 }
 
                 frame.draw_calls.push_back(std::move(dc));

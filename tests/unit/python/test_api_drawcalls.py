@@ -223,3 +223,33 @@ class TestDrawCallVertices:
             "/api/v1/frames/1/drawcalls/9999/vertices", headers=auth_headers
         )
         assert resp.status_code == 404
+
+
+class TestDrawCallAttachments:
+    """MRT color-attachment table — Round 5 r32 silent-MRT-miss coverage."""
+
+    def test_attachments_200(self, client, auth_headers):
+        resp = client.get(
+            "/api/v1/frames/1/drawcalls/0/attachments", headers=auth_headers
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["frame_id"] == 1
+        assert data["dc_id"] == 0
+        assert "fbo_color_attachments" in data
+        # conftest mock sets fbo_color_attachments = [7, 12, 0, 0, 0, 0, 0, 0]
+        assert data["fbo_color_attachments"] == [7, 12, 0, 0, 0, 0, 0, 0]
+
+    def test_active_attachment_count(self, client, auth_headers):
+        """Two non-zero entries (7 and 12) must produce active_attachment_count == 2."""
+        resp = client.get(
+            "/api/v1/frames/1/drawcalls/0/attachments", headers=auth_headers
+        )
+        assert resp.status_code == 200
+        assert resp.json()["active_attachment_count"] == 2
+
+    def test_attachments_404(self, client, auth_headers):
+        resp = client.get(
+            "/api/v1/frames/1/drawcalls/9999/attachments", headers=auth_headers
+        )
+        assert resp.status_code == 404

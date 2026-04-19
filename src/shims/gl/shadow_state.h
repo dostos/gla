@@ -65,9 +65,14 @@ typedef struct {
 } GpaTextureInfo;
 
 /* Per-FBO attachment tracking */
+#define GPA_MAX_COLOR_ATTACHMENTS 8
 typedef struct {
     uint32_t fbo_id;
-    uint32_t color_attachment_tex;   /* texture ID attached as COLOR_ATTACHMENT0 */
+    /* Texture IDs for GL_COLOR_ATTACHMENT0..7. Slot 0 mirrors
+     * color_attachment_tex below for backward compat.  A value of 0 in slot i
+     * means "no texture attached at COLOR_ATTACHMENT<i>". */
+    uint32_t color_attachments[GPA_MAX_COLOR_ATTACHMENTS];
+    uint32_t color_attachment_tex;   /* texture ID attached as COLOR_ATTACHMENT0 (== color_attachments[0]) */
     uint32_t depth_attachment_tex;   /* texture ID attached as DEPTH_ATTACHMENT */
 } GpaFboInfo;
 

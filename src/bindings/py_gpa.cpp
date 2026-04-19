@@ -81,6 +81,12 @@ PYBIND11_MODULE(_gpa_core, m) {
         })
         .def_readonly("debug_group_path", &gpa::NormalizedDrawCall::debug_group_path)
         .def_readonly("fbo_color_attachment_tex", &gpa::NormalizedDrawCall::fbo_color_attachment_tex)
+        .def_property_readonly("fbo_color_attachments",
+            [](const gpa::NormalizedDrawCall& dc) {
+                py::list out;
+                for (auto v : dc.fbo_color_attachments) out.append(v);
+                return out;
+            })
         .def_readonly("index_type", &gpa::NormalizedDrawCall::index_type);
 
     // -------------------------------------------------------------------------

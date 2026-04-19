@@ -82,6 +82,7 @@ NormalizedFrame Normalizer::normalize(const gpa::store::RawFrame& raw) const {
 
         dc.debug_group_path = rdc.debug_group_path;
         dc.fbo_color_attachment_tex = rdc.fbo_color_attachment_tex;
+        dc.fbo_color_attachments = rdc.fbo_color_attachments;
         dc.index_type = rdc.index_type;
 
         pass.draw_calls.push_back(std::move(dc));

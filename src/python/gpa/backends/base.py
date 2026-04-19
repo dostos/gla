@@ -47,6 +47,9 @@ class DrawCallInfo:
     params: List[Dict[str, Any]] = field(default_factory=list)
     textures: List[Dict[str, Any]] = field(default_factory=list)
     fbo_color_attachment_tex: int = 0
+    # Full MRT attachment table (GL_COLOR_ATTACHMENT0..7); entry i == 0 means
+    # the slot is unbound. Non-MRT draws have entries 1..7 = 0.
+    fbo_color_attachments: List[int] = field(default_factory=lambda: [0] * 8)
     index_type: int = 0
 
 

@@ -70,8 +70,12 @@ typedef struct {
     /* Debug group path (GL_KHR_debug push/pop group stack) */
     char debug_group_path[512];
 
-    /* FBO color attachment texture (for feedback loop detection) */
+    /* FBO color attachment texture (for feedback loop detection).
+     * `fbo_color_attachment_tex` preserves the pre-MRT single-attachment API
+     * and is always kept equal to `fbo_color_attachments[0]`. The 8-element
+     * array captures the full MRT layout (COLOR_ATTACHMENT0..7). */
     uint32_t fbo_color_attachment_tex;
+    uint32_t fbo_color_attachments[GPA_MAX_COLOR_ATTACHMENTS];
 } GpaDrawCallSnapshot;
 
 static GpaDrawCallSnapshot gpa_draw_call_buf[GPA_MAX_DRAW_CALLS_PER_FRAME];
@@ -153,10 +157,20 @@ void gpa_frame_record_draw_call(const GpaShadowState* shadow,
 
     gpa_shadow_get_debug_group_path(shadow, s->debug_group_path, sizeof(s->debug_group_path));
 
-    /* FBO color attachment texture — look up the current bound FBO's attachment */
+    /* FBO color attachments — look up the current bound FBO's MRT table.
+     * Slot 0 is mirrored to `fbo_color_attachment_tex` for backward compat. */
     {
         const GpaFboInfo* fbo = gpa_shadow_get_fbo_info(shadow, shadow->bound_fbo);
-        s->fbo_color_attachment_tex = fbo ? fbo->color_attachment_tex : 0;
+        if (fbo) {
+            for (uint32_t i = 0; i < GPA_MAX_COLOR_ATTACHMENTS; i++) {
+                s->fbo_color_attachments[i] = fbo->color_attachments[i];
+            }
+        } else {
+            for (uint32_t i = 0; i < GPA_MAX_COLOR_ATTACHMENTS; i++) {
+                s->fbo_color_attachments[i] = 0;
+            }
+        }
+        s->fbo_color_attachment_tex = s->fbo_color_attachments[0];
     }
 
     gpa_draw_call_count++;
@@ -195,8 +209,9 @@ void gpa_frame_record_draw_call(const GpaShadowState* shadow,
  *                   data_size bytes of data }
  *   uint16  debug_group_path_len
  *   debug_group_path_len chars (no null terminator)
- *   uint32  fbo_color_attachment_tex
+ *   uint32  fbo_color_attachment_tex       (backward-compat scalar = slot 0)
  *   uint32  index_type  (GL enum; 0 for non-indexed draws)
+ *   uint32  fbo_color_attachments[8]       (MRT: COLOR_ATTACHMENT0..7 tex IDs)
  *
  * Returns the number of bytes written.  The caller must ensure `buf` has
  * enough room; `buf_max` is the hard ceiling.
@@ -286,13 +301,19 @@ static size_t serialise_draw_calls(uint8_t* buf, size_t buf_max) {
         memcpy(p, &path_len, 2); p += 2;
         if (path_len > 0) { memcpy(p, s->debug_group_path, path_len); p += path_len; }
 
-        /* FBO color attachment texture (uint32) */
+        /* FBO color attachment texture (uint32) — backward-compat slot 0 */
         if (p + 4 > end) break;
         memcpy(p, &s->fbo_color_attachment_tex, 4); p += 4;
 
         /* Index type (uint32 GL enum; 0 for non-indexed draws) */
         if (p + 4 > end) break;
         memcpy(p, &s->index_type, 4); p += 4;
+
+        /* Full MRT attachment array (8 * uint32 = 32 bytes) */
+        if (p + 32 > end) break;
+        for (uint32_t k = 0; k < GPA_MAX_COLOR_ATTACHMENTS; k++) {
+            memcpy(p, &s->fbo_color_attachments[k], 4); p += 4;
+        }
     }
 
     return (size_t)(p - buf);

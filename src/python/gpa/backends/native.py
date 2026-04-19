@@ -135,6 +135,18 @@ class NativeBackend(FrameProvider):
         fbo_tex = getattr(dc, "fbo_color_attachment_tex", 0) or 0
         index_type = getattr(dc, "index_type", 0) or 0
 
+        # MRT attachment array. Fall back to scalar-in-slot-0 when the native
+        # type does not expose the array (older C++ shim).
+        raw_attachments = getattr(dc, "fbo_color_attachments", None)
+        if raw_attachments is None:
+            fbo_attachments = [fbo_tex] + [0] * 7
+        else:
+            fbo_attachments = list(raw_attachments)
+            if len(fbo_attachments) < 8:
+                fbo_attachments = fbo_attachments + [0] * (8 - len(fbo_attachments))
+            elif len(fbo_attachments) > 8:
+                fbo_attachments = fbo_attachments[:8]
+
         return DrawCallInfo(
             id=dc.id,
             primitive_type=dc.primitive_type,
@@ -146,6 +158,7 @@ class NativeBackend(FrameProvider):
             params=params,
             textures=textures,
             fbo_color_attachment_tex=fbo_tex,
+            fbo_color_attachments=fbo_attachments,
             index_type=index_type,
         )
 

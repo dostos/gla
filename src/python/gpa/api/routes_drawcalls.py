@@ -270,3 +270,35 @@ def get_drawcall_vertices(
         "index_type": getattr(dc, "index_type", 0) or 0,
         "primitive_type": dc.primitive_type,
     })
+
+
+@router.get("/frames/{frame_id}/drawcalls/{dc_id}/attachments")
+def get_drawcall_attachments(
+    frame_id: int, dc_id: int, request: Request
+):
+    """Return the full MRT color-attachment table for a draw call.
+
+    Exposes GL_COLOR_ATTACHMENT0..7 as an 8-element list plus a convenience
+    count of non-zero entries.  Diagnoses silent MRT misconfigurations where
+    the shader writes to ``out`` locations the FBO does not bind (three.js
+    custom-points r32).
+    """
+    provider = request.app.state.provider
+    dc = provider.get_draw_call(frame_id, dc_id)
+    if dc is None:
+        raise HTTPException(
+            status_code=404, detail=f"Draw call {dc_id} in frame {frame_id} not found"
+        )
+    attachments = list(getattr(dc, "fbo_color_attachments", []) or [])
+    # Pad/truncate to exactly 8 for a stable shape.
+    if len(attachments) < 8:
+        attachments = attachments + [0] * (8 - len(attachments))
+    elif len(attachments) > 8:
+        attachments = attachments[:8]
+    active = sum(1 for a in attachments if a)
+    return safe_json_response({
+        "frame_id": frame_id,
+        "dc_id": dc_id,
+        "fbo_color_attachments": attachments,
+        "active_attachment_count": active,
+    })

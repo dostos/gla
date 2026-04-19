@@ -269,8 +269,13 @@ void gpa_shadow_framebuffer_texture_2d(GpaShadowState *state, uint32_t target,
         state->fbo_count++;
     }
 
-    if (attachment == GL_COLOR_ATTACHMENT0) {
-        slot->color_attachment_tex = texture;
+    if (attachment >= GL_COLOR_ATTACHMENT0 &&
+        attachment <  GL_COLOR_ATTACHMENT0 + GPA_MAX_COLOR_ATTACHMENTS) {
+        uint32_t idx = attachment - GL_COLOR_ATTACHMENT0;
+        slot->color_attachments[idx] = texture;
+        if (idx == 0) {
+            slot->color_attachment_tex = texture; /* backward compat mirror */
+        }
     } else if (attachment == GL_DEPTH_ATTACHMENT) {
         slot->depth_attachment_tex = texture;
     }

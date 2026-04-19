@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <cstdint>
 #include <vector>
 #include <string>
@@ -55,8 +56,14 @@ struct NormalizedDrawCall {
 
     std::string debug_group_path;
 
-    // FBO color attachment texture (for feedback loop detection)
+    // FBO color attachment texture (for feedback loop detection).
+    // `fbo_color_attachment_tex` mirrors fbo_color_attachments[0] for
+    // backward compatibility with existing routes/tests.
     uint32_t fbo_color_attachment_tex = 0;
+
+    // Full MRT color-attachment table (GL_COLOR_ATTACHMENT0..7).
+    // Non-MRT draws have entries 1..7 = 0.
+    std::array<uint32_t, 8> fbo_color_attachments{};
 
     // GL index type enum for indexed draws (GL_UNSIGNED_SHORT/INT/BYTE); 0 for glDrawArrays*
     uint32_t index_type = 0;

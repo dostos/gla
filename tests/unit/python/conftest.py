@@ -92,6 +92,9 @@ def _make_drawcall(dc_id: int = 0, frame_id: int = 1) -> MagicMock:
     tex1.format = "RGBA8"
     dc.textures = [tex0, tex1]
     dc.fbo_color_attachment_tex = 7  # simulates render-to-texture FBO
+    # MRT color-attachment table: COLOR_ATTACHMENT0 = tex 7 (back-compat),
+    # COLOR_ATTACHMENT1 = tex 12 (second MRT target), rest unbound.
+    dc.fbo_color_attachments = [7, 12, 0, 0, 0, 0, 0, 0]
     dc.index_type = 0x1403  # GL_UNSIGNED_SHORT
     return dc
 
