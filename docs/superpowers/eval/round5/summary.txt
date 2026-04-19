@@ -1,0 +1,31 @@
+Total runs: 78  Total cost: $30.94
+
+## Mode × Model Accuracy
+Mode         Model      N  Correct     Acc
+code_only    haiku     20       20  100.0%
+code_only    sonnet    20       17   85.0%
+with_gpa     haiku     19       17   89.5%
+with_gpa     sonnet    19       16   84.2%
+
+## Per-Scenario
+scenario                                            co_h  co_s  gp_h  gp_s
+r11_three_js_effectcomposer_browser_window_r           Y     Y     Y     Y
+r12_omniscale_cleanedge_scaling_issues                 Y     Y     Y     Y
+r15_post_effects_and_transparent_background_           Y     Y     Y     Y
+r15_unrealbloompass_produces_no_visible_outp           Y     Y     Y     Y
+r20_three_js_meshdepthmaterial_depth_map_not           Y     Y     Y     Y
+r22_point_sprite_rendering_issues_with_three           Y     Y     Y     Y
+r23_using_multiple_alphamask_s_with_renderma           Y     Y     Y     Y
+r24_artifacts_when_rendering_both_sides_of_a           Y     Y     Y     Y
+r24_enabling_autogeneratemipmaps_breaks_filt           Y     Y     Y     Y
+r25_filters_with_backbuffers_seem_not_to_wor           Y     Y     Y     Y
+r25_three_js_transparency_disparition                  Y     Y     Y     Y
+r26_incorrect_behavior_in_colormatrixfilter_           Y     Y     Y     Y
+r27_bug_black_squares_appear_when_rendering_           Y     Y     N     N
+r28_bug_in_rendering_glb_models                        Y     N     N     N
+r29_add_an_animated_icon_to_the_map_not_work           Y     N     -     -
+r30_incomplete_lines_problem_with_mixing_lay           Y     Y     Y     Y
+r32_v7_issue_with_custom_points_shader_three           Y     N     Y     Y
+r33_latest_build_6_38_1_got_glitchy_opacity_           Y     Y     Y     Y
+r34_depth_buffer_issue_when_using_depthoffie           Y     Y     Y     N
+r3_material_shines_through_when_zooming_out            Y     Y     Y     Y

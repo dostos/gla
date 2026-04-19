@@ -240,3 +240,111 @@ Per-scenario (code_only | with_gpa):
 - `/tmp/eval_round4/scored.json` — scored aggregate.
 - `/tmp/eval_round4/run_subagent.sh`, `score.py`, `summarize.py` — eval
   driver scripts.
+
+## Round 5 — 20 Framework-Consumer Scenarios (2026-04-19)
+
+First statistically meaningful run. 20 real-world scenarios (pixijs, three.js,
+mapbox-gl-js, pmndrs/postprocessing, Pixelorama) × 2 modes × 2 models = 80 runs
+budgeted, 78 executed (r29 segfaulted at startup — no GL capture, so its
+`with_gpa` cells were skipped). 40-turn budget per run, 8 retries at 80 turns.
+
+All scenarios pre-cleaned by the contamination validator: no hint comments,
+`## User Report` and `## Ground Truth` separated. Subagents received only
+`## User Report` + the upstream framework snapshot (for the 12 scenarios with
+one — three.js, mapbox-gl-js, pixijs, postprocessing) + optional GPA curl.
+
+### Setup
+
+- Xvfb on `:99`, engine on `:18080`, shim + shm `/gpa_eval`, token `EVALTOKEN`.
+- Built all `tests/eval:*` targets. Captured 19/20 scenarios with non-empty
+  draw-call counts (1–5 draws each); r29 segfaulted before any GL call and
+  only ran in `code_only` mode.
+- Snapshots: three.js (977 MB), mapbox-gl-js (531 MB), pixijs and postprocessing
+  cloned fresh (depth 200). Pixelorama (r12) was handled shader-only from the
+  scenario directory.
+
+### Aggregate Accuracy
+
+| Mode      | Model  | N  | Correct | Accuracy |
+|-----------|--------|----|---------|----------|
+| code_only | haiku  | 20 | 20      | 100.0%   |
+| code_only | sonnet | 20 | 17      | 85.0%    |
+| with_gpa  | haiku  | 19 | 17      | 89.5%    |
+| with_gpa  | sonnet | 19 | 16      | 84.2%    |
+
+- **Total cost: $30.94** across all 78 runs.
+- Avg turns: code_only 18–24; with_gpa 20–29.
+- Avg framework files opened: 2.6–5.3. Avg GPA queries (with_gpa only): 3.6–4.7.
+
+### Per-Scenario Matrix
+
+`co_h / co_s` = code_only Haiku / Sonnet; `gp_h / gp_s` = with_gpa Haiku / Sonnet.
+`-` = not applicable (capture failed).
+
+| Scenario | co_h | co_s | gp_h | gp_s |
+|----------|:----:|:----:|:----:|:----:|
+| r11_three_js_effectcomposer_browser_window_r | Y | Y | Y | Y |
+| r12_omniscale_cleanedge_scaling_issues | Y | Y | Y | Y |
+| r15_post_effects_and_transparent_background_ | Y | Y | Y | Y |
+| r15_unrealbloompass_produces_no_visible_outp | Y | Y | Y | Y |
+| r20_three_js_meshdepthmaterial_depth_map_not | Y | Y | Y | Y |
+| r22_point_sprite_rendering_issues_with_three | Y | Y | Y | Y |
+| r23_using_multiple_alphamask_s_with_renderma | Y | Y | Y | Y |
+| r24_artifacts_when_rendering_both_sides_of_a | Y | Y | Y | Y |
+| r24_enabling_autogeneratemipmaps_breaks_filt | Y | Y | Y | Y |
+| r25_filters_with_backbuffers_seem_not_to_wor | Y | Y | Y | Y |
+| r25_three_js_transparency_disparition | Y | Y | Y | Y |
+| r26_incorrect_behavior_in_colormatrixfilter_ | Y | Y | Y | Y |
+| r27_bug_black_squares_appear_when_rendering_ | Y | Y | **N** | **N** |
+| r28_bug_in_rendering_glb_models | Y | N | N | N |
+| r29_add_an_animated_icon_to_the_map_not_work | Y | N | - | - |
+| r30_incomplete_lines_problem_with_mixing_lay | Y | Y | Y | Y |
+| r32_v7_issue_with_custom_points_shader_three | Y | N | Y | Y |
+| r33_latest_build_6_38_1_got_glitchy_opacity_ | Y | Y | Y | Y |
+| r34_depth_buffer_issue_when_using_depthoffie | Y | Y | Y | N |
+| r3_material_shines_through_when_zooming_out | Y | Y | Y | Y |
+
+### Qualitative Findings
+
+**Round 4's Haiku+GPA force-multiplier pattern DID NOT reproduce at scale.**
+Haiku with code_only scored 20/20 on this suite; GPA did not add a measurable
+accuracy delta over code_only for either model. In 4 cells GPA *regressed*
+relative to code_only (r27 both models, r28 haiku, r34 sonnet). The cleaned
+scenario descriptions + upstream framework access are already sufficient for
+an LLM to reason about most of these bugs; the smaller sample from Round 4
+(4 scenarios) conflated scenario difficulty with a GPA effect.
+
+**r27 is the most interesting regression.** Both GPA agents noticed NaN/black
+patches in the framebuffer and anchored on "division by zero in
+D_GGX_Anisotropic denominator" — an internally coherent but wrong hypothesis.
+Code-only agents, lacking that empirical hint, read the fragment shader and
+correctly identified the removed `saturate()` on `V_GGX_SmithCorrelated_Anisotropic`
+plus the per-channel energy-conservation change. **Live pixel evidence led the
+model toward a plausible local fix rather than the architectural cause.** This
+is a new failure mode not seen in Rounds 1–4: GPA's runtime signal becomes a
+red herring when the visible artifact (NaN→black) has multiple pathways.
+
+**r28 (Mapbox GLB 65 k vertex limit)** — 1/4 correct. The bug lives in a
+purely CPU-side type choice (`TriangleIndexArray` uses `Uint16Array`) that
+never surfaces as a GL error; the GL stream just shows truncated indices.
+Sonnet-code-only inventedfilter hypotheses; GPA-mode agents hallucinated
+depth/projection issues from what was actually a degenerate wireframe draw.
+**The repro frame didn't carry enough signal to disambiguate — this is a
+scenario where Tier 3 framework metadata (reporting `indexBufferType:
+"UNSIGNED_SHORT"` on the draw call) would directly fix it.**
+
+**r29 (Mapbox animated-icon regression)** — 1/2 correct, no GPA cells. The
+binary segfaulted before issuing any GL call (likely a scenario bug; only
+Haiku code-only succeeded, speaking to scenario.md alone).
+
+### Capability gaps for next iteration
+
+See `docs/superpowers/eval/round5-capture-gaps.md`.
+
+### Raw artifacts
+
+- `/tmp/eval_round5/*.json` — 78 per-run Claude Code JSON outputs.
+- `/tmp/eval_round5/scored.json` — scored aggregate (parsed dict per run).
+- `/tmp/eval_round5/summary.txt` — mode × model and per-scenario tables.
+- `/tmp/eval_round5/run_subagent.sh`, `score.py` — driver scripts.
+- `/tmp/eval_round5/captures.txt` — scenario → frame_id + draw count.
