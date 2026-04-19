@@ -65,3 +65,22 @@ def err_line(check: str, message: str, *, enabled: bool = False) -> str:
 
 def dim(text: str, *, enabled: bool = False) -> str:
     return color(text, _DIM, enabled=enabled)
+
+
+def drill_line(
+    check: str,
+    frame_id: int,
+    dc_id: int | None = None,
+    *,
+    enabled: bool = False,
+) -> str:
+    """One-liner telling the agent the exact next command to run.
+
+    Emitted under each warning in ``gpa report`` plain-text output so the
+    caller doesn't have to guess the check name and draw-call id.
+    """
+    cmd = f"gpa check {check} --frame {frame_id}"
+    if dc_id is not None:
+        cmd += f" --dc {dc_id}"
+    arrow = color("\u2192", _DIM, enabled=enabled)
+    return f"  {arrow} drill: {cmd}"

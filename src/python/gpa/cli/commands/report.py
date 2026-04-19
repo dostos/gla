@@ -15,6 +15,7 @@ from typing import Iterable, List, Optional
 from gpa.cli import checks as checks_mod
 from gpa.cli.checks import CheckResult
 from gpa.cli.formatting import (
+    drill_line,
     err_line,
     ok_line,
     use_color,
@@ -110,6 +111,25 @@ def _format_text(
             lines.append(warn_line(r.name, header, enabled=colored))
             for f in r.findings:
                 lines.append(f"  {f.summary}")
+            # One drill hint per distinct dc_id (preserving first-seen
+            # order). If a finding has no dc_id (per-frame check), emit a
+            # single hint without --dc.
+            seen_dcs: List[int] = []
+            saw_no_dc = False
+            for f in r.findings:
+                did = f.detail.get("dc_id")
+                if did is None:
+                    saw_no_dc = True
+                else:
+                    did_int = int(did)
+                    if did_int not in seen_dcs:
+                        seen_dcs.append(did_int)
+            if saw_no_dc and not seen_dcs:
+                lines.append(drill_line(r.name, frame_id, enabled=colored))
+            for did_int in seen_dcs:
+                lines.append(
+                    drill_line(r.name, frame_id, did_int, enabled=colored)
+                )
             lines.append("")
         elif r.status == "error":
             warning_count += 1
@@ -128,10 +148,7 @@ def _format_text(
         lines.append("0 warnings.")
     else:
         plural = "" if warning_count == 1 else "s"
-        lines.append(
-            f"{warning_count} warning{plural}. "
-            "Run `gpa check <name>` for details."
-        )
+        lines.append(f"{warning_count} warning{plural}.")
     return "\n".join(lines) + "\n"
 
 
