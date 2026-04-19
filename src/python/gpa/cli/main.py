@@ -22,7 +22,13 @@ from pathlib import Path
 from typing import List, Optional, Sequence
 
 from gpa.cli import __version__
+from gpa.cli.commands import annotate as annotate_cmd
+from gpa.cli.commands import annotations as annotations_cmd
+from gpa.cli.commands import check as check_cmd
+from gpa.cli.commands import dump as dump_cmd
 from gpa.cli.commands import env as env_cmd
+from gpa.cli.commands import frames as frames_cmd
+from gpa.cli.commands import report as report_cmd
 from gpa.cli.commands import run as run_cmd
 from gpa.cli.commands import start as start_cmd
 from gpa.cli.commands import stop as stop_cmd
@@ -87,6 +93,66 @@ def build_parser() -> argparse.ArgumentParser:
         help="Target command and arguments",
     )
 
+    # ---- report -----------------------------------------------------------
+    p_report = sub.add_parser(
+        "report",
+        help="Run every diagnostic check on a captured frame",
+    )
+    _add_session_arg(p_report)
+    p_report.add_argument("--frame", type=int, default=None,
+                          help="Frame id (default: latest)")
+    p_report.add_argument("--json", dest="json_output", action="store_true",
+                          help="Emit JSON instead of plain text")
+    p_report.add_argument("--only", type=str, default=None,
+                          help="Comma-separated list of check names to run")
+    p_report.add_argument("--skip", type=str, default=None,
+                          help="Comma-separated list of check names to skip")
+
+    # ---- check ------------------------------------------------------------
+    p_check = sub.add_parser(
+        "check",
+        help="Drill-down into a single diagnostic",
+    )
+    _add_session_arg(p_check)
+    p_check.add_argument("name", help="Check name (e.g. feedback-loops)")
+    p_check.add_argument("--frame", type=int, default=None)
+    p_check.add_argument("--dc", type=int, default=None,
+                         help="Filter to a single draw call id")
+    p_check.add_argument("--json", dest="json_output", action="store_true")
+
+    # ---- dump -------------------------------------------------------------
+    p_dump = sub.add_parser("dump", help="Raw REST data access")
+    _add_session_arg(p_dump)
+    p_dump.add_argument("what", help="frame | drawcalls | drawcall | shader | "
+                                     "textures | attachments | pixel")
+    p_dump.add_argument("--frame", type=int, default=None)
+    p_dump.add_argument("--dc", type=int, default=None)
+    p_dump.add_argument("--x", type=int, default=None)
+    p_dump.add_argument("--y", type=int, default=None)
+    p_dump.add_argument("--format", dest="fmt", default="plain",
+                        choices=["plain", "json", "compact"])
+
+    # ---- frames -----------------------------------------------------------
+    p_frames = sub.add_parser("frames", help="List captured frame ids")
+    _add_session_arg(p_frames)
+
+    # ---- annotate ---------------------------------------------------------
+    p_annotate = sub.add_parser(
+        "annotate",
+        help="POST KEY=VALUE annotation pairs to a frame",
+    )
+    _add_session_arg(p_annotate)
+    p_annotate.add_argument("--frame", type=int, required=True)
+    p_annotate.add_argument("pairs", nargs="+", help="KEY=VALUE pairs")
+
+    # ---- annotations ------------------------------------------------------
+    p_ann = sub.add_parser(
+        "annotations",
+        help="Retrieve the annotation payload for a frame",
+    )
+    _add_session_arg(p_ann)
+    p_ann.add_argument("--frame", type=int, required=True)
+
     return parser
 
 
@@ -120,6 +186,47 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             session_dir=args.session,
             timeout=args.timeout,
             port=args.port,
+        )
+    if args.cmd == "report":
+        only = args.only.split(",") if args.only else None
+        skip = args.skip.split(",") if args.skip else None
+        return report_cmd.run(
+            session_dir=args.session,
+            frame=args.frame,
+            json_output=args.json_output,
+            only=only,
+            skip=skip,
+        )
+    if args.cmd == "check":
+        return check_cmd.run(
+            name=args.name,
+            session_dir=args.session,
+            frame=args.frame,
+            dc=args.dc,
+            json_output=args.json_output,
+        )
+    if args.cmd == "dump":
+        return dump_cmd.run(
+            what=args.what,
+            session_dir=args.session,
+            frame=args.frame,
+            dc=args.dc,
+            x=args.x,
+            y=args.y,
+            fmt=args.fmt,
+        )
+    if args.cmd == "frames":
+        return frames_cmd.run(session_dir=args.session)
+    if args.cmd == "annotate":
+        return annotate_cmd.run(
+            frame=args.frame,
+            pairs=args.pairs,
+            session_dir=args.session,
+        )
+    if args.cmd == "annotations":
+        return annotations_cmd.run(
+            frame=args.frame,
+            session_dir=args.session,
         )
 
     parser.error(f"unknown command: {args.cmd}")  # pragma: no cover
