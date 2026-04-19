@@ -1,7 +1,49 @@
 # R36_OPENGL_PROXIMITY_FADE_COULD_NOT_CREATE_3: Compat back-buffer depth/stencil texture has mismatched pixel `type`
 
-## Bug
-The GLES3 Compatibility renderer has two code paths for setting up the 3D back buffers — one for 3D-scaling == 100%, another for anything else. The scaling path allocates the depth/stencil back-buffer texture with a pixel `type` argument that does not form a valid combination with `internalformat=GL_DEPTH24_STENCIL8` / `format=GL_DEPTH_STENCIL`. `glTexImage2D` rejects the call with `GL_INVALID_OPERATION`, the texture has no storage, and the FBO it is attached to becomes `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT`. Any subsequent rendering into the back buffer is silently discarded, which breaks effects (like Proximity Fade) that sample the depth texture.
+## User Report
+### Tested versions
+
+4.5.1.stable
+
+### System information
+
+Linux Mint 21.3 - 4.5.1.stable - Open GL - GTX 1650
+
+### Issue description
+
+I made a shader based on Proximity Fade but it doesnt work if Scaling 3D is anything other than 100%. Proximity Fade itself doesnt work either but thats not my issue. Since i copy pasted it from the same code it gives the same error.
+
+The Error
+
+check_backbuffer: Could not create 3D back buffers, status: GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT
+  <C++ Source>  drivers/gles3/storage/render_scene_buffers_gles3.cpp:540 @ check_backbuffer()
+
+The Shader
+
+```
+shader_type spatial;
+uniform sampler2D depth_texture : hint_depth_texture;
+
+void fragment() {
+  float depth = texture(depth_texture, SCREEN_UV).x;
+  #if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+  vec3 ndc = vec3(SCREEN_UV, depth) * 2.0 - 1.0;
+  #else
+  vec3 ndc = vec3(SCREEN_UV * 2.0 - 1.0, depth);
+  #endif
+  vec4 view = INV_PROJECTION_MATRIX * vec4(ndc, 1.0);
+  view.xyz /= view.w;
+  ALPHA *= clamp(1.0 - smoothstep(view.z + 0.1, view.z, VERTEX.z), 0.0, 1.0);
+}
+```
+
+### Steps to reproduce
+
+Enable Proximity Fade and change Scaling 3D away from 100%
+
+### Minimal reproduction project (MRP)
+
+N/A
 
 ## Expected Correct Output
 Binding the back-buffer FBO, clearing to green, and blitting to the default framebuffer produces a green frame (center pixel ≈ `(0, 255, 0, 255)`).
@@ -9,7 +51,9 @@ Binding the back-buffer FBO, clearing to green, and blitting to the default fram
 ## Actual Broken Output
 The back-buffer FBO is incomplete, so the clear and the blit are both no-ops. The default framebuffer retains its earlier black clear — center pixel is `(0, 0, 0, 255)`.
 
-## Ground Truth Diagnosis
+## Ground Truth
+The GLES3 Compatibility renderer has two code paths for setting up the 3D back buffers — one for 3D-scaling == 100%, another for anything else. The scaling path allocates the depth/stencil back-buffer texture with a pixel `type` argument that does not form a valid combination with `internalformat=GL_DEPTH24_STENCIL8` / `format=GL_DEPTH_STENCIL`. `glTexImage2D` rejects the call with `GL_INVALID_OPERATION`, the texture has no storage, and the FBO it is attached to becomes `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT`. Any subsequent rendering into the back buffer is silently discarded, which breaks effects (like Proximity Fade) that sample the depth texture.
+
 Divergent initialization paths for the Compatibility back buffer use different `type` values for the depth/stencil texture, despite every other parameter matching. The scaling-path value isn't a legal combination with `GL_DEPTH_STENCIL`, so the FBO ends up incomplete.
 
 From the linked PR #111234:
@@ -61,6 +105,14 @@ spec:
   actual_dominant: "black (FBO incomplete, clear+blit skipped, default fb untouched)"
   tolerance: "green channel > 128 ⇒ correct; green channel ~0 and all channels < 32 ⇒ bug"
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/godotengine/godot
+- **SHA**: e72374a5da98f3c824974507dbdf3e8529940d95
+- **Relevant Files**:
+  - drivers/gles3/storage/texture_storage.cpp  # default-branch SHA at issue close; fix via PR #111234 (copy type value); (inferred)
+  - drivers/gles3/storage/render_scene_buffers_gles3.cpp
+  - drivers/gles3/rasterizer_scene_gles3.cpp
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes

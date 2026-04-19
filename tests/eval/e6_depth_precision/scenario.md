@@ -1,12 +1,14 @@
 # E6: Depth Buffer Precision
 
-## Bug
+## User Report
 
-The perspective projection matrix is constructed with `near=0.001` and
-`far=100000`, yielding a near/far ratio of ~10^8. A 24-bit depth buffer
-provides only ~16 million discrete depth values, so the precision available
-near `z=50` is far coarser than the 0.01-unit gap between the two quads.
-Both quads map to the same (or alternating) depth values, causing z-fighting.
+I have two quads positioned very close together near the middle of my scene
+(roughly z=-50 and z=-50.01). The nearer one should fully occlude the
+further one, but instead the central screen region flickers between the
+two colors every frame in a non-deterministic pattern. The geometry is
+stable on the CPU side — I've printed the vertex positions across frames
+and they don't move. The shader compiles, depth testing is enabled, and
+nothing about the matrices or vertex data appears to change frame to frame.
 
 ## Expected Output
 
@@ -19,7 +21,13 @@ The center region flickers between red and blue on every frame as the two
 quads compete for depth ownership. The pattern is non-deterministic across
 frames.
 
-## Ground Truth Diagnosis
+## Ground Truth
+
+The perspective projection matrix is constructed with `near=0.001` and
+`far=100000`, yielding a near/far ratio of ~10^8. A 24-bit depth buffer
+provides only ~16 million discrete depth values, so the precision available
+near `z=50` is far coarser than the 0.01-unit gap between the two quads.
+Both quads map to the same (or alternating) depth values, causing z-fighting.
 
 The near/far ratio destroys depth precision for mid-to-far geometry.
 **Fix**: use a near value of at least `0.1` (ratio 1e6) or ideally `1.0`
@@ -47,10 +55,8 @@ chasing floating-point rounding bugs in the geometry or transform code.
   root cause.
 - **No compile/runtime error**: the shader and geometry compile cleanly.
 
-## OpenGPA Advantage
+## How OpenGPA Helps
 
-`query_scene(camera)` immediately surfaces `near=0.001, far=100000` and can
-compute the resulting depth precision at z=50 (approximately 4.8e-4 units per
-LSB vs. 0.01 needed). `query_pixel` at the fighting area shows depth values
-that are identical or differ by less than one depth buffer increment, making
-the diagnosis unambiguous in a single query.
+OpenGPA exposes the camera's projection parameters and per-pixel depth
+buffer values, so the precision available at the fighting region can be
+read directly rather than inferred from the matrix on the CPU side.

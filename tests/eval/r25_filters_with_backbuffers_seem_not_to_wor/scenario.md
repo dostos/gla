@@ -1,7 +1,65 @@
 # R6_FILTERS_WITH_BACKBUFFERS_SEEM_NOT_TO_WOR: PixiJS filter backbuffer bound to wrong texture unit when only glProgram is supplied
 
-## Bug
-A PixiJS filter declared with `blendRequired: true` but only a `glProgram` (no `gpuProgram`) samples `uBackTexture` and gets the front-sprite texture back instead of the backbuffer. The filter's fragment shader sees `uBackTexture` point at texture unit 0 (where `uTexture` is bound) while `FilterSystem` has placed the actual backbuffer texture at texture unit 3. The unit-3 texture is never read.
+## User Report
+### PixiJS version
+
+8.14.0 in my game, 8.3.4 on pixi playground
+
+### Link to minimal reproduction
+
+https://pixiplayground.com/#/edit/q0w7pEykjfdlJSXL6aJEz
+
+### Steps to reproduce
+
+Please try my reproduction. Clicking these texts will insert into the template
+for the frag. The code in the frag template is very similar to the [built-in
+blend](https://github.com/pixijs/pixijs/blob/15bd3d9d2d99e5cd9aa5817ae75c929d93fcf58d/src/filters/blend-modes/blend-template.frag) — it samples from `uTexture`,
+and `uBackTexture` and blends in different ways.
+
+What I'm finding both in [my retro game](https://blockstack.ing) and this
+reproduction is unexpected behaviour — in my game, if I sample from uTexture
+(even if I multiply the result by zero to destroy the information), it inserts
+uTexture completely into the display.
+
+### What is expected?
+
+- Click 'back' — see back only (front sprite's shader samples from its
+  backbuffer and returns it unmodified)
+- 'back inv' — same as above but with inverted colours (actually inverts the
+  front sprite)
+- Click 'front' — see front as normal only
+- Click 'mixed' — see the two mixed
+
+### What is actually happening?
+
+In this example, using the backBuffer for `finalColor` doesn't show what is
+behind the front sprite, it instead renders only the front sprite but
+stretched.
+
+The example for `interlaceChannels` does
+`'vec4(textureCol.r, backCol.g, textureCol.b, 1.0)'` — however this too just
+shows the front sprite.
+
+Mixed is the same as front, despite doing `mix(back,front,0.5)`.
+
+### Environment
+
+- Chrome 141.0.7390.123
+- MacOS 26.0.1
+- Apple Silicon
+
+Also seen on Windows 11, x64 arch.
+
+### Any additional comments?
+
+`uBackTexture` is not well documented, so I could have the wrong idea here.
+However, my shader in this example (and the more complex one in my actual
+game) both show seemingly impossible behaviour where simply reading from the
+`uTexture` seems to override the output.
+
+In fact, googling `uBackTexture pixi.js` currently brings up nothing relevant
+to using this backbuffer. I'm happy to contribute to the docs if this is
+found to be a misunderstanding on my part.
 
 ## Expected Correct Output
 A fragment shader that outputs `texture(uBackTexture, vUV)` should show whatever is behind the sprite — in this minimal reproducer, a solid blue frame (the back texture bound at unit 3).
@@ -9,7 +67,7 @@ A fragment shader that outputs `texture(uBackTexture, vUV)` should show whatever
 ## Actual Broken Output
 A solid red frame — the front texture that is bound at unit 0 and is what `uTexture` points at. The shader nominally reads `uBackTexture`, but because its sampler uniform has been set to `0`, it samples from unit 0 and returns the front-sprite color.
 
-## Ground Truth Diagnosis
+## Ground Truth
 The root cause is a bind-point collision between PixiJS's `FilterSystem` and its `Shader` constructor's fallback path for GL-only filters.
 
 The issue reporter traced it (comment 3):
@@ -63,6 +121,14 @@ spec:
   actual_texture_unit: 0
   collision_with: uTexture
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/pixijs/pixijs
+- **SHA**: 10a92cf89c1e224a7d4d9f4cffa24bea32a44440
+- **Relevant Files**:
+  - src/filters/FilterSystem.ts  # base of fix PR #11754 (uBackTexture binding)
+  - src/rendering/renderers/shared/shader/Shader.ts
+  - src/rendering/renderers/gl/shader/GlShaderSystem.ts
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes

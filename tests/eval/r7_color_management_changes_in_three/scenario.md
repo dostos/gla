@@ -1,13 +1,13 @@
 # R4_COLOR_MANAGEMENT_CHANGES_IN_THREE: sRGB texture uploaded as linear while framebuffer encodes sRGB
 
-## Bug
-A diffuse texture containing sRGB-encoded bytes is uploaded with a linear
-internal format (`GL_RGB8`) while `GL_FRAMEBUFFER_SRGB` is enabled. The shader
-samples the sRGB bytes as if they were linear values; the framebuffer then
-gamma-encodes those values to sRGB on write. The effective result is a
-double-encoded image — everything is noticeably brighter than the input
-texture, the classic "washed out" look A-Frame scenes exhibited after the
-three.js r152 color management changes made sRGB output encoding the default.
+## User Report
+I've seen changes landing on THREE lately related to color management that seemed change A-Frame default behavior
+
+[A-Frame 1.4.2 on THREE r147](https://aframe.io/aframe/examples/showcase/ui/)
+
+[A-Frame master on THREE r152](https://glitch.com/edit/#!/hammerhead-rare-skipjack?path=info-message.js%3A113%3A0)
+
+@donmccurdy Sorry to bother. I went through the changelog. There are tons of changes and couldn't make it complete sense. Do you have a quick summary of the changes we have to do to get the same results than r147? Thanks so much
 
 ## Expected Correct Output
 A 256×256 window filled with mid-gray matching the texture input:
@@ -20,7 +20,15 @@ A 256×256 window filled with a distinctly brighter gray: framebuffer RGB ≈
 (188, 188, 188). The sampled value 128/255 ≈ 0.502 is treated as linear, then
 sRGB-encoded on output, lifting it to ~0.741.
 
-## Ground Truth Diagnosis
+## Ground Truth
+A diffuse texture containing sRGB-encoded bytes is uploaded with a linear
+internal format (`GL_RGB8`) while `GL_FRAMEBUFFER_SRGB` is enabled. The shader
+samples the sRGB bytes as if they were linear values; the framebuffer then
+gamma-encodes those values to sRGB on write. The effective result is a
+double-encoded image — everything is noticeably brighter than the input
+texture, the classic "washed out" look A-Frame scenes exhibited after the
+three.js r152 color management changes made sRGB output encoding the default.
+
 The three.js r152 release made `renderer.outputColorSpace = SRGBColorSpace`
 the default, so the final blit now gamma-encodes linear values to sRGB. Apps
 that relied on the pre-r152 behavior never tagged their diffuse textures as
@@ -84,6 +92,14 @@ spec:
   expected_rgb: [128, 128, 128]
   tolerance: 10
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/aframevr/aframe
+- **SHA**: 5e98e2d672d49a1d5a217fa9c0507ac5d82ca949
+- **Relevant Files**:
+  - src/systems/renderer.js  # default-branch SHA near issue close (no linked A-Frame PR; fix is app-side); (inferred)
+  - src/components/material.js
+  - src/components/environment.js
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes

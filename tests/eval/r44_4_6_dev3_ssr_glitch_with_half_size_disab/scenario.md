@@ -1,7 +1,25 @@
 # R44_4_6_DEV3_SSR_GLITCH_WITH_HALF_SIZE_DISAB: Full-size SSR corrupted by unsanitized NaN in reflection buffer base mip
 
-## Bug
-When Screen-Space Reflections run at full resolution in Godot 4.6-dev3, a single pixel that emits NaN from a scene material propagates across the reflection output and produces flickering/black glitches. The problem disappears with "half size" enabled because the half-resolution path discards the NaN before it reaches the mip chain.
+## User Report
+### Tested versions
+
+4.6-dev3
+
+### System information
+
+Linux - Nvidia RTX 4060 driver 580
+
+### Issue description
+
+With the new SSR overhaul #111210 which is amazing!! but if i disable the "half size" in the project settings it starts glitching
+
+### Steps to reproduce
+
+https://github.com/user-attachments/assets/5345d494-5c6f-4a47-b49b-b613dc62dfa5
+
+### Minimal reproduction project (MRP)
+
+N/A
 
 ## Expected Correct Output
 A uniformly blue reflection buffer (the scene color) with, at worst, a single-pixel darkening at the center where the material wrote NaN — the NaN should be sanitized at every stage including the base level.
@@ -9,7 +27,9 @@ A uniformly blue reflection buffer (the scene color) with, at worst, a single-pi
 ## Actual Broken Output
 A roughly 3x3 pixel black/garbage blotch around the center, caused by bilinear filtering spreading the unsanitized NaN sample to its neighbors, visually matching the "glitch" blobs shown in the reporter's video.
 
-## Ground Truth Diagnosis
+## Ground Truth
+When Screen-Space Reflections run at full resolution in Godot 4.6-dev3, a single pixel that emits NaN from a scene material propagates across the reflection output and produces flickering/black glitches. The problem disappears with "half size" enabled because the half-resolution path discards the NaN before it reaches the mip chain.
+
 The reporter's scene contains a material that writes NaN into the color buffer consumed by SSR. A developer confirms: `> The material seems to write a NaN pixel which propagates really quickly with SSR due to infinite bounces it does.` The fix author then explains the exact root cause: `> It already sanitizes when computing. Mipmaps. I guess I just missed adding the sanitization code for the base level` — referring to the `isnan` guard in `servers/rendering/renderer_rd/shaders/effects/copy.glsl#L86` which runs only on mip downsample, leaving the base level unprotected. The SSR overhaul PR #111210 introduced the Gaussian mip chain but did not apply the guard symmetrically across all levels.
 
 ## Difficulty Rating
@@ -50,6 +70,14 @@ spec:
   forbidden_rgb_approx: [0, 0, 0]
   rationale: center region should remain scene-blue; any near-black pixels indicate NaN leaked from the unsanitized base mip
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/godotengine/godot
+- **SHA**: e6aa06d3de372513bedb036d2adb1052a9b4b87f
+- **Relevant Files**:
+  - servers/rendering/renderer_rd/shaders/effects/copy.glsl  # base of fix PR #112732 (sanitize INF/NaN in copy_to_rect)
+  - servers/rendering/renderer_rd/effects/copy_effects.cpp
+  - servers/rendering/renderer_rd/effects/ss_effects.cpp
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes

@@ -1,20 +1,13 @@
 # E8: Race Condition Texture Upload
 
-## Bug
+## User Report
 
-The application intends to display a 64×64 checkerboard texture on a quad.
-The texture object is seeded with a 1×1 white placeholder at creation time
-(a common pattern to keep the texture object valid while real data is loaded
-asynchronously). The real upload is guarded by a flag `upload_complete` that
-is never set to `1`, simulating a background loader thread that stalls or
-crashes before signalling completion.
-
-```c
-int upload_complete = 0; /* BUG: never set */
-if (upload_complete) {
-    glTexImage2D(..., 64, 64, ...);
-}
-```
+I'm displaying a checkerboard texture (8x8 black/white tiles, 64x64 total)
+on a quad. Instead of the checkerboard, the quad shows up as uniformly
+white. There are no GL errors, the shader compiles, the quad geometry is
+correct (it's the right size and position), and `glIsTexture` reports the
+texture object as valid. The texture is loaded asynchronously from a
+worker; the main loop runs fine.
 
 ## Expected Output
 
@@ -25,7 +18,21 @@ texture, 8-pixel tiles).
 
 A uniformly white quad. The 1×1 placeholder is used for all rendering.
 
-## Ground Truth Diagnosis
+## Ground Truth
+
+The texture object is seeded with a 1×1 white placeholder at creation time
+(a common pattern to keep the texture object valid while real data is
+loaded asynchronously). The real `glTexImage2D(..., 64, 64, ...)` upload
+is guarded by a flag `upload_complete` that is never set to `1`,
+simulating a background loader thread that stalls or crashes before
+signalling completion.
+
+```c
+int upload_complete = 0; /* never set */
+if (upload_complete) {
+    glTexImage2D(..., 64, 64, ...);
+}
+```
 
 The 64×64 texture upload never executes. The texture object remains 1×1.
 **Fix**: ensure `upload_complete` is set to `1` after the data is ready, or
@@ -47,9 +54,9 @@ for `GL_TEXTURE_WIDTH` at the right time requires knowing to look.
 - **Visually benign placeholder**: a 1×1 white texture looks like an
   intentional design choice.
 
-## OpenGPA Advantage
+## How OpenGPA Helps
 
-`inspect_drawcall(textures)` directly reports the bound texture dimensions as
-`1×1` instead of `64×64`, pinpointing that the real upload never occurred
-without requiring the developer to add probe code or inspect raw GL state
-manually.
+OpenGPA reports the actual dimensions and contents of the texture sampled
+by the draw, so the discrepancy between the intended 64x64 asset and the
+1x1 placeholder is visible without adding probe code or instrumenting the
+loader.

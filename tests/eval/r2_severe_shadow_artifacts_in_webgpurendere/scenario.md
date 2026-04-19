@@ -79,6 +79,14 @@ spec:
   tolerance: "bug present when dark-pixel count > 50 in a 1024-pixel probe patch"
 ```
 
+## Upstream Snapshot
+- **Repo**: https://github.com/mrdoob/three.js
+- **SHA**: dca4d8bf512b02e15cc7e43d430a91c345140cbe
+- **Relevant Files**:
+  - src/renderers/common/Renderer.js  # base of fix PR #32705 (shadow side selection)
+  - src/renderers/common/ShadowMap.js
+  - src/materials/MeshDepthMaterial.js
+
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes
 - **Reasoning**: The bug is purely a per-pass state mismatch — `GL_CULL_FACE_MODE` during the shadow-FBO draw vs. the lit draws that sample the resulting depth texture. OpenGPA's per-draw state snapshot plus depth-range stats directly expose that the shadow-map draw captured front-face depths, turning the shadow compare into a degenerate self-comparison. A code-only agent must span renderer, shadow-material, and pass-management logic to notice the missing side inversion, which is exactly why the upstream reporter needed a full day and a SpectorJS diff to find it.

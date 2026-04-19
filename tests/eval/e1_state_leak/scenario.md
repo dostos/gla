@@ -1,19 +1,13 @@
 # E1: State Leak
 
-## Bug
+## User Report
 
-`glBindTexture(GL_TEXTURE_2D, tex_blue)` is missing before the draw call for
-Quad B. OpenGL retains the last-bound texture across draw calls, so Quad B
-inherits Quad A's red texture.
-
-**Location:** `e1_state_leak.c`, inside the render loop after the comment
-`// Draw Quad B`.
-
-```c
-// BUG: glBindTexture(GL_TEXTURE_2D, tex_blue) is intentionally omitted here
-glBindVertexArray(vao_b);
-glDrawArrays(GL_TRIANGLES, 0, 6);
-```
+I'm drawing two textured quads side-by-side: the left quad should be red and
+the right quad should be blue. Both textures upload without errors and I've
+verified both texture IDs are valid (querying them returns the expected
+RGBA8 / 1x1 color data). At runtime both quads render solid red — the right
+one never picks up its blue texture. There are no GL errors and the program
+runs and exits cleanly.
 
 ## Expected Correct Output
 
@@ -28,7 +22,11 @@ glDrawArrays(GL_TRIANGLES, 0, 6);
 Both quads appear red. There is no error message; the app runs and exits
 cleanly.
 
-## Ground Truth Diagnosis
+## Ground Truth
+
+`glBindTexture(GL_TEXTURE_2D, tex_blue)` is missing before the draw call for
+Quad B. OpenGL retains the last-bound texture across draw calls, so Quad B
+inherits Quad A's red texture.
 
 The GL texture unit is stateful. After binding `tex_red` for Quad A, no
 subsequent `glBindTexture` is issued before Quad B's draw, so the driver
@@ -54,20 +52,7 @@ than incorrect — readers tend to read what they expect to be there.
 
 ## How OpenGPA Helps
 
-```
-inspect_drawcall(draw_id=2, query="textures")
-```
-
-OpenGPA captures the full texture-unit state at the moment of each draw call.
-The output for draw 2 (Quad B) would show:
-
-```json
-{
-  "TEXTURE_BINDING_2D": { "id": 1, "label": "tex_red", "size": "1x1",
-                          "format": "GL_RGBA", "sample": "#FF0000" }
-}
-```
-
-The sampled color `#FF0000` (red) immediately reveals that tex_red is still
-bound. A code-only agent would need to manually trace all `glBindTexture`
-calls in order to infer the state, which is error-prone in larger codebases.
+OpenGPA captures the full texture-unit state at the moment of each draw
+call. Inspecting per-draw bindings would surface the actual texture object
+sampled by Quad B's fragment shader, which a code-only agent must infer by
+manually tracing all `glBindTexture` calls in the program.

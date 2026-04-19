@@ -89,6 +89,14 @@ spec:
   rationale: "Instanced draw should cover visible area with orange triangles; link failure leaves clear color dominant."
 ```
 
+## Upstream Snapshot
+- **Repo**: https://github.com/mrdoob/three.js
+- **SHA**: 1f2fea769315befd9bdb3f46574e2eeb92c5047a
+- **Relevant Files**:
+  - src/nodes/accessors/InstanceNode.js  # same issue as r6; pre-fix snapshot from r183-era dev branch
+  - src/nodes/accessors/BufferNode.js
+  - src/renderers/webgl-fallback/WebGLBackend.js
+
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes
 - **Reasoning**: The failure mode is a link error whose text names the exact root cause (`exceeds GL_MAX_UNIFORM_BLOCK_SIZE`), but application code that ignores `GL_LINK_STATUS` or buries the infolog will show only a missing mesh. An OpenGPA query that inspects program link status, info log, and `GL_MAX_UNIFORM_BLOCK_SIZE` versus declared UBO size will deterministically identify the mismatch — far more directly than visual or geometry-level diagnostics.

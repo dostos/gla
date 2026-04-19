@@ -1,7 +1,27 @@
 # R22_CSG_GIZMO_ZFIGHT_COPLANAR: CSG selection gizmo Z-fights with mesh due to coplanar faces
 
-## Bug
-Two draw calls render geometry that shares identical corner positions on a single plane — the CSG mesh face and its selection/collision-debug gizmo. Both use the same depth test (`GL_LESS`) with no depth bias, so the rasterizer's per-triangle depth interpolation along different diagonal splits produces sub-ULP-scale z differences per pixel. The result is the classic Z-fighting speckle: sometimes the mesh color wins the depth test, sometimes the gizmo color wins.
+## User Report
+### Tested versions
+
+I only testing with godot 4.3
+
+### System information
+
+mac os 15.0.1 Godot 4.3
+
+### Issue description
+
+Some materials cause graphics issue that are hard to work around.
+
+(image attached)
+
+### Steps to reproduce
+
+the issues have happed when things involve transparency. In the photo included it is created with CSG volumes. When working with one the graphics issues happen. The artifacts are high frequency and hard to work with.
+
+### Minimal reproduction project (MRP)
+
+issue.zip (attached). Rotating around scene shows graphic issues. Could be around z fighting issues.
 
 ## Expected Correct Output
 The selected face should be covered by a single solid color — the gizmo overlay — because the gizmo is intended to visibly mark the selected CSG shape. (After the fix, this is achieved by pushing the gizmo slightly toward the camera via a per-material depth offset.)
@@ -9,7 +29,9 @@ The selected face should be covered by a single solid color — the gizmo overla
 ## Actual Broken Output
 The face shows a high-frequency interference pattern mixing the mesh color and the gizmo color. When the camera moves, the pattern shimmers — which is what users experience as unpleasant flicker.
 
-## Ground Truth Diagnosis
+## Ground Truth
+Two draw calls render geometry that shares identical corner positions on a single plane — the CSG mesh face and its selection/collision-debug gizmo. Both use the same depth test (`GL_LESS`) with no depth bias, so the rasterizer's per-triangle depth interpolation along different diagonal splits produces sub-ULP-scale z differences per pixel. The result is the classic Z-fighting speckle: sometimes the mesh color wins the depth test, sometimes the gizmo color wins.
+
 The CSG selection gizmo is built from the same vertex data as the CSG mesh itself, so every gizmo face is exactly coplanar with a mesh face. With both draws using the same depth test and no depth bias, the GPU's depth interpolation — which is defined per-triangle, not per-plane — produces different per-pixel z values between the two draws whenever the triangulation differs or the rasterizer takes a different path through the two primitives. Godot maintainer `@bruvzg` diagnosed this directly in the issue thread:
 
 > it's likely caused by selection and shape having face in the same plane (both are generated from the same data, so this is expected, we probably should add some offset to the selection).
@@ -56,6 +78,14 @@ spec:
       - {r: 0, g: 255, b: 0}
     each_fraction_min: 0.05
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/godotengine/godot
+- **SHA**: e42def12d0475e34e05ffd872eb12c88e0688fbf
+- **Relevant Files**:
+  - editor/plugins/gizmos/csg_gizmo_plugin.cpp  # default-branch SHA at issue close; fix via PR #100211 (add depth offset); (inferred)
+  - scene/resources/material.cpp
+  - modules/csg/csg_shape.cpp
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes

@@ -1,21 +1,15 @@
 # E3: Index Buffer Off-by-One (sizeof Pointer Bug)
 
-## Bug
+## User Report
 
-`glBufferData` is called with `sizeof(indices)` where `indices` is a
-`const GLushort *` pointer, not an array. On a 64-bit system,
-`sizeof(pointer) = 8`, so only 8 bytes (4 × uint16 = indices 0, 1, 2, 2)
-are uploaded to the GPU instead of the required
-`n_indices * sizeof(GLushort) = 36 * 2 = 72` bytes.
-
-**Location:** `e3_index_buffer_obo.c`:
-
-```c
-const GLushort *indices = indices_data;
-glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-             sizeof(indices),   // BUG: sizeof(pointer) = 8, not 72
-             indices, GL_STATIC_DRAW);
-```
+My indexed cube draw should render 12 triangles (36 indices) but only one
+face/triangle ever appears on screen. The remaining geometry is either
+missing or shows up as garbled fragments depending on the GPU/driver. The
+vertex buffer looks correct (the visible triangle has the right colors),
+the shader compiles, `glGetError` returns `GL_NO_ERROR`, and the same code
+runs without warning under `-Wall -Wextra`. The index data array is
+declared with all 36 indices; I've printed it on the CPU side and the
+contents are correct.
 
 ## Expected Correct Output
 
@@ -29,7 +23,13 @@ The remaining 33 draw indices reference uninitialised GPU memory, producing
 undefined vertex fetches: missing triangles, garbage geometry, or driver-
 specific visual corruption.
 
-## Ground Truth Diagnosis
+## Ground Truth
+
+`glBufferData` is called with `sizeof(indices)` where `indices` is a
+`const GLushort *` pointer, not an array. On a 64-bit system,
+`sizeof(pointer) = 8`, so only 8 bytes (4 × uint16 = indices 0, 1, 2, 2)
+are uploaded to the GPU instead of the required
+`n_indices * sizeof(GLushort) = 36 * 2 = 72` bytes.
 
 The pointer-vs-array `sizeof` mistake is a classic C footgun. The correct
 call is:
@@ -67,24 +67,7 @@ frames away from the original array declaration.
 
 ## How OpenGPA Helps
 
-```
-inspect_drawcall(draw_id=1, query="vertices")
-```
-
-OpenGPA records the byte length of each bound buffer object at draw time:
-
-```json
-{
-  "GL_ELEMENT_ARRAY_BUFFER": {
-    "id": 2,
-    "size_bytes": 8,
-    "expected_bytes_for_draw": 72,
-    "index_count": 36,
-    "index_type": "GL_UNSIGNED_SHORT"
-  }
-}
-```
-
-The mismatch `8 != 72` is immediately surfaced. A code-only agent must
-trace the `sizeof` argument through the source, which requires knowing
-the declaration kind of the variable in scope at the call site.
+OpenGPA records the byte length of each bound buffer object at draw time,
+so a mismatch between buffer size and the expected index-count footprint
+is directly visible in a per-draw record. A code-only agent must trace the
+`sizeof` argument through the source.

@@ -1,7 +1,47 @@
 # R6_TRANSPARENT_OBJECTS_IN_THREE_JS: Back transparent object vanishes when drawn after a closer one
 
-## Bug
-Two overlapping transparent quads are rendered with `glDepthMask(GL_TRUE)` and `GL_BLEND` enabled. The closer (outer) quad is drawn first; it writes depth values at z=0.2. The farther (inner) quad is drawn second at z=0.8, fails the depth test on every fragment, and contributes nothing to the framebuffer — even though its draw call is issued and blending is active.
+## User Report
+I am trying to write a small program in Three.js that displays two spheres, one inside the other. The radius of sphere 2 is supposed to oscillate between 0.5 and 1.5 while the radius of sphere1 is always 1.0. Each sphere is transparent (opacity: 0.5) so that it would be possible to see the smaller sphere contained in the larger one. Of course the roles of "smaller" and "larger" change as the radius of sphere 2 varies.
+
+The problem now is that Three.js makes the first sphere transparent. I define in my program but not the second one. If I first define sphere 1 then it becomes transparent, but then sphere 2 is completely opaque. If I first define sphere 2 then this is the transparent one. The order of adding them to the scene plays no role.
+
+I include a minimal program below that shows what is going on (without the animation). In its current state only sphere 1 is visible and it is not transparent. If I define sphere 1 before sphere 2 then sphere 1 becomes transparent, but sphere 2 is no longer transparent. Changing sphere 2's radius to 1.2 will then hide sphere 1.
+
+Is there a way to make both spheres transparent?
+
+```javascript
+var scene = new THREE.Scene();
+var camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.set(0, 0, 3);
+camera.lookAt(new THREE.Vector3(0, 0, 0));
+scene.add(camera);
+
+var ambient = new THREE.AmbientLight( 0x555555 );
+scene.add(ambient);
+
+var light = new THREE.DirectionalLight( 0xffffff );
+light.position = camera.position;
+scene.add(light);
+
+var renderer = new THREE.WebGLRenderer();
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// Definition 2
+var geometry2 = new THREE.SphereGeometry(0.8,32,24);
+var material2 = new THREE.MeshLambertMaterial({color: 0x0000ff, transparent: true, opacity: 0.5});
+var sphere2 = new THREE.Mesh(geometry2, material2);
+
+// Definition 1
+var geometry1 = new THREE.SphereGeometry(1.0,32,24);
+var material1 = new THREE.MeshLambertMaterial({color: 0x00ff00, transparent: true, opacity: 0.5});
+var sphere1 = new THREE.Mesh(geometry1, material1);
+
+scene.add(sphere1);
+scene.add(sphere2);
+
+renderer.render(scene, camera);
+```
 
 ## Expected Correct Output
 A green outer quad with a teal/blue-tinted center where the inner blue quad blends through the green at 50% opacity. Both transparent objects visible.
@@ -9,7 +49,9 @@ A green outer quad with a teal/blue-tinted center where the inner blue quad blen
 ## Actual Broken Output
 Only the green outer quad is visible over the dark gray clear color. The inner blue quad is entirely absent from the framebuffer; no hint of blue appears anywhere.
 
-## Ground Truth Diagnosis
+## Ground Truth
+Two overlapping transparent quads are rendered with `glDepthMask(GL_TRUE)` and `GL_BLEND` enabled. The closer (outer) quad is drawn first; it writes depth values at z=0.2. The farther (inner) quad is drawn second at z=0.8, fails the depth test on every fragment, and contributes nothing to the framebuffer — even though its draw call is issued and blending is active.
+
 The accepted Stack Overflow answer explains the mechanism directly:
 
 > The `WebGLRenderer` in three.js sorts objects based upon their distance from the camera, and renders transparent objects in order from farthest to closest. ... So for two transparent objects to render correctly, the object that is in back ... must be rendered first. Otherwise, it will not be rendered at all, due to the depth buffer.

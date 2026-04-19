@@ -1,7 +1,44 @@
 # R9_THREE_JS_RESIZING_CANVAS: three.js EffectComposer not resized with renderer
 
-## Bug
-When the browser window (or the containing DOM element) is resized, the application calls `renderer.setSize()` on the three.js `WebGLRenderer` but forgets to call `composer.setSize()` on the companion `EffectComposer`. The composer's two internal ping-pong `WebGLRenderTarget`s remain at their pre-resize dimensions. The post-processing pipeline therefore renders the scene into an undersized offscreen FBO and then copies that FBO into the now-larger default framebuffer, producing a pixelated, upscaled image.
+## User Report
+I have been working on a 3D project where we show 3D object in the web browser using Three.js Library.
+The problem is:
+
+1st the model is displayed in a small `dom` element or when the browser window itself is small.
+Then when the window (or the `dom` element is resized) the model become pixelated
+
+Following are some screenshots:
+### Before resize:
+
+### After resize:
+
+### How it should be after resize:
+
+Here is the part of code that is setting the the model dimensions (height and width), and this function gets called when the resize event if fired:
+
+```
+console.log("domChanged fired")
+
+instance.domBoundingBox = instance.dom.getBoundingClientRect();
+instance.domCenterPos.x = instance.domBoundingBox.width / 2 + instance.domBoundingBox.left;
+instance.domCenterPos.y = instance.domBoundingBox.height / 2 + instance.domBoundingBox.top;
+
+var width = instance.dom.clientWidth, height = instance.dom.clientHeight;
+instance.domWidthHalf = width / 2, instance.domHeightHalf = height / 2;
+
+// TODO: fire event to expose it to site developers
+
+// here we should update several values regarding width,height,position
+if(instance.cameraReal) {
+    instance.cameraReal.aspect = instance.dom.clientWidth / instance.dom.clientHeight;
+    instance.cameraReal.updateProjectionMatrix();
+}
+
+if(instance.renderer3D)
+    instance.renderer3D.setSize(instance.dom.clientWidth, instance.dom.clientHeight);
+```
+
+Can anybody give me a hint? I've been working on that a couple of days already but no clue so far
 
 ## Expected Correct Output
 A smooth, high-resolution frame that fills the resized canvas with the same perceived sharpness it had before the resize — gradients and edges are rendered natively at the canvas's current pixel count.
@@ -9,7 +46,9 @@ A smooth, high-resolution frame that fills the resized canvas with the same perc
 ## Actual Broken Output
 A blocky, low-resolution image stretched to fill the resized canvas. The content was rasterised at the old 200x150 offscreen resolution and then scaled up into an 800x600 presentation surface, so features that should be pixel-sharp instead appear as 4x4 blocks.
 
-## Ground Truth Diagnosis
+## Ground Truth
+When the browser window (or the containing DOM element) is resized, the application calls `renderer.setSize()` on the three.js `WebGLRenderer` but forgets to call `composer.setSize()` on the companion `EffectComposer`. The composer's two internal ping-pong `WebGLRenderTarget`s remain at their pre-resize dimensions. The post-processing pipeline therefore renders the scene into an undersized offscreen FBO and then copies that FBO into the now-larger default framebuffer, producing a pixelated, upscaled image.
+
 The OP's own accepted answer identifies `EffectComposer` as the missing piece:
 
 > Finally the problem were solved the actually problem was coming from because the application is using the `THREE.EffectComposer` object ... the composer needed to have the size updated after the event handler function like following:

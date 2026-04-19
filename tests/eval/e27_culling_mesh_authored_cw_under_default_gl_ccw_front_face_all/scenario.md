@@ -1,9 +1,11 @@
 # E27_CULLING_MESH_AUTHORED_CW_UNDER_DEFAULT_GL_CCW_FRONT_FACE_ALL: Clockwise quad culled under default CCW front-face
 
-## Bug
-A quad authored with clockwise (CW) vertex winding is drawn with back-face
-culling enabled and the default `GL_CCW` front-face convention. Every
-triangle is classified as a back face and culled — nothing is rasterized.
+## User Report
+I draw a centered orange quad covering most of the viewport with back-face
+culling enabled. The quad never appears — the framebuffer stays the clear
+color (black) everywhere. The center pixel reads (0,0,0,255). The draw
+call completes without GL errors, the shader compiles, the vertex buffer
+contains the right positions, and the program is bound.
 
 ## Expected Correct Output
 A centered orange quad (RGBA ~ 255, 128, 51, 255) covering roughly 64% of
@@ -14,7 +16,11 @@ The framebuffer is the clear color (black) everywhere. Center pixel reads
 RGBA = 0 0 0 255. The draw call completes without GL error but produces
 zero visible fragments.
 
-## Ground Truth Diagnosis
+## Ground Truth
+A quad authored with clockwise (CW) vertex winding is drawn with back-face
+culling enabled and the default `GL_CCW` front-face convention. Every
+triangle is classified as a back face and culled — nothing is rasterized.
+
 The mesh vertex order for both triangles (TL→BL→TR, TR→BL→BR) traverses
 each triangle clockwise in window space. With `GL_CULL_FACE` enabled and
 `glFrontFace(GL_CCW)` selecting counter-clockwise as front, CW triangles
@@ -39,17 +45,10 @@ plotting six 2D points in signed area order — easy to miscount.
 
 ## How OpenGPA Helps
 
-The specific query that reveals the bug:
-
-```
-inspect_drawcall(frame=current, index=0)
-```
-
-`inspect_drawcall` returns the full pipeline state for the draw: it
-reports `front_face=GL_CCW` and `cull_face=GL_BACK` alongside the raw
-vertex attribute data. Cross-referencing the per-triangle winding of the
-vertex stream against the active front-face convention immediately shows
-that every primitive will be classified as a back face and culled.
+OpenGPA exposes the cull state and the raw vertex attributes for each
+draw, so the geometric winding of submitted primitives can be cross-
+checked against the active front-face convention without reasoning about
+asset authoring.
 
 ## Tier
 core

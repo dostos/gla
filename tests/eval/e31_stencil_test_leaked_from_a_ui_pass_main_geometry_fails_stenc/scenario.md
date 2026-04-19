@@ -1,7 +1,13 @@
 # E31_STENCIL_TEST_LEAKED_FROM_A_UI_PASS_MAIN_GEOMETRY_FAILS_STENC: Stencil test leaked from UI pass kills main 3D geometry
 
-## Bug
-The UI pass enables `GL_STENCIL_TEST` and leaves it bound with `glStencilFunc(GL_EQUAL, 1, 0xFF)` before the main 3D pass runs. The scene triangle is drawn into a region where stencil is 0, so every fragment fails the stencil test and nothing from the main pass reaches the framebuffer.
+## User Report
+My frame should show a dark blue-grey background, a large red triangle in
+the center, and a small HUD quad in the top-left corner. Instead the
+center pixel reads the clear color (~26,31,46,255) — the red 3D triangle
+is completely missing. The HUD quad in the corner renders correctly. The
+main geometry's `glDrawArrays` is issued, the shader compiles, the depth
+test allows it through (cleared depth, near triangle), and there are no
+GL errors.
 
 ## Expected Correct Output
 Dark blue-grey clear color (~`0.10, 0.12, 0.18`) with a red triangle centered in the frame and a small yellow/cyan HUD quad in the top-left corner. Center pixel should be red (~`242, 64, 38, 255`).
@@ -9,8 +15,21 @@ Dark blue-grey clear color (~`0.10, 0.12, 0.18`) with a red triangle centered in
 ## Actual Broken Output
 Only the clear color and the small HUD quad are visible. The center pixel is the clear color (`~26, 31, 46, 255`) — the main 3D triangle is completely missing.
 
-## Ground Truth Diagnosis
-The UI pass's second draw sets `glStencilFunc(GL_EQUAL, 1, 0xFF)` to restrict HUD fill to the masked region, but it neither disables `GL_STENCIL_TEST` nor restores `GL_ALWAYS` before the main geometry draw. The stencil buffer outside the HUD rectangle is still 0, so `ref=1` never equals the buffer value and every fragment of the 3D triangle is discarded. No GL error is raised; the framebuffer simply shows nothing from the scene draw.
+## Ground Truth
+The UI pass enables `GL_STENCIL_TEST` and leaves it bound with
+`glStencilFunc(GL_EQUAL, 1, 0xFF)` before the main 3D pass runs. The
+scene triangle is drawn into a region where stencil is 0, so every
+fragment fails the stencil test and nothing from the main pass reaches
+the framebuffer.
+
+The UI pass's second draw sets `glStencilFunc(GL_EQUAL, 1, 0xFF)` to
+restrict HUD fill to the masked region, but it neither disables
+`GL_STENCIL_TEST` nor restores `GL_ALWAYS` before the main geometry draw.
+The stencil buffer outside the HUD rectangle is still 0, so `ref=1` never
+equals the buffer value and every fragment of the 3D triangle is
+discarded. No GL error is raised; the framebuffer simply shows nothing
+from the scene draw. Fix: `glDisable(GL_STENCIL_TEST)` (or restore
+`GL_ALWAYS`) before the main pass.
 
 ## Difficulty Rating
 **Hard (4/5)**
@@ -23,13 +42,9 @@ The UI and scene passes are structurally separated and look correct individually
 
 ## How OpenGPA Helps
 
-The specific query that reveals the bug:
-
-```
-inspect_drawcall(draw_call_index=2)
-```
-
-Returns the full pipeline state for the main 3D triangle draw, including `stencil_test=GL_TRUE`, `stencil_func=GL_EQUAL`, `stencil_ref=1`, `stencil_value_mask=0xFF`. Seeing a stencil equality test active on a draw that clearly belongs to the scene pass immediately implicates stencil state leakage from the preceding UI pass.
+OpenGPA reports the full stencil state at each draw call, so a stencil
+test active on a draw that doesn't expect one is visible in a single
+record without simulating state across passes.
 
 ## Tier
 core

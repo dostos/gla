@@ -1,7 +1,29 @@
 # R11_ADD_AN_ANIMATED_ICON_TO_THE_MAP_NOT_WORK: Overlapping symbol layers sharing a source — one icon disappears
 
-## Bug
-Two symbol layers that share a single GeoJSON source and sit at the same map coordinate render only one icon instead of both.  Mapbox-GL-JS 3.9.0 shows only the static sprite; 3.10.0 shows only the render-callback (pulsing) sprite.  The minimal C analogue draws two overlapping textured quads backed by separate VAOs but a shared element buffer; the second draw is silently dropped because the VAO binding is incomplete when the draw is issued.
+## User Report
+**mapbox-gl-js version**: 3.9
+
+**browser**: chrome
+
+### Steps to Trigger Behavior
+
+ 1. open example: Add an animated icon to the map
+ 2. Icon does not render
+
+### Link to Demonstration
+
+https://docs.mapbox.com/mapbox-gl-js/example/add-image-animated/
+
+### Expected Behavior
+
+The animated pulsing icon should render on top of the static map symbol at
+the demo location.
+
+### Actual Behavior
+
+The icon does not render — only one of the two symbol layers is visible at a
+time, depending on the Mapbox version (either the pulsing dot or the static
+image, but not both).
 
 ## Expected Correct Output
 Both icons visible at the same screen-space location: a pulsing red disc with a smaller static cyan disc composited on top.
@@ -9,7 +31,7 @@ Both icons visible at the same screen-space location: a pulsing red disc with a 
 ## Actual Broken Output
 Only one of the two quads is rendered.  In the mapbox regression, which quad wins depends on the library version (3.9 vs 3.10) but never both.
 
-## Ground Truth Diagnosis
+## Ground Truth
 The upstream reporter describes the symptom precisely:
 
 > Only one of the layers is visible at a time, depending on the Mapbox version - either the pulsing dot or the static image, but not both.
@@ -59,6 +81,14 @@ spec:
   observed_draw_count: 1
   shared_resource: element_buffer
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/mapbox/mapbox-gl-js
+- **SHA**: f03200d37b7095291da94781cc5857caa84d050f
+- **Relevant Files**:
+  - src/symbol/placement.ts  # base of release PR #13379 (closes #13367)
+  - src/symbol/collision_index.ts
+  - src/data/bucket/symbol_bucket.ts
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes

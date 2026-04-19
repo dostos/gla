@@ -1,7 +1,48 @@
 # R14_DEPTH_BUFFER_ISSUE_WHEN_USING_DEPTHOFFIE: CoC shader linearizes perspective depth as if it were orthographic
 
-## Bug
-Under a perspective projection, the DepthOfFieldEffect's circle-of-confusion (CoC) shader computed per-fragment focus by comparing the scene depth texture to a target depth derived from `worldFocusDistance`. When the `PERSPECTIVE_CAMERA` define was absent from `cocMaterial`, the shader treated the depth-buffer value as already linear in `[near, far]` and the target depth as `(focusDist - near) / (far - near)`. The depth buffer stores a nonlinear, perspective-encoded value, so the two sides of the CoC comparison use incompatible units. The equation accidentally holds only at the endpoints (near-plane depth = 0, far-plane depth = 1), which is why focus "works" when the target is at the clip planes but drifts toward the near plane for every distance in between.
+## User Report
+### Description of the bug
+
+Follow-up to #420.
+By using `dofEffect.circleOfConfusionMaterial.adoptCameraSettings` and `worldFocusDistance`, I was able to get a dynamic target to change the focus. I got it to match up / work in @vanruesc's [sandbox](https://codesandbox.io/s/gifted-forest-ssbdry?file=/src/App.js).
+
+However, I still don't get it to work elsewhere...
+
+For me it looks like the depth buffer is in a wrong format, and that the calculation to go from linearized near/far values to world distances and vice versa doesn't match some setting here. I checked that we're not using logarithmic depth.
+
+Maybe these images of expected and not expected cases help:
+In the below images,
+- the textured plane is cut off by near and far clip planes of 1 and 10
+- the white cube is the focus target - placed at 1, 10, ~5.5 and ~2.5
+
+Target at near clip plane - as expected: near clip plane is in focus
+
+Target at far clip plane - as expected: far clip plane is in focus
+
+Target at center between near and far - not expected: focus is too close
+
+Target at 1/4 between near and far - not expected: focus is too close
+
+So there seems to be some nonlinearity going on, but I have no idea why.
+
+### To Reproduce
+
+I'm unfortunately unsure how to reproduce / what's wrong in this setup so far. Happy to answer any questions to hopefully figure out what I'm doing wrong.
+
+### Expected behavior
+
+Ability to set the worldFocusDistance and get that distance in focus.
+
+### Library versions used
+
+ - Three: 0.145.4
+ - Post Processing: 6.29.1
+
+### Desktop
+
+ - OS: Windows 10 and 11
+ - Browser Chrome
+ - Graphics hardware: RTX 2070 Max-Q and RTX 3070
 
 ## Expected Correct Output
 A fullscreen red channel close to zero: a single plane at view-space z = −5.5, rendered under near=1/far=10 perspective, compared against a focus distance of 5.5, is exactly at the focus plane. CoC (= red channel) should be ~0 everywhere, so the center pixel reads `R ≈ 0`.
@@ -9,7 +50,9 @@ A fullscreen red channel close to zero: a single plane at view-space z = −5.5,
 ## Actual Broken Output
 The center pixel reads `R ≈ 104` (out of 255), because the depth buffer stores ~0.909 for a perspective fragment at z=−5.5 while the shader's linear "focus depth" is 0.5. `|0.909 − 0.5| ≈ 0.409` is written into the red channel and the plane renders uniformly red instead of black. Reruns with `uFocusDist = 1.0` (near plane) or `uFocusDist = 10.0` (far plane) produce `R ≈ 0` as expected, demonstrating the nonlinearity: only the endpoints satisfy the shader's linear assumption.
 
-## Ground Truth Diagnosis
+## Ground Truth
+Under a perspective projection, the DepthOfFieldEffect's circle-of-confusion (CoC) shader computed per-fragment focus by comparing the scene depth texture to a target depth derived from `worldFocusDistance`. When the `PERSPECTIVE_CAMERA` define was absent from `cocMaterial`, the shader treated the depth-buffer value as already linear in `[near, far]` and the target depth as `(focusDist - near) / (far - near)`. The depth buffer stores a nonlinear, perspective-encoded value, so the two sides of the CoC comparison use incompatible units. The equation accidentally holds only at the endpoints (near-plane depth = 0, far-plane depth = 1), which is why focus "works" when the target is at the clip planes but drifts toward the near plane for every distance in between.
+
 Two independent comments on the thread identify the root cause. First, maintainer @vanruesc (comment 9) acknowledges that the CoC path assumes a linear mapping that only matches an orthographic camera:
 
 > The unexpected behaviour that can be observed when the target is off-center has to do with perspective projection. The object would probably remain in focus at all times with an orthographic camera. The effect translates the world distance to a linear, orthographic depth value which basically counters the perspective projection.
@@ -64,6 +107,14 @@ spec:
   actual_when_buggy_rgb: [104, 0, 0]
   actual_tolerance: 16
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/pmndrs/postprocessing
+- **SHA**: c2634bd3e8b906bd7f1af3824d33563b9c6f47a3
+- **Relevant Files**:
+  - src/materials/CircleOfConfusionMaterial.ts  # default-branch SHA at issue close (full distance-based fix in v6.38.0); (inferred)
+  - src/materials/glsl/convolution.coc.frag
+  - src/effects/DepthOfFieldEffect.ts
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes

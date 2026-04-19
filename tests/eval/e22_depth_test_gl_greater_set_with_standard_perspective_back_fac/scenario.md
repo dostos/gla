@@ -1,7 +1,14 @@
 # E22_DEPTH_TEST_GL_GREATER_SET_WITH_STANDARD_PERSPECTIVE_BACK_FAC: Back quad occludes front quad under leaked GL_GREATER
 
-## Bug
-A helper that configured a reversed-Z depth prepass sets `glDepthFunc(GL_GREATER)` and `glClearDepth(0.0)`, then returns. The main render path assumes defaults and never resets the depth function, so with standard perspective projection the farther quad wins the depth test against the nearer quad.
+## User Report
+I draw two quads with a standard perspective camera: a near red quad at
+view z=-2 and a far blue quad at view z=-5. The near quad should
+completely occlude the far one — center pixel should be red (~RGBA
+255,0,0,255). Instead the center pixel renders blue (~RGBA 0,0,255,255):
+the far quad wins. Depth test is enabled, depth mask is on, the geometry
+is correct, both shaders compile, and there are no GL errors. There's a
+helper called once at startup to "configure depth pipeline" but it
+appears to deal with prepass setup that doesn't run here.
 
 ## Expected Correct Output
 Center pixel red: RGBA ≈ `(255, 0, 0, 255)`. The near red quad at view z=-2 should cover the far blue quad at view z=-5.
@@ -9,8 +16,20 @@ Center pixel red: RGBA ≈ `(255, 0, 0, 255)`. The near red quad at view z=-2 sh
 ## Actual Broken Output
 Center pixel blue: RGBA ≈ `(0, 0, 255, 255)`. The far (back) quad paints and the near (front) quad is rejected by depth test.
 
-## Ground Truth Diagnosis
-`configure_depth_pipeline()` leaves `GL_DEPTH_FUNC=GL_GREATER` and `GL_DEPTH_CLEAR_VALUE=0.0` in the context. After the "reset" block in `main`, those two pieces of state are never overwritten. On frame clear the depth buffer fills with `0.0`; the back quad (window-depth ≈ 0.95) passes `0.95 > 0.0` and writes. The front quad (window-depth ≈ 0.75) then fails `0.75 > 0.95` and is discarded. The net effect is inverted occlusion: back occludes front.
+## Ground Truth
+A helper that configured a reversed-Z depth prepass sets
+`glDepthFunc(GL_GREATER)` and `glClearDepth(0.0)`, then returns. The main
+render path assumes defaults and never resets the depth function, so
+with standard perspective projection the farther quad wins the depth
+test against the nearer quad.
+
+`configure_depth_pipeline()` leaves `GL_DEPTH_FUNC=GL_GREATER` and
+`GL_DEPTH_CLEAR_VALUE=0.0` in the context. After the "reset" block in
+`main`, those two pieces of state are never overwritten. On frame clear
+the depth buffer fills with `0.0`; the back quad (window-depth ≈ 0.95)
+passes `0.95 > 0.0` and writes. The front quad (window-depth ≈ 0.75)
+then fails `0.75 > 0.95` and is discarded. Fix: restore
+`glDepthFunc(GL_LESS)` and `glClearDepth(1.0)` before the main draws.
 
 ## Difficulty Rating
 **Moderate (3/5)**
@@ -23,13 +42,9 @@ The main render loop looks textbook — back-to-front painter's order with depth
 
 ## How OpenGPA Helps
 
-The specific query that reveals the bug:
-
-```
-inspect_drawcall(frame="current", draw_call_index=1)
-```
-
-The returned state snapshot for the second draw shows `depth_test=ENABLED`, `depth_func=GL_GREATER`, and `clear_depth=0.0`. Seeing `GL_GREATER` attached to a draw that uses a standard forward perspective matrix (near plane 0.1, far 100.0) immediately fingers the inverted predicate — no shader walk or projection math required.
+OpenGPA exposes the active depth-test state (function, clear value, mask)
+on every draw call, so an inverted predicate left over from a helper is
+visible without source tracing.
 
 ## Tier
 core

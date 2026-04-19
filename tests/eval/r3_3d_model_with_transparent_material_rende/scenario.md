@@ -90,6 +90,14 @@ spec:
     reason: "opaque overlapping geometry drawn with depth writes disabled"
 ```
 
+## Upstream Snapshot
+- **Repo**: https://github.com/mrdoob/three.js
+- **SHA**: 18ae441f1cf275971bcdcef25be03f6f67965690
+- **Relevant Files**:
+  - src/renderers/WebGLRenderer.js  # default-branch SHA at issue close (no PR; modeling-only workaround); (inferred)
+  - src/renderers/webgl/WebGLState.js
+  - src/materials/Material.js
+
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes
 - **Reasoning**: The bug is invisible from shader source and vertex data —

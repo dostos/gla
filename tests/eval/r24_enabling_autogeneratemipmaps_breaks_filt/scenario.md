@@ -1,7 +1,46 @@
 # R5_ENABLING_AUTOGENERATEMIPMAPS_BREAKS_FILT: Mipmap levels allocated but never populated cause filter sampling to read uninitialized data
 
-## Bug
-A render-target texture is allocated with multiple mipmap levels, but only level 0 is ever rendered into. A subsequent "filter" pass samples the texture at a LOD greater than 0 (either explicitly via `textureLod` or implicitly via derivatives / `LOD bias` / a smaller filter framebuffer). The GPU reads from uninitialized higher mip levels and produces corrupt output — typically black or driver-dependent garbage — instead of the scene content that was rendered into level 0.
+## User Report
+### PixiJS version
+
+8.14.0
+
+### Link to minimal reproduction
+
+https://codesandbox.io/p/sandbox/hardcore-rosalind-89vxfs
+
+### Steps to reproduce
+
+Open the link and observe the bunny fading away with the pinch filter when
+`PIXI.TextureSource.defaultOptions.autoGenerateMipmaps` is set to `true`.
+
+### What is expected?
+
+Setting `PIXI.TextureSource.defaultOptions.autoGenerateMipmaps` to `true`
+shouldn't affect filter sampling as that doesn't make any sense. The bunny
+should be fully visible and pinched correctly.
+
+### What is actually happening?
+
+Enabling mipmaps causes the `TexturePool` to create render textures with
+mipmap levels which are never populated with any real data. This causes
+filters that do scaled UV sampling to sample invalid or "corrupt" data.
+
+### Environment
+
+- **Browser & Version**: Chrome Version 141.0.7390.67 (Official Build) (64-bit)
+- **OS & Version**: Windows 11 Home 26200.6725
+
+### Any additional comments?
+
+As per #11304 there is no other way to generate mipmaps for `Text` than to
+enable the mipmap generation by default. While it would be possible to set
+`PIXI.TexturePool.textureOptions.autoGenerateMipmaps = false` to fix the
+filter issue, unfortunately the `TexturePool` is also used by the text
+rendering which will also disable it for `Text` instances.
+
+Ideally I would like to have the mipmaps enabled for text and disabled for
+filters. That doesn't seem to be possible due to this issue.
 
 ## Expected Correct Output
 The full-screen quad should show the scene rendered into level 0 (a UV-derived gradient). At the center of the window, the pixel should be a non-black color roughly `(128, 128, 51)` reflecting the fragment-shader output `vec4(uv, 0.2, 1)` at `uv=(0.5, 0.5)`.
@@ -9,7 +48,7 @@ The full-screen quad should show the scene rendered into level 0 (a UV-derived g
 ## Actual Broken Output
 The center pixel is black (or undefined / driver-dependent garbage), because the filter fragment shader sampled level 2 of the render-target texture, which was allocated but never written. The rendered scene content exists only on level 0 and is not visible in the composited frame.
 
-## Ground Truth Diagnosis
+## Ground Truth
 The PixiJS `TexturePool` creates filter render targets with mipmap storage allocated whenever `TextureSource.defaultOptions.autoGenerateMipmaps = true` (needed so `PIXI.Text` can mipmap), but after rendering into the filter target it never calls `glGenerateMipmap`. Filter shaders that sample with a non-zero effective LOD then read uninitialized mip levels:
 
 > Enabling mipmaps causes the `TexturePool` to create render textures with mipmap levels which are never populated with any real data. This causes filters that do scaled UV sampling to sample invalid or "corrupt" data.
@@ -58,6 +97,14 @@ spec:
   broken_rgb: [0, 0, 0]
   note: "Correct frame has level-0 gradient visible at center (roughly (128,128,51)). Broken frame samples uninitialized mip level 2 → typically all-zero black."
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/pixijs/pixijs
+- **SHA**: 2146b890a6a6ccda74d24dbff62cfc63e2a8787a
+- **Relevant Files**:
+  - src/rendering/renderers/shared/texture/TexturePool.ts  # base of fix PR #11865 (mipmap key in TexturePool)
+  - src/filters/defaults/FilterPipe.ts
+  - src/rendering/renderers/shared/texture/TextureSource.ts
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes

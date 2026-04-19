@@ -1,14 +1,31 @@
 # R5_BUG_IN_RENDERING_GLB_MODELS: 16-bit index buffer overflow on large mesh
 
-## Bug
+## User Report
 
-A 3D model with more than 65,535 vertices is drawn through an engine that
-hard-codes `GL_UNSIGNED_SHORT` (16-bit) index buffers. Any logical index
-`i >= 65536` is silently truncated to `i & 0xFFFF` when written into the
-`GLushort` array, so triangles/points that should reference the upper portion
-of the vertex buffer instead dereference low-index vertices. The rendered
-geometry is scrambled; entire regions of the model are missing or collapsed
-back onto unrelated vertex data.
+### mapbox-gl-js version
+
+v3.15.0
+
+### Browser and version
+
+Chrome, Safari, Edge
+
+### Expected behavior
+
+The GLB model renders correctly.
+
+### Actual behavior
+
+The GLB model renders incorrectly.
+
+### Link to the demonstration
+
+https://codepen.io/woyehenni/pen/jEWNrVZ
+
+### Steps to trigger the unexpected behavior
+
+My glb model file:
+https://3d-map.s3.jp-tok.cloud-object-storage.appdomain.cloud/test-model/Marina_c.glb
 
 ## Expected Correct Output
 
@@ -23,7 +40,7 @@ Only the green bottom strip is visible. The top red strip is missing — its
 rendered green vertices at y = -0.5. The top half of the frame contains zero
 non-black fragments and zero red pixels anywhere in the image.
 
-## Ground Truth Diagnosis
+## Ground Truth
 
 The upstream Mapbox GL JS maintainer pinpoints the limit in a reply to the
 report:
@@ -104,6 +121,14 @@ spec:
   expected_min_fraction: 0.02
   tolerance: 32
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/mapbox/mapbox-gl-js
+- **SHA**: fc919f4c171a4b0ed4a621092447723b3f7c8305
+- **Relevant Files**:
+  - 3d-style/data/model.ts  # default-branch SHA at issue close (no fix — 16-bit index is engine limit); (inferred)
+  - 3d-style/source/model_loader.ts
+  - src/data/segment.ts
 
 ## Predicted OpenGPA Helpfulness
 

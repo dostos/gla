@@ -1,7 +1,12 @@
 # E17_UNIFORM_TYPE_MISMATCH_GLUNIFORM1F_USED_FOR_A_VEC3_UNIFORM_RE: glUniform1f on a vec3 tint uniform is silently ignored
 
-## Bug
-The code sets the `u_tint` uniform (declared `vec3` in the fragment shader) with `glUniform1f`. GL rejects the type-mismatched call with `GL_INVALID_OPERATION` and performs no update, so the uniform stays at its default `(0,0,0)` and the quad renders black instead of warm orange.
+## User Report
+A large quad covering my framebuffer should render warm orange (~RGBA
+255,140,25,255 at the center pixel) — it's tinted by a `u_tint` uniform
+I'm setting on the CPU side. Instead the quad renders solid black
+(0,0,0,255). Shaders compile, the program links, the draw issues, no GL
+errors are printed in the loop. The line of code that sets the tint runs
+every frame and the value I'm passing on the CPU side is correct.
 
 ## Expected Correct Output
 The 400x300 framebuffer is covered by a large quad tinted warm orange. Center pixel RGBA ≈ `(255, 140, 25, 255)` — i.e. `(1.0, 0.55, 0.10)` scaled to 8-bit.
@@ -9,8 +14,19 @@ The 400x300 framebuffer is covered by a large quad tinted warm orange. Center pi
 ## Actual Broken Output
 The quad renders solid black. Center pixel RGBA = `(0, 0, 0, 255)`. The printed line reads `center RGBA = 0 0 0 255`.
 
-## Ground Truth Diagnosis
-`glUniform1f(loc_tint, 1.0f)` targets a uniform the shader declared as `vec3`. The GL spec requires the setter function's component count and base type to match the uniform's GLSL type; on mismatch the driver raises `GL_INVALID_OPERATION` and leaves the uniform unchanged. Because the uniform was never successfully written, it holds its default `(0,0,0)`, and the fragment shader emits `vec4(0,0,0,1)` for every fragment of the quad. The author clearly believed they were setting a red/orange tint (the `1.0f` lands in the R slot only if `glUniform3f` were used), but the silent failure produces a black quad.
+## Ground Truth
+The code sets the `u_tint` uniform (declared `vec3` in the fragment
+shader) with `glUniform1f`. GL rejects the type-mismatched call with
+`GL_INVALID_OPERATION` and performs no update, so the uniform stays at
+its default `(0,0,0)` and the quad renders black instead of warm orange.
+
+The GL spec requires the setter function's component count and base type
+to match the uniform's GLSL type; on mismatch the driver raises
+`GL_INVALID_OPERATION` and leaves the uniform unchanged. Because the
+uniform was never successfully written, it holds its default `(0,0,0)`,
+and the fragment shader emits `vec4(0,0,0,1)` for every fragment of the
+quad. Fix: replace `glUniform1f(loc_tint, 1.0f)` with
+`glUniform3f(loc_tint, 1.0f, 0.55f, 0.10f)`.
 
 ## Difficulty Rating
 **Moderate (3/5)**
@@ -23,13 +39,10 @@ The mistake is a one-character difference (`glUniform1f` vs `glUniform3f`) at a 
 
 ## How OpenGPA Helps
 
-The specific query that reveals the bug:
-
-```
-inspect_drawcall(frame=1, draw_call_index=0)
-```
-
-The response lists the program's active uniforms with their current values. `u_tint` appears as `vec3` with value `(0.0, 0.0, 0.0)` and a note that the most recent setter call for this location was `glUniform1f` (error `GL_INVALID_OPERATION`). Seeing a vec3 uniform still at its zero default while the code "set" it immediately localizes the bug to the setter's type, not the shader or vertex data.
+OpenGPA reports each program's active uniforms with their declared GLSL
+type and the value resolved at draw time, plus per-uniform setter history.
+A `vec3` uniform sitting at its zero default after a "set" call surfaces
+the type mismatch directly.
 
 ## Tier
 core

@@ -1,22 +1,15 @@
 # E2: NaN Propagation
 
-## Bug
+## User Report
 
-The model matrix is constructed with a Z scale of 0 (`model[10] = 0.0f`),
-intended to flatten the object to a shadow plane. The CPU then computes
-the normal matrix as `transpose(inverse(model))`. Inverting a singular
-matrix (determinant = 0) produces Inf values; Inf multiplied by the zero
-column then produces NaN. The NaN propagates into every fragment's normal
-vector, causing `max(dot(normalize(NaN), lightDir), 0.0)` to evaluate to
-0, so all fragments receive zero diffuse contribution and render black.
-
-**Location:** `e2_nan_propagation.c`:
-
-```c
-model[10] = 0.0f;  // Z scale = 0  <-- the bug
-// ...
-float inv_det = 1.0f / det;  // det == 0 -> inv_det = Inf
-```
+I'm rendering a quad with simple diffuse lighting and a directional light at
+`(1, 1, 2)`. Instead of the expected gradient from ambient grey to bright
+white, the entire quad renders solid near-black — only the ambient term
+seems to contribute. The shader compiles cleanly, `glGetError` returns
+`GL_NO_ERROR` every frame, and the light direction and color uniforms read
+back correctly on the CPU side. I've tried tweaking the light direction with
+no change. The object is intentionally being flattened to a shadow plane
+this frame (a common pre-pass step in my engine).
 
 ## Expected Correct Output
 
@@ -30,7 +23,15 @@ The entire quad renders solid near-black (`vec3(0.05)` from the ambient
 term only). No error is printed; `glGetError` returns `GL_NO_ERROR` because
 NaN in a uniform is not an OpenGL error.
 
-## Ground Truth Diagnosis
+## Ground Truth
+
+The model matrix is constructed with a Z scale of 0 (`model[10] = 0.0f`),
+intended to flatten the object to a shadow plane. The CPU then computes
+the normal matrix as `transpose(inverse(model))`. Inverting a singular
+matrix (determinant = 0) produces Inf values; Inf multiplied by the zero
+column then produces NaN. The NaN propagates into every fragment's normal
+vector, causing `max(dot(normalize(NaN), lightDir), 0.0)` to evaluate to 0,
+so all fragments receive zero diffuse contribution and render black.
 
 `model[10] = 0` makes the matrix singular. The CPU-side normal matrix
 computation divides by `det = 0`, yielding Inf in every matrix element.
@@ -66,23 +67,7 @@ and knowing IEEE 754 NaN semantics in GLSL.
 
 ## How OpenGPA Helps
 
-```
-inspect_drawcall(draw_id=1, query="shader")
-```
-
-OpenGPA captures uniform values at draw time. The output would show:
-
-```json
-{
-  "uNormalMatrix": [
-    [Inf,  Inf,  Inf],
-    [Inf,  Inf,  Inf],
-    [Inf,  Inf,  Inf]
-  ],
-  "uModel[10]": 0.0
-}
-```
-
-Seeing Inf in `uNormalMatrix` immediately points to the singular model
-matrix. A code-only agent must mentally execute the matrix inversion or
-add debug prints and recompile, which is significantly slower.
+OpenGPA captures uniform values at draw time, so derived matrices that
+contain Inf or NaN are visible in the per-draw snapshot rather than only
+inside the shader. A code-only agent must mentally execute the matrix
+inversion or add debug prints and recompile, which is significantly slower.

@@ -1,6 +1,27 @@
 # E7: Shader Include Order (Wrong saturate)
 
-## Bug
+## User Report
+
+My lit quad mostly looks right — diffuse + specular shading is visible —
+but the highlight in the middle is washed out. Instead of a defined bright
+spot, the entire highlight area saturates to flat white with no shape. I
+suspected my light intensity was too high or my gamma was off, but
+adjusting them just shifts where the saturation begins; the highlight
+shape is still gone. The fragment shader compiles cleanly; no warnings.
+
+## Expected Output
+
+A smoothly lit quad with diffuse + specular lighting. Highlights should be
+white (1.0, 1.0, 1.0) but not blown out beyond that.
+
+## Actual Output
+
+The highlight region of the quad is over-bright: the white channel computes
+to values around (4.0, 4.0, 4.0) internally, which clamps to solid white at
+the framebuffer but loses all specular shape. The quad looks uniformly
+washed out at the highlight center.
+
+## Ground Truth
 
 The fragment shader contains two `saturate()` helper blocks that simulate
 competing include files. The active definition is:
@@ -15,20 +36,6 @@ above it. Lighting code multiplies the specular term by 3.0 and then calls
 definition only clamps at 0, the specular channel exceeds 1.0 and writes
 HDR values into the standard `[0, 1]` framebuffer, saturating at the display
 stage rather than in the shader.
-
-## Expected Output
-
-A smoothly lit quad with diffuse + specular lighting. Highlights should be
-white (1.0, 1.0, 1.0) but not blown out beyond that.
-
-## Actual Output
-
-The highlight region of the quad is over-bright: the white channel computes
-to values around (4.0, 4.0, 4.0) internally, which clamps to solid white at
-the framebuffer but loses all specular shape. The quad looks uniformly
-washed out at the highlight center.
-
-## Ground Truth Diagnosis
 
 `saturate(x) = max(x, 0.0)` does not clamp the upper bound.
 **Fix**: replace with `clamp(x, 0.0, 1.0)` (the commented-out line above).
@@ -53,9 +60,9 @@ alternative and recognizing that `max(x, 0)` is not a complete `saturate`.
 - **Comment noise**: The correct implementation is visibly present but marked
   as inactive, creating confusion about intent.
 
-## OpenGPA Advantage
+## How OpenGPA Helps
 
-`query_pixel` at the highlight area returns a raw color channel value > 1.0,
-immediately indicating that shader output is exceeding the normalised range.
-This directs attention to clamping logic in the fragment shader rather than
-to geometry, transforms, or light position.
+OpenGPA can sample the raw fragment color at the highlight pixel,
+revealing whether the shader is producing values out of the [0, 1] range
+before framebuffer clamping. That redirects attention from light/geometry
+to the shader's clamping logic.

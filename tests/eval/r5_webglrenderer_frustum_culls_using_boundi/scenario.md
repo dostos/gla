@@ -1,12 +1,9 @@
 # R5_WEBGLRENDERER_FRUSTUM_CULLS_USING_BOUNDI: Transparent depth sort uses object origin instead of bounding-sphere center
 
-## Bug
-The renderer sorts transparent draw calls by each object's origin
-(`matrixWorld` translation) rather than by the world-space center of its
-bounding sphere. When modelers "apply" or "freeze" transforms, the origin
-no longer reflects where the geometry actually lives, so two overlapping
-transparent objects can be drawn in the wrong back-to-front order,
-producing incorrectly blended pixels.
+## User Report
+https://github.com/mrdoob/three.js/blob/fb46a77f8ef9f82992b5119c834ae72ad1f46578/src/renderers/WebGLRenderer.js#L1318
+
+Wouldn't it be more consistent to also sort by bounding-sphere-center? Then transparent objects don't all need to be centered around their origin. And this would be more consistent with other engines.
 
 ## Expected Correct Output
 With the two transparent quads blended back-to-front by their bounding-
@@ -19,7 +16,14 @@ drawn last), the central overlap region is instead blue-dominant —
 roughly `(R≈0.25, G≈0.00, B≈0.50)`. Red and blue channels are swapped
 relative to the correct result.
 
-## Ground Truth Diagnosis
+## Ground Truth
+The renderer sorts transparent draw calls by each object's origin
+(`matrixWorld` translation) rather than by the world-space center of its
+bounding sphere. When modelers "apply" or "freeze" transforms, the origin
+no longer reflects where the geometry actually lives, so two overlapping
+transparent objects can be drawn in the wrong back-to-front order,
+producing incorrectly blended pixels.
+
 The reporter observes that the renderer *culls* by bounding sphere but
 *sorts* by origin, citing the relevant line in `WebGLRenderer.js`:
 
@@ -91,6 +95,14 @@ spec:
     512x512 framebuffer. Correct back-to-front sort yields a red-dominant
     blend; the buggy origin-based sort yields a blue-dominant blend.
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/mrdoob/three.js
+- **SHA**: 0319a2a421aea8ea3aa4b45235ce06da7be8235f
+- **Relevant Files**:
+  - src/renderers/WebGLRenderer.js  # default-branch SHA at issue close; fix landed via PRs #25913/#25974; (inferred)
+  - src/renderers/webgl/WebGLRenderLists.js
+  - src/core/Object3D.js
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes

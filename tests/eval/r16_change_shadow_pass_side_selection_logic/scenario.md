@@ -1,7 +1,19 @@
 # R16_CHANGE_SHADOW_PASS_SIDE_SELECTION_LOGIC: Shadow pass culls the wrong face side
 
-## Bug
-During the shadow-map depth pass, the renderer enables front-face culling. For a caster whose visible surface to the light is its front face (the common case for closed-mesh surfaces oriented toward the light), this discards the exact triangles that should populate the shadow map. Downstream, the lit pass samples the shadow map and concludes those surfaces never occluded the light, producing missing shadows or peter-panning.
+## User Report
+### Description
+
+Shadow rendering appears to use an incorrect face side in some cases. Objects that are not visible to the light source may still cast shadows, while objects oriented toward the light source may fail to cast them correctly.
+
+This results in two main problems (I can reproduce it in Three.js Editor and with WebGPURenderer):
+
+1) Objects that should cast shadows sometimes fail to do so.
+
+2) Peter-panning artifacts in certain scenarios.
+
+### Version
+
+r0.183.2
 
 ## Expected Correct Output
 The shadow-caster triangle (CCW as seen from the light) rasterizes into the depth target, and the center pixel of the diagnostic framebuffer is red (rendered caster). Equivalently: a shadow-map pass should retain front-facing casters so the lit pass can compare against them.
@@ -9,7 +21,9 @@ The shadow-caster triangle (CCW as seen from the light) rasterizes into the dept
 ## Actual Broken Output
 The triangle is culled before rasterization because its CCW winding marks it as a front face and `glCullFace(GL_FRONT)` discards exactly those. The center pixel is black (clear color); the caster contributes nothing to the depth target, so downstream the surface is treated as unshadowed.
 
-## Ground Truth Diagnosis
+## Ground Truth
+During the shadow-map depth pass, the renderer enables front-face culling. For a caster whose visible surface to the light is its front face (the common case for closed-mesh surfaces oriented toward the light), this discards the exact triangles that should populate the shadow map. Downstream, the lit pass samples the shadow map and concludes those surfaces never occluded the light, producing missing shadows or peter-panning.
+
 The upstream issue pins the visible symptoms to shadow-pass face selection:
 
 > Shadow rendering appears to use an incorrect face side in some cases. Objects that are not visible to the light source may still cast shadows, while objects oriented toward the light source may fail to cast them correctly.
@@ -61,6 +75,14 @@ spec:
   actual_dominant: "black (caster culled by glCullFace(GL_FRONT) during shadow pass)"
   tolerance: "red channel > 128 ⇒ correct; red channel ~0 ⇒ bug"
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/mrdoob/three.js
+- **SHA**: 75ec9d4f5682822af75c74729744caee41915c19
+- **Relevant Files**:
+  - src/renderers/common/ShadowMap.js  # default-branch SHA at issue close; related xref PR #33168 not merged; (inferred)
+  - src/renderers/common/RenderObject.js
+  - src/materials/Material.js
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes

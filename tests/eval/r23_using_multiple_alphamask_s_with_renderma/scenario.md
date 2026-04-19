@@ -1,15 +1,61 @@
 # R1_PIXIJS_ALPHAMASK_STALE_MAPCOORD: Pooled mask texture reused without refreshing UV-transform uniform
 
-## Bug
-Two consecutive `AlphaMask` filter applies share the same pooled
-framebuffer texture object. Between the two applies, the pool returns the
-texture, the second mask repopulates it with a different sub-region
-(70x110 instead of 100x80), and the filter is invoked again. The shader's
-`mapCoord` uniform — which encodes how the live sub-region maps into the
-128x128 pooled source — is supposed to be refreshed each invoke, but the
-texture-matrix setter early-returns whenever the underlying texture
-*handle* matches its previous value. So draw call 2 inherits draw call 1's
-`mapCoord` and samples the new mask data through the wrong UV transform.
+## User Report
+### PixiJS version
+
+8.17.0
+
+### Link to minimal reproduction
+
+https://stackblitz.com/edit/pixijs-v8-v9aazsue?file=src%2Fmain.js
+
+### Steps to reproduce
+
+1. Create two differently-sized shapes which will act as alpha masks. In this
+   case, we'll do a 100x80 rectangle and a 70x110 rectangle.
+   ```ts
+   const maskRectA = new Graphics().rect(10, 20, 100, 80).fill(0xffffff);
+   maskRectA.position.set(20, 50);
+
+   const maskRectB = new Graphics().rect(5, 5, 70, 110).fill(0xffffff);
+   maskRectB.position.set(290, 45);
+   ```
+2. Create `AlphaMask` instances for these mask shapes with
+   `renderMaskToTexture = true`.
+   ```ts
+   const alphaMaskA = new AlphaMask({ mask: maskRectA });
+   alphaMaskA.renderMaskToTexture = true;
+
+   const alphaMaskB = new AlphaMask({ mask: maskRectB });
+   alphaMaskB.renderMaskToTexture = true;
+   ```
+3. Apply these alpha masks to some arbitrary display objects.
+
+### What is expected?
+
+- `alphaMaskA` should mask `squareA` to a 100x80 area.
+- `alphaMaskB` should mask `squareB` to a 70x110 area.
+
+### What is actually happening?
+
+`alphaMaskA` applies as expected, but `alphaMaskB` does not.
+
+- `alphaMaskA` correctly masks `squareA` to a 100x80 area.
+- `alphaMaskB`, however, masks `squareB` to a ~50x110 area instead of the
+  expected 70x110 area.
+
+### System Info
+
+```
+OS: macOS 14.8.4
+Browser: Chrome 146.0.7680.165
+```
+
+### Any additional comments?
+
+I have a workaround which patches `MaskFilter.apply()` to make sure
+`this._textureMatrix.update()` is called first. I included this patch in the
+repro I shared. I doubt that patch is a holistic fix.
 
 ## Expected Correct Output
 - Left half: 130x130 green square, masked to a 100x80 axis-aligned region.
@@ -23,7 +69,7 @@ texture-matrix setter early-returns whenever the underlying texture
   ~50x110 strip rather than the intended 70x110 rectangle. (The reporter
   observed exactly this in the linked StackBlitz repro.)
 
-## Ground Truth Diagnosis
+## Ground Truth
 The reporter's flow analysis traces the bug to `MaskFilter._textureMatrix`
 short-circuiting on identical texture references inside `MaskFilter.apply()`:
 
@@ -94,6 +140,14 @@ spec:
   expected_state:
     draw_1: { uMapCoord: [0.546875, 0.859375] }
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/pixijs/pixijs
+- **SHA**: 6e59c6fd0fb031f661f4d7db99dd44f45f5e4ef1
+- **Relevant Files**:
+  - src/filters/mask/MaskFilter.ts  # base of fix PR #11997 (TextureMatrix forced update on pooled reuse)
+  - src/rendering/renderers/shared/texture/TextureMatrix.ts
+  - src/rendering/renderers/shared/texture/TexturePool.ts
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes

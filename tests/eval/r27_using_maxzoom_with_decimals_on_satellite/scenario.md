@@ -1,12 +1,39 @@
 # R2_USING_MAXZOOM_WITH_DECIMALS_ON_SATELLITE: Fractional maxZoom renders black satellite tiles under 3D terrain (mapbox-gl-js)
 
-## Bug
-In mapbox-gl-js v3.15.0–v3.18.x, combining the satellite style with 3D
-terrain and a fractional `maxZoom` (e.g. `16.58`) causes some tiles to
-render solid black once the camera zooms in. Setting `maxZoom` to an
-integer (`16`) avoids the issue. The failure is specific to: satellite
-style + terrain enabled + fractional `maxZoom` + zooming in. Other
-combinations render correctly.
+> This scenario is snapshot-tier: diagnosis requires reading upstream code; capture is a context stub.
+
+## User Report
+### mapbox-gl-js version
+
+v3.15.0
+
+### Browser and version
+
+Firefox 142.0.1, Chromium 140.0.7339.127
+
+### Expected behavior
+
+When setting a `maxZoom`, I simply expect this max zoom value to be applied
+as limit without impact on the rendering.
+
+### Actual behavior
+
+When setting a `maxZoom` a numeric value with decimals (like `16.58`), on a
+map with satellite style and 3D terrain, some tiles are not correctly
+displayed (and appear black).
+
+Setting an integer value as `maxZoom` (like `16`) fixes the issue!
+
+### Link to the demonstration
+
+https://jsbin.com/tukedijime/edit?html,js,output
+
+### Steps to trigger the unexpected behavior
+
+- Add 3D terrain
+- Use satellite style (`mapbox://styles/mapbox/satellite-v9`)
+- Set `maxZoom` with decimals
+- Zoom in the map
 
 ## Expected Correct Output
 A seamless satellite-imagery mosaic draped on the terrain mesh. Every
@@ -21,7 +48,7 @@ aligned on the tile grid, indicating the failure is per-tile (not a
 fragment-shader artifact or a terrain-mesh seam). The raster imagery for
 those tiles is never visible to the user.
 
-## Ground Truth Diagnosis
+## Ground Truth
 The fix landed as commit
 `e730d17afb4a05af9f744ed783dee13d7e238425` with message
 "Fix empty tiles on non-integer maxZoom with terrain" and shipped in

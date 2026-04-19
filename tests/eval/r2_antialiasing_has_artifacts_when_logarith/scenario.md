@@ -1,7 +1,26 @@
 # R2_ANTIALIASING_HAS_ARTIFACTS_WHEN_LOGARITH: gl_FragDepth write disables MSAA at geometry intersections
 
-## Bug
-When the fragment shader writes to `gl_FragDepth` on a multisampled framebuffer, the GPU silently falls back from per-sample to per-pixel fragment execution. All MSAA samples within a pixel receive the same color and depth, so coverage-based antialiasing stops smoothing geometry edges — most visibly at intersections where neighboring pixels straddle the depth-test boundary between two surfaces.
+## User Report
+When the logarithmic depth buffer is enabled, antialiasing fails in areas
+where geometry intersects or lines up. See screenshot below. It feels like
+this would be a common issue, but I couldn't find any other post on it.
+
+With logarithmic depth buffer enabled. Notice the jagged, aliased lines.
+
+With logarithmic depth buffer disabled.
+
+I've encountered this on desktop computers. I've seen it on both Linux Ubuntu
+and Fedora, in the Chrome browser. I don't remember how it looks in Windows,
+but it seems a bit strange if it would be different there?
+
+Right now we're at version 0.129.0 of threejs, but it's always been like this
+since we started using logarithmic depth (1-2 years ago), and it happens with
+all geometry.
+
+Is it like this for everyone else? Any idea how to fix it, or is it something
+we just have to live with?
+
+Thanks.
 
 ## Expected Correct Output
 Two intersecting triangles (blue and yellow) sharing a horizontal depth-test boundary at `y = 0`. With 4x MSAA, the intersection line is rendered as a smooth, ~1-pixel-wide blended transition band where pixels straddling the boundary have colors interpolated between pure blue and pure yellow.
@@ -9,7 +28,7 @@ Two intersecting triangles (blue and yellow) sharing a horizontal depth-test bou
 ## Actual Broken Output
 The intersection line is pixel-sharp. Pixels are either pure blue or pure yellow (within quantization tolerance); no blended transition pixels appear along the boundary. The `GL_SAMPLES=4` framebuffer is effectively rendering at 1 sample per pixel for coverage purposes.
 
-## Ground Truth Diagnosis
+## Ground Truth
 Writing to `gl_FragDepth` opts the fragment shader out of per-sample invocation. The outerra blog passage linked from the thread explains:
 
 > I presume that assigning to gl_FragDepth will break the logic of MSAA, where the fragment shader is executed once per pixel of the rasterized element. It means that in this case it outputs the same depth value for all MSAA pixel samples, which is not what we want - it disables the antialiasing.
@@ -72,6 +91,14 @@ spec:
   actual_when_buggy:
     blended_fraction_max: 0.005
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/mrdoob/three.js
+- **SHA**: 5e5d2711f5826972e8215f86781ead3c254abedd
+- **Relevant Files**:
+  - src/renderers/shaders/ShaderChunk/logdepthbuf_pars_fragment.glsl.js  # base of fix PR #29445 (reverse-z EXT_clip_control)
+  - src/renderers/shaders/ShaderChunk/logdepthbuf_fragment.glsl.js
+  - src/renderers/WebGLRenderer.js
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes

@@ -1,22 +1,14 @@
 # E9: Scissor Rect Not Reset
 
-## Bug
+## User Report
 
-A UI rendering pass enables `GL_SCISSOR_TEST` with a small rectangle
-(`glScissor(100, 100, 200, 100)`) to clip UI elements to a sub-region of the
-viewport. The subsequent 3D scene pass omits `glDisable(GL_SCISSOR_TEST)`,
-so all 3D draw calls are silently clipped to the same UI rectangle.
-
-```c
-/* UI pass */
-glScissor(100, 100, 200, 100);
-glEnable(GL_SCISSOR_TEST);
-glDrawArrays(...);  /* UI element */
-
-/* 3D pass — BUG: scissor still active */
-/* glDisable(GL_SCISSOR_TEST); <-- missing */
-glDrawArrays(...);  /* 3D content clipped! */
-```
+I render a UI element first, then the main 3D scene. The 3D scene is
+supposed to be a large blue triangle filling most of the viewport, with a
+small yellow UI rectangle in the middle. Instead, the UI rectangle looks
+correct but the blue triangle is clipped to a tiny rectangle in the same
+area as the UI element — as if it's only rendering inside the UI's
+bounding box. There are no GL errors. If I change the projection matrix
+the clipped region doesn't move.
 
 ## Expected Output
 
@@ -29,7 +21,12 @@ The yellow UI element appears correctly within its scissor rect. The blue
 3D triangle is clipped to the same 200×100 rectangle (x=100..300, y=100..200),
 making it appear as a small coloured patch rather than a large triangle.
 
-## Ground Truth Diagnosis
+## Ground Truth
+
+A UI rendering pass enables `GL_SCISSOR_TEST` with a small rectangle
+(`glScissor(100, 100, 200, 100)`) to clip UI elements to a sub-region of the
+viewport. The subsequent 3D scene pass omits `glDisable(GL_SCISSOR_TEST)`,
+so all 3D draw calls are silently clipped to the same UI rectangle.
 
 `GL_SCISSOR_TEST` was not disabled between the UI and 3D passes.
 **Fix**: add `glDisable(GL_SCISSOR_TEST)` immediately before the 3D pass, or
@@ -50,10 +47,8 @@ time of the 3D draw call, not just at the start of the frame.
   frustum error.
 - **No error signal**: GL happily clips geometry; no warning is issued.
 
-## OpenGPA Advantage
+## How OpenGPA Helps
 
-`inspect_drawcall(pipeline)` for the 3D draw call reports
-`scissor_enabled=true` and the exact rectangle `(100, 100, 200×100)`. This
-immediately identifies that the scissor test is still active during the 3D
-pass and shows the inherited UI rectangle, rather than requiring the developer
-to trace state across multiple render passes manually.
+OpenGPA reports the per-draw pipeline state, including scissor test enable
+and rectangle, so the residual UI scissor active during the 3D pass is
+visible in a single record without manually tracing state across passes.

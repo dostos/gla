@@ -1,7 +1,12 @@
 # E11_STATE_LEAK_GL_TEXTURE_2D_BINDING_FROM_PREVIOUS_DRAW_NEVER_RE: Second mesh inherits stale GL_TEXTURE_2D from first draw
 
-## Bug
-The right quad should sample the blue texture, but it samples the red texture because no `glBindTexture` call is issued between the first and second draw. The blue texture is created but never actually bound to `GL_TEXTURE_2D` before the second `glDrawArrays`.
+## User Report
+I'm drawing two textured quads: the left one with a red texture, the right
+one with a blue texture. Both texture uploads succeed (both IDs come back
+valid, both query as RGBA8 256x256). At runtime the right quad renders red
+instead of blue. The center pixel (200, 150) reads ~`(230, 40, 40, 255)`
+when I expect ~`(40, 60, 230, 255)`. No GL errors, the program runs and
+exits cleanly, and both shaders compile without warnings.
 
 ## Expected Correct Output
 A dark background with a red quad on the left half of the window and a blue quad on the right half. The center pixel (200, 150) lies inside the right quad and should read approximately RGBA `(40, 60, 230, 255)`.
@@ -9,8 +14,20 @@ A dark background with a red quad on the left half of the window and a blue quad
 ## Actual Broken Output
 Both quads render red. The left quad is correctly red, and the right quad is also red. The center pixel reads approximately RGBA `(230, 40, 40, 255)` instead of blue.
 
-## Ground Truth Diagnosis
-OpenGL's texture binding is a global piece of context state: `TEXTURE_BINDING_2D` on the active texture unit stays put until the next `glBindTexture(GL_TEXTURE_2D, ...)` call. Draw 0 binds `texRed` and leaves it bound. Draw 1 reuses the attribute setup helper but never rebinds, so `TEXTURE_BINDING_2D` is still `texRed` when the second `glDrawArrays` executes. The fragment shader samples `uTex` (which maps to texture unit 0), reads red texels, and paints the right quad red. `texBlue` is created and fully initialized but never becomes the active binding.
+## Ground Truth
+The right quad should sample the blue texture, but it samples the red
+texture because no `glBindTexture` call is issued between the first and
+second draw. The blue texture is created but never actually bound to
+`GL_TEXTURE_2D` before the second `glDrawArrays`.
+
+OpenGL's texture binding is a global piece of context state:
+`TEXTURE_BINDING_2D` on the active texture unit stays put until the next
+`glBindTexture(GL_TEXTURE_2D, ...)` call. Draw 0 binds `texRed` and leaves
+it bound. Draw 1 reuses the attribute setup helper but never rebinds, so
+`TEXTURE_BINDING_2D` is still `texRed` when the second `glDrawArrays`
+executes. The fragment shader samples `uTex` (which maps to texture unit
+0), reads red texels, and paints the right quad red. `texBlue` is created
+and fully initialized but never becomes the active binding.
 
 ## Difficulty Rating
 **Medium (2/5)**
@@ -24,13 +41,9 @@ Nothing in the source "looks wrong" — the second draw mirrors the structure of
 
 ## How OpenGPA Helps
 
-The specific query that reveals the bug:
-
-```
-inspect_drawcall(dc_id=1, include=['textures'])
-```
-
-The tool returns the bound texture objects for draw call 1. `TEXTURE_BINDING_2D` on unit 0 still points at the red texture object — the same object reported for draw call 0 — even though the second mesh was intended to use a different texture. Seeing identical texture IDs across both draws immediately flags that no rebind happened between them and points straight at the missing `glBindTexture` call.
+OpenGPA reports the bound texture object on each unit at every draw call,
+so identical bindings across two draws that should differ are immediately
+visible in the per-draw record.
 
 ## Tier
 core

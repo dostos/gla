@@ -1,12 +1,64 @@
 # R6_WEBGL_BACKEND_INSTANCENODE_UBO_EXCEEDS_G: InstanceNode UBO exceeds GL_MAX_UNIFORM_BLOCK_SIZE when hardcoded 1000-matrix budget assumes 64KB
 
-## Bug
-A shader declares a `std140` uniform block containing a large `mat4` array
-sized from a hardcoded budget (1000 matrices × 64 bytes ≈ 64KB). The code
-never queries `GL_MAX_UNIFORM_BLOCK_SIZE`, so on any driver reporting less
-than that budget (notably Chrome/ANGLE on macOS at 16384 bytes), the program
-fails to link. The draw call then does nothing and the `InstancedMesh`
-silently fails to render.
+## User Report
+### Description
+
+`InstanceNode` uses a hardcoded threshold of 1000 instances to decide between UBO (`buffer()`) and vertex attributes for instance matrices:
+
+https://github.com/mrdoob/three.js/blob/dev/src/nodes/accessors/InstanceNode.js#L153-L158
+
+```js
+// Both backends have ~64kb UBO limit; fallback to attributes above 1000 matrices.
+if ( count <= 1000 ) {
+    instanceMatrixNode = buffer( instanceMatrix.array, 'mat4', Math.max( count, 1 ) ).element( instanceIndex );
+} else {
+    // vertex attribute fallback
+}
+```
+
+This assumes a ~64KB UBO limit, but **Chrome/ANGLE on macOS reports `GL_MAX_UNIFORM_BLOCK_SIZE = 16384` bytes** (the WebGL2 spec minimum). Any `InstancedMesh` with more than **256 instances** (256 × 64 bytes = 16,384) will silently fail to render on Chrome because the `NodeBuffer` UBO exceeds the device limit.
+
+Safari and Firefox report 65,536 bytes, so the same code works fine there.
+
+### Reproduction
+
+```js
+import { WebGPURenderer } from 'three/webgpu'
+
+const renderer = new WebGPURenderer({ forceWebGL: true })
+
+const mesh = new InstancedMesh(geometry, material, 300) // 300 × 64 = 19,200 bytes > 16,384
+scene.add(mesh)
+renderer.render(scene, camera)
+```
+
+**Chrome**: shader fails with `Size of uniform block NodeBuffer_XXXXX in VERTEX shader exceeds GL_MAX_UNIFORM_BLOCK_SIZE (16384)`. The mesh does not render.
+
+**Safari / Firefox**: renders correctly (64KB UBO limit).
+
+### Suggested fix
+
+Query `GL_MAX_UNIFORM_BLOCK_SIZE` at init and compute the threshold dynamically instead of hardcoding 1000:
+
+```js
+const maxUBOSize = gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE);
+const maxInstancesInUBO = Math.floor(maxUBOSize / 64); // 64 bytes per mat4
+
+if (count <= maxInstancesInUBO) {
+    // UBO path
+} else {
+    // vertex attribute fallback
+}
+```
+
+### Environment
+
+- three.js version: r182
+- Browser: Chrome 133 (ANGLE/Metal backend on macOS)
+- OS: macOS 15.5
+- Renderer: `WebGPURenderer({ forceWebGL: true })`
+
+Issue I encounter while working on a client project / description written by Claude
 
 ## Expected Correct Output
 A triangle (or a grid of instanced triangles) rendered against the dark
@@ -20,7 +72,14 @@ that the uniform block size exceeds `GL_MAX_UNIFORM_BLOCK_SIZE`, and the
 subsequent draw generates `GL_INVALID_OPERATION` because the bound program
 is not linked.
 
-## Ground Truth Diagnosis
+## Ground Truth
+A shader declares a `std140` uniform block containing a large `mat4` array
+sized from a hardcoded budget (1000 matrices × 64 bytes ≈ 64KB). The code
+never queries `GL_MAX_UNIFORM_BLOCK_SIZE`, so on any driver reporting less
+than that budget (notably Chrome/ANGLE on macOS at 16384 bytes), the program
+fails to link. The draw call then does nothing and the `InstancedMesh`
+silently fails to render.
+
 The three.js `InstanceNode._createInstanceMatrixNode` picked between a UBO
 and a vertex-attribute fallback using a hardcoded threshold that assumed
 a ~64KB UBO budget, without consulting the device limit:

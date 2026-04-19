@@ -1,12 +1,28 @@
 # R15_GODOT_MOBILE_RENDERER_MACOS_TRANSPARENT_FLICKER: Godot 4.6 Mobile renderer flickers transparent materials on macOS/Metal
 
-## Bug
-When a Godot 4.6 project using the Mobile renderer is run on macOS with the
-Metal backend, meshes with transparent materials flicker / show stray
-fragments whenever the camera (or animated node) rotates. Disabling
-transparency hides the symptom. Reproducible only on macOS + Metal — not on
-MoltenVK (Vulkan-on-macOS), not on Compatibility, not on Linux/Vulkan, not
-on Android Mobile. Does not reproduce in Godot 4.5.1.
+## User Report
+### Tested versions
+
+Reproducible in: v4.6-beta1
+Not reproducible in: v4.5.1
+
+### System information
+
+MacOS 15.7.3 - Godot 4.6 beta1, Mobile Render, MacMini4 M4 Pro
+
+### Issue description
+
+A rendering error occurred when I upgraded Godot from 4.5.1 to 4.6 beta1. This issue is triggered by camera rotation, causing flickering in meshes using transparent materials during rendering.
+When I disabled material transparency, the issue disappeared. There was no problem when using the Forward+ and Compatibility renderers. The issue also did not occur when running the project on an Android phone with the Mobile Renderer. This problem only exists on macOS when using the Mobile Renderer.
+
+### Steps to reproduce
+
+1) open the project
+2) Click the Rotate Camera button several times(<10) until the issue occurs.
+
+### Minimal reproduction project (MRP)
+
+[test-1.zip] (attached)
 
 ## Expected Correct Output
 A transparent textured mesh rendered stably each frame as the camera
@@ -20,7 +36,14 @@ to jump, show at wrong positions/orientations, or have wrong alpha/colour —
 consistent with draws reading stale or garbled per-object uniforms from an
 earlier frame's buffer slice in the dynamic UBO ring.
 
-## Ground Truth Diagnosis
+## Ground Truth
+When a Godot 4.6 project using the Mobile renderer is run on macOS with the
+Metal backend, meshes with transparent materials flicker / show stray
+fragments whenever the camera (or animated node) rotates. Disabling
+transparency hides the symptom. Reproducible only on macOS + Metal — not on
+MoltenVK (Vulkan-on-macOS), not on Compatibility, not on Linux/Vulkan, not
+on Android Mobile. Does not reproduce in Godot 4.5.1.
+
 Per the upstream maintainer in the issue thread:
 
 > I can reproduce – must be an issue with the dynamic uniform buffers. They

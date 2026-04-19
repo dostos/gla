@@ -1,7 +1,53 @@
 # R17_SVG_PATH_SEEMS_TO_RENDER_WEIRD_IN_SOME_C: Coplanar quads z-fight at shared depth
 
-## Bug
-A foreground "SVG shape" quad and a background "ocean" quad are submitted at the same Z. Both pass the depth test against each other unpredictably, so fragments from the far quad leak through the near quad in a speckled pattern instead of the near quad cleanly occluding the far one.
+## User Report
+### Description
+
+I import a SVG with the parse function of SVGLoader.
+The result seems to be inconsistent: when i add an ocean shader underneath the imported path, it displays glitches on the shape (built with ShapeGeometry) or the extruded shape (built with ExtrudeGeometry).
+
+Ocean shader came from here: https://threejs.org/examples/webgl_shaders_ocean.html
+
+### Reproduction steps
+
+1. Import SVG ressource as text (parse function)
+2. Add water object (ocean)
+3. Create mesh, shape and lines then add it to the scene
+4. Move mouse to activate controls
+
+### Code
+
+**Add Ocean Shader (from three.js example)**
+```javascript
+const waterGeometry = new THREE.PlaneGeometry( 10000, 10000 );
+const water = new Water(waterGeometry, { /* ... */ });
+water.rotation.x = - Math.PI / 2;
+scene.add( water );
+```
+
+**SVG parse and load.**
+
+```javascript
+const loader = new SVGLoader();
+const svgData = loader.parse(svg);
+const svgGroup = new THREE.Group();
+svgGroup.scale.y *= -1;
+svgGroup.translateY(-0.5)
+svgData.paths.forEach((path) => {
+  const shapes = SVGLoader.createShapes(path);
+  shapes.forEach((shape) => {
+    const meshGeometry = new THREE.ExtrudeGeometry(shape, { depth: extrusion, bevelEnabled: false });
+    const mesh = new THREE.Mesh(meshGeometry, fillMaterial);
+    svgGroup.add(mesh, /* lines */);
+  });
+});
+svgGroup.rotateX(-Math.PI / 2);
+scene.add(svgGroup);
+```
+
+### Version
+
+r151.3, Chrome on Windows.
 
 ## Expected Correct Output
 The center region should show a solid red shape sitting cleanly on top of the dark teal ocean, with the ocean filling only the surrounding frame.
@@ -9,7 +55,9 @@ The center region should show a solid red shape sitting cleanly on top of the da
 ## Actual Broken Output
 The shape region shows an unstable mix of red and dark teal: depth values are mathematically equal, so `GL_LESS` rejects some shape fragments and the ocean bleeds through, producing the "glitches on the shape" the reporter observed.
 
-## Ground Truth Diagnosis
+## Ground Truth
+A foreground "SVG shape" quad and a background "ocean" quad are submitted at the same Z. Both pass the depth test against each other unpredictably, so fragments from the far quad leak through the near quad in a speckled pattern instead of the near quad cleanly occluding the far one.
+
 The water plane and the extruded SVG shape occupy the same plane in world space, so at rasterization their depth values collide and the depth test is effectively a tie-break. The maintainer diagnoses this directly:
 
 > The z-fighting potentially occurs since the water and the shape are coincident (meaning they lie in the same XZ plane). Lowering the height of the water mesh should fix that.
@@ -57,6 +105,13 @@ spec:
   failure_mode: mixed_with_background
   background_color: [0, 30, 15]
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/mrdoob/three.js
+- **SHA**: e4b8f3d623977586e16288e5590692b32771a970
+- **Relevant Files**:
+  - examples/jsm/loaders/SVGLoader.js  # default-branch SHA at issue close (user-side z-offset workaround); (inferred)
+  - src/renderers/WebGLRenderer.js
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes

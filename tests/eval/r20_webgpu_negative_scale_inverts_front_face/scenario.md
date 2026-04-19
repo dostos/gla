@@ -71,6 +71,14 @@ spec:
   tolerance: "red channel > 128 ⇒ correct; red channel ~0 ⇒ bug"
 ```
 
+## Upstream Snapshot
+- **Repo**: https://github.com/mrdoob/three.js
+- **SHA**: cf60b969c46b0b27e1262b1e24dff908480a89cf
+- **Relevant Files**:
+  - src/renderers/webgpu/WebGPUBackend.js  # base of fix PR #31769 (align frontFace/cullMode to WebGL)
+  - src/renderers/webgpu/utils/WebGPUPipelineUtils.js
+  - src/renderers/common/nodes/NodeMaterial.js
+
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes
 - **Reasoning**: The bug is a per-draw interaction between static pipeline state (`GL_FRONT_FACE`, `GL_CULL_FACE_MODE`) and a per-object uniform (model matrix determinant). OpenGPA's ability to correlate cull state with shader-uniform values for a specific draw call lets a developer see that mirrored meshes silently drop primitive counts, directly implicating the winding/cull convention rather than blending, depth, or geometry upload.

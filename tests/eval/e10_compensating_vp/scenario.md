@@ -1,22 +1,15 @@
 # E10: Compensating View/Projection Bugs
 
-## Bug
+## User Report
 
-Two independent matrix construction errors partially cancel each other:
-
-**Bug 1 — Left-handed lookAt** (`buggy_lookat`):  
-The forward vector is computed as `eye - center` instead of `center - eye`,
-producing a view matrix that looks in the opposite direction (+Z instead of
--Z).
-
-**Bug 2 — Inverted depth range** (`buggy_perspective`):  
-The projection matrix has `m[10]` and `m[14]` negated relative to the
-standard OpenGL perspective formula, inverting the NDC depth mapping.
-
-For a camera positioned on the +Z axis looking toward the origin, the two
-sign errors cancel in the depth dimension, making on-axis geometry appear
-at the correct depth and position. However, the X-axis handedness is still
-wrong: left-world maps to right-screen and vice versa.
+I'm rendering three triangles: a white one at the world origin, a red one
+to the left (x=-0.5), and a green one to the right (x=+0.5). From my
+default camera angle the scene looks fine — the white triangle is in the
+center, depth ordering is correct, depth precision is fine. But the red
+triangle shows up on the right side of the screen and the green one on the
+left. They're swapped. There are no GL errors and depth/coverage all look
+right; only the horizontal positions seem mirrored, but only for off-axis
+content.
 
 ## Expected Output
 
@@ -32,10 +25,23 @@ triangles are swapped: red appears on the **right** and green appears on the
 **left**. The scene looks plausible from the default camera angle, but all
 off-axis geometry is mirror-reflected.
 
-## Ground Truth Diagnosis
+## Ground Truth
 
-Two bugs; each is individually serious but they partially cancel on the
-depth axis while compounding on the X axis:
+Two independent matrix construction errors partially cancel each other:
+
+**Bug 1 — Left-handed lookAt** (`buggy_lookat`):
+The forward vector is computed as `eye - center` instead of `center - eye`,
+producing a view matrix that looks in the opposite direction (+Z instead of
+-Z).
+
+**Bug 2 — Inverted depth range** (`buggy_perspective`):
+The projection matrix has `m[10]` and `m[14]` negated relative to the
+standard OpenGL perspective formula, inverting the NDC depth mapping.
+
+For a camera positioned on the +Z axis looking toward the origin, the two
+sign errors cancel in the depth dimension, making on-axis geometry appear
+at the correct depth and position. However, the X-axis handedness is still
+wrong: left-world maps to right-screen and vice versa.
 
 | Bug | Location | Effect |
 |---|---|---|
@@ -44,7 +50,7 @@ depth axis while compounding on the X axis:
 | Combined | — | Depth looks OK; X is mirrored |
 
 **Fix Bug 1**: change `float fwd[3] = { ex-cx, ey-cy, ez-cz }` to
-`{ cx-ex, cy-ey, cz-ez }`.  
+`{ cx-ex, cy-ey, cz-ez }`.
 **Fix Bug 2**: remove the negation signs from `m[10]` and `m[14]` in the
 projection matrix.
 
@@ -67,11 +73,9 @@ isolate individually.
 - **Deep pipeline knowledge required**: diagnosing this requires understanding
   the interaction between view and projection matrix handedness conventions.
 
-## OpenGPA Advantage
+## How OpenGPA Helps
 
-`query_scene(camera)` exposes the raw view matrix and derived camera vectors.
-It shows `forward = (0, 0, +1)` instead of `(0, 0, -1)`, which directly
-indicates the lookAt sign error. Separately, displaying the raw projection
-matrix (or its derived near/far/depth-range parameters) reveals the negated
-depth range. OpenGPA surfaces both errors independently, rather than leaving the
-developer to deduce them from a "mostly correct" visual output.
+OpenGPA exposes the raw view and projection matrices and the derived
+camera basis vectors as part of per-draw state. Both errors can be read
+out independently from the captured matrices, instead of being deduced
+from a "mostly correct" final image.

@@ -1,6 +1,28 @@
 # E5: Uniform Location Collision
 
-## Bug
+## User Report
+
+I have two materials, RED and BLUE, drawn as two quads — left should be red,
+right should be blue. After a recent refactor (which involved reordering
+some unrelated enum values in the materials header), the colors come out
+wrong: the left quad renders blue and the right quad renders red, or both
+end up the same color depending on order. There are no GL errors; both
+shaders compile and link, both `glUniform4f` calls return without complaint,
+and the upload values on the CPU side are exactly what they should be
+(`(1,0,0,1)` for red, `(0,0,1,1)` for blue). It worked before the refactor.
+
+## Expected Correct Output
+
+- Left quad: solid red (MAT_RED material)
+- Right quad: solid blue (MAT_BLUE material)
+
+## Actual Broken Output
+
+Both quads render with swapped or identical colors. In the specific
+simulation: left quad renders blue, right quad renders red (or both render
+the color of whichever was set last, depending on GL program state).
+
+## Ground Truth
 
 Two material objects share a uniform-location cache indexed by a `MaterialID`
 enum. A developer reordered the enum values during a refactoring:
@@ -20,31 +42,14 @@ cache[1] = glGetUniformLocation(prog_for_old_slot_1, "uColor")  // was BLUE
 
 After the reorder, code reads `cache[MAT_RED=1]` to set the red material's
 color, but slot 1 now holds the location that was cached for the BLUE
-program. The `glUniform4f` call uploads red into the wrong program's uniform,
-and blue into the red program's uniform.
-
-**Location:** `e5_uniform_collision.c`, uniform cache initialisation block.
-
-## Expected Correct Output
-
-- Left quad: solid red (MAT_RED material)
-- Right quad: solid blue (MAT_BLUE material)
-
-## Actual Broken Output
-
-Both quads render with swapped or identical colors. In the specific
-simulation: left quad renders blue, right quad renders red (or both render
-the color of whichever was set last, depending on GL program state).
-
-## Ground Truth Diagnosis
+program. The `glUniform4f` call uploads red into the wrong program's uniform.
 
 The uniform-location cache must be invalidated (or re-queried) whenever
 the enum-to-program mapping changes. A safer design queries locations once
 per program at link time and stores them *per program object*, not in a
-global array keyed by an enum. The fix for this specific bug:
+global array keyed by an enum. The fix:
 
 ```c
-// Re-query after any enum reorder:
 color_loc_cache[MAT_RED]  = glGetUniformLocation(prog[MAT_RED],  "uColor");
 color_loc_cache[MAT_BLUE] = glGetUniformLocation(prog[MAT_BLUE], "uColor");
 ```
@@ -75,33 +80,7 @@ visible in the current diff.
 
 ## How OpenGPA Helps
 
-```
-inspect_drawcall(draw_id=1, query="shader")
-inspect_drawcall(draw_id=2, query="shader")
-```
-
-OpenGPA captures the active program and all uniform values at each draw call:
-
-```json
-// Draw 1 (left quad, intended MAT_RED)
-{
-  "program_id": 1,
-  "uniforms": {
-    "uColor": [0.0, 0.0, 1.0, 1.0]   // blue! code intended [1,0,0,1]
-  }
-}
-
-// Draw 2 (right quad, intended MAT_BLUE)
-{
-  "program_id": 2,
-  "uniforms": {
-    "uColor": [1.0, 0.0, 0.0, 1.0]   // red! code intended [0,0,1,1]
-  }
-}
-```
-
-Seeing that draw 1's `uColor` is blue when the code called
-`glUniform4f(..., 1,0,0,1)` immediately signals a location mismatch. A
-code-only agent must trace the enum value through the cache, understand
-the reorder history, and correlate the location integer with the right
-program — all without seeing the actual runtime values.
+OpenGPA captures the active program and resolved uniform values at each
+draw call, so the actual color reaching the GPU per program is observable
+without reasoning about the cache. A code-only agent must trace the enum
+through the cache and correlate the location integer with the right program.

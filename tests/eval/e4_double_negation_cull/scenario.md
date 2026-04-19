@@ -1,32 +1,14 @@
 # E4: Double-Negation Culling
 
-## Bug
+## User Report
 
-Two independent errors interact and partially cancel each other, making the
-root cause invisible when examining either error in isolation.
-
-**Error 1** — model matrix has a negative X scale (`mvp[0] = -mvp[0]`) to
-mirror the mesh horizontally. A negative determinant in the model matrix
-flips the winding order of every triangle from CCW to CW in clip space.
-
-**Error 2** — `glFrontFace(GL_CW)` is set with a misleading comment
-("GL_CW because right-handed coords"), ostensibly to compensate for the
-mirrored winding. However this makes CW triangles *front-facing*, which
-means the *original* CCW faces (now appearing as CW after the mirror) are
-treated as front-facing and survive culling — so they do render.
-Simultaneously, the faces that should be back-facing in the mirrored object
-are now CCW, which GL_CW declares as back-facing, so they get culled.
-
-The net result is that some faces appear inside-out or are missing in ways
-that partly resemble correct geometry, making visual inspection misleading.
-
-**Location:** `e4_double_negation_cull.c`:
-
-```c
-glFrontFace(GL_CW);   // BUG line 1 -- should be GL_CCW
-// ...
-mvp[0] = -mvp[0];     // BUG line 2 -- negative scale without compensating front-face
-```
+I added a horizontal mirror to one of my cube instances by negating the X
+scale in the model matrix. The result looks "almost right" — it's clearly
+recognisable as a cube — but some faces appear missing or inside-out
+depending on the viewing angle. There's no GL error, no shader warning,
+and the same code path renders the non-mirrored cubes correctly. I've
+tried adjusting the matrix construction and the cull state independently
+and neither change makes things look fully correct.
 
 ## Expected Correct Output
 
@@ -41,7 +23,21 @@ to have missing or reversed faces depending on viewing angle. The scene
 does not look completely wrong — it superficially resembles a cube — which
 makes the partial-cancellation hard to spot.
 
-## Ground Truth Diagnosis
+## Ground Truth
+
+Two independent errors interact and partially cancel each other.
+
+**Error 1** — model matrix has a negative X scale (`mvp[0] = -mvp[0]`) to
+mirror the mesh horizontally. A negative determinant in the model matrix
+flips the winding order of every triangle from CCW to CW in clip space.
+
+**Error 2** — `glFrontFace(GL_CW)` is set with a misleading comment
+("GL_CW because right-handed coords"), ostensibly to compensate for the
+mirrored winding. However this makes CW triangles *front-facing*, which
+means the *original* CCW faces (now appearing as CW after the mirror) are
+treated as front-facing and survive culling — so they do render.
+Simultaneously, the faces that should be back-facing in the mirrored object
+are now CCW, which GL_CW declares as back-facing, so they get culled.
 
 The double-negation means neither error by itself would cause the visual
 artifact. Removing only `GL_CW` (while keeping the negative scale) would
@@ -84,24 +80,7 @@ discourages deep investigation. Finding the root cause requires:
 
 ## How OpenGPA Helps
 
-```
-inspect_drawcall(draw_id=1, query="pipeline")
-```
-
-OpenGPA surfaces the complete pipeline state at draw time:
-
-```json
-{
-  "GL_CULL_FACE": true,
-  "GL_CULL_FACE_MODE": "GL_BACK",
-  "GL_FRONT_FACE": "GL_CW",
-  "model_matrix_determinant": -0.125,
-  "model_matrix": [["-0.5", 0, 0, 0], [0, "0.5", 0, 0],
-                   [0, 0, "-0.5", 0], [0, 0, 0, 1]]
-}
-```
-
-The combination of `GL_FRONT_FACE: GL_CW` and a negative-determinant model
-matrix is a known-bad pattern. OpenGPA can flag this directly. A code-only
-agent must mentally trace `glFrontFace`, the matrix construction, and their
-interaction — which spans multiple functions and files in real codebases.
+OpenGPA surfaces the complete pipeline state and active matrices at draw
+time, so the combination of front-face mode and the model matrix
+determinant is observable in a single snapshot. A code-only agent must
+mentally trace winding-affecting state across multiple functions and files.

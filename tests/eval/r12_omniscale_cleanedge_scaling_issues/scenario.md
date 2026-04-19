@@ -1,11 +1,21 @@
 # R12: OmniScale/CleanEdge scaler samples only the top-left pixel
 
-## Bug
-A fullscreen image-scaling pass that applies a `mat2` UV transform in the
-fragment shader never has its transformation uniform written by the CPU.
-In GLSL the uniform therefore defaults to the zero matrix, so every fragment
-ends up sampling the source texture at `(0, 0)`. The rescaled image comes out
-as a flat fill of the source's top-left texel.
+## User Report
+**Pixelorama version:**
+1.0.1 and commit 9c170ee5a02984537780766c23f4038e3875afb1 also attempted on itch.io web build
+
+**OS/device including version:**
+Arch Linux native, and FlatPak with Nvidia GTX 1050 Ti mobile
+
+**Issue description:**
+OmniScale, and CleanEdge scaling only grabs top left pixel of image for scaling
+
+**Steps to reproduce:**
+
+1. Open the scale image menu.
+2. Set interpolation to OmniScale, or CleanEdge.
+3. Set Width/Height to a value other than the original size
+4. Press 'OK'
 
 ## Expected Correct Output
 A 256x256 upscale of the 4x4 test image: a recognisable pattern where the
@@ -15,7 +25,13 @@ top-left 64x64 region is red and the rest is a green/blue checkerboard.
 A solid red 256x256 framebuffer — the entire output is the colour of texel
 `(0, 0)` of the source texture.
 
-## Ground Truth Diagnosis
+## Ground Truth
+A fullscreen image-scaling pass that applies a `mat2` UV transform in the
+fragment shader never has its transformation uniform written by the CPU.
+In GLSL the uniform therefore defaults to the zero matrix, so every fragment
+ends up sampling the source texture at `(0, 0)`. The rescaled image comes out
+as a flat fill of the source's top-left texel.
+
 The fragment shader declares `uniform mat2 transformation_matrix;` without a
 default value, and the scale code path for OmniScale/CleanEdge never calls
 the equivalent of `glUniformMatrix2fv` for it. Per the GLSL spec an unset
@@ -73,6 +89,14 @@ spec:
   min_fraction: 0.95
   region: full
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/Orama-Interactive/Pixelorama
+- **SHA**: 9c170ee5a02984537780766c23f4038e3875afb1
+- **Relevant Files**:
+  - src/Shaders/Effects/Rotation/CommonRotation.gdshaderinc  # parent of closing commit 3113459 (identity default added to transformation_matrix)
+  - src/Shaders/Effects/Rotation/OmniScale.gdshader
+  - src/Shaders/Effects/Rotation/cleanEdge.gdshader
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes

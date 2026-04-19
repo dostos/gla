@@ -1,7 +1,72 @@
 # R31_WEIRD_R164_WEBGL_RENDERER_REGRESSION_WIT: Per-frame color clear skipped, prior-frame trails persist
 
-## Bug
-A logical new frame is rendered without first clearing the color buffer. Prior-frame content therefore bleeds through as "trails" in regions the new frame does not draw over.
+## User Report
+### Description
+
+After upgrading three.js from `0.163.0` to `0.164.0` or `0.164.1` one
+particular `GLB` model from my library breaks the renderer when camera looks
+at it, it leaves the "trail" on the screen, where only the background image
+visible. I'm not sure how to describe it in a more informative way TBH, see
+the screenshot and attached codepen.
+
+### Reproduction steps
+
+1. open this [CodePen example](https://codepen.io/Andrew-Gura-the-flexboxer/pen/ZENQpjR)
+2. move camera to the left and see that lambo car can be seen without issues
+3. replace `three@0.163.0` with `three@0.164.1` in HTML
+4. move camera to the left again and see the issue
+
+OR
+
+1. add [this glb](https://gg-web-demos.guraklgames.com/assets/fly-city/lambo/body.glb) to scene
+2. add some mesh behind this glb to see the bug
+3. add two directional lights (optional?)
+4. move camera
+
+### Code (excerpted)
+
+```js
+const renderer = new THREE.WebGLRenderer({
+  preserveDrawingBuffer: true,
+  background: 0xffffff,
+});
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setClearColor(0xffffff, 1);
+
+new GLTFLoader().load(
+  "https://gg-web-demos.guraklgames.com/assets/fly-city/lambo/body.glb",
+  (gltf) => {
+    gltf.scene.position.set(10, 0, 0);
+    scene.add( gltf.scene );
+  }
+);
+
+function render(time) {
+  requestAnimationFrame(render);
+  renderer.render(scene, camera);
+}
+render();
+```
+
+### Live example
+
+[CodePen](https://codepen.io/Andrew-Gura-the-flexboxer/pen/ZENQpjR)
+
+### Screenshots
+
+0.163.0 — renders correctly.
+
+0.164.0(1) — leaves trail of background pixels behind moving geometry.
+
+### Version
+
+r164
+
+### Device / Browser / OS
+
+Desktop / Chrome / Linux
 
 ## Expected Correct Output
 A 256×256 frame with a white background and a single green quad on the right half. The left half should be entirely white (clear color).
@@ -9,7 +74,7 @@ A 256×256 frame with a white background and a single green quad on the right ha
 ## Actual Broken Output
 A frame showing BOTH the red quad on the left (leaked from the previous logical frame) AND the green quad on the right. The left half contains red pixels that should have been cleared.
 
-## Ground Truth Diagnosis
+## Ground Truth
 The upstream regression was traced to a reordering in WebGLBackground that moved the color clear to after render-list insertion, so with `preserveDrawingBuffer: true` the intended per-frame clear was effectively skipped and prior-frame pixels persisted:
 
 > Confirmed with `git bisect`, the change in behavior was introduced in #28118.
@@ -62,6 +127,13 @@ spec:
   forbidden_rgb: [255, 0, 0]
   forbidden_fraction_max: 0.01
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/mrdoob/three.js
+- **SHA**: eaede05ea1aac8a047b03fef536f3aa53955539c
+- **Relevant Files**:
+  - src/renderers/webgl/WebGLBackground.js  # base of fix PR #28445 (clear ordering vs. transmission pass)
+  - src/renderers/WebGLRenderer.js
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes

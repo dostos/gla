@@ -115,6 +115,14 @@ spec:
   expected_finite: true
 ```
 
+## Upstream Snapshot
+- **Repo**: https://github.com/mrdoob/three.js
+- **SHA**: 4f067f0f4dc9e81f7fb3484962f2e973f71fab60
+- **Relevant Files**:
+  - src/renderers/webxr/WebXRManager.js  # base of fix PR #29120 (infinite-far projection for depth-sensing)
+  - src/math/Matrix4.js
+  - src/cameras/PerspectiveCamera.js
+
 ## Predicted OpenGPA Helpfulness
 
 - **Verdict**: yes

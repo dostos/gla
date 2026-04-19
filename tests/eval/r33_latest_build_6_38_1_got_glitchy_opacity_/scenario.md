@@ -1,7 +1,28 @@
 # R6_LATEST_BUILD_6_38_1_GOT_GLITCHY_OPACITY_: EffectPass final-pass blending darkens screen during fade
 
-## Bug
-The last post-processing pass renders a fullscreen quad of the post-processed scene to the default framebuffer with `GL_BLEND` enabled and `glBlendFuncSeparate(SRC_ALPHA, ONE_MINUS_SRC_ALPHA, ONE, ONE_MINUS_SRC_ALPHA)`. During a fade the fragment alpha is less than 1, so the final color is blended against whatever is already in the default framebuffer (here, the black clear color) instead of overwriting it. The result is a darkened / "black glitchy" frame whenever opacity is animated.
+## User Report
+### Description of the bug
+
+Animate opacity fadein/fadeout, it glitches black all around
+
+### To reproduce
+
+I believe just animate? im using alpha canvas above another canvas
+
+### Expected behavior
+
+Stable fade as below 6.38.1
+
+### Library versions used
+
+ - Three: tested from 178 to 182, actually in 182
+ - Post Processing: 6.38.1
+
+### Mobile
+
+ - Device: Tablet Lenovo
+ - OS: Android 12
+ - Browser Webview/Chromium
 
 ## Expected Correct Output
 The center of the window displays the post-processed scene color — solid orange `(255, 153, 51)` — regardless of the animated opacity value, because the final composite-to-screen pass should be an opaque copy.
@@ -9,7 +30,9 @@ The center of the window displays the post-processed scene color — solid orang
 ## Actual Broken Output
 The center of the window is roughly half-brightness orange `(~128, ~77, ~26)`: the source color was blended against the black default framebuffer clear using `uOpacity = 0.5`.
 
-## Ground Truth Diagnosis
+## Ground Truth
+The last post-processing pass renders a fullscreen quad of the post-processed scene to the default framebuffer with `GL_BLEND` enabled and `glBlendFuncSeparate(SRC_ALPHA, ONE_MINUS_SRC_ALPHA, ONE, ONE_MINUS_SRC_ALPHA)`. During a fade the fragment alpha is less than 1, so the final color is blended against whatever is already in the default framebuffer (here, the black clear color) instead of overwriting it. The result is a darkened / "black glitchy" frame whenever opacity is animated.
+
 The upstream maintainer confirmed the regression was introduced by a deliberate blend-state change on `EffectMaterial` in 6.38.1:
 
 > I changed the behavior of the `EffectPass` in 6.38.1 to use `NormalBlending` with `tranparent` set to `true` on the `EffectMaterial` in hopes that this would help fix #475, but alas.
@@ -57,6 +80,13 @@ spec:
   expected_rgb: [255, 153, 51]
   tolerance: 8
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/pmndrs/postprocessing
+- **SHA**: 6f40279377ff28d7c07351df2a5006625897a718
+- **Relevant Files**:
+  - src/materials/EffectMaterial.ts  # parent of closing commit 3f6f8efcc (EffectPass blend revert for v6.38.2)
+  - src/passes/EffectPass.ts
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes

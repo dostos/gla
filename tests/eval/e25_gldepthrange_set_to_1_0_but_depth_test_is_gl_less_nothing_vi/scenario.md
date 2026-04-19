@@ -1,7 +1,13 @@
 # E25_GLDEPTHRANGE_SET_TO_1_0_BUT_DEPTH_TEST_IS_GL_LESS_NOTHING_VI: Inverted depth range with GL_LESS leaves window empty
 
-## Bug
-The renderer enables a reverse-Z configuration (`glClearDepth(0.0)` + `glDepthRange(1.0, 0.0)`) but leaves `glDepthFunc` at the default `GL_LESS`. Every post-transform fragment depth lands in `[0,1]` and is never less than the cleared value `0.0`, so every fragment is rejected and only the clear color ever reaches the framebuffer.
+## User Report
+I'm trying out a reverse-Z setup for better depth precision. I draw a
+red-orange quad covering most of the window, but the entire framebuffer
+just shows the dark blue-gray clear color — the quad is completely
+invisible. `glReadPixels` at the center reads roughly `25 31 46 255`
+(the clear color), not the orange I expect. The shader compiles, the
+draw issues, no GL errors are raised. The geometry is in front of the
+camera and would render correctly with my old (standard) depth setup.
 
 ## Expected Correct Output
 A red-orange quad (≈ RGBA `(235, 77, 56, 255)`) covering most of the 400×300 window, on a dark blue-gray background.
@@ -9,8 +15,21 @@ A red-orange quad (≈ RGBA `(235, 77, 56, 255)`) covering most of the 400×300 
 ## Actual Broken Output
 The entire window is the dark blue-gray clear color. `glReadPixels` at the center prints roughly `center RGBA = 25 31 46 255` — the quad is entirely missing.
 
-## Ground Truth Diagnosis
-Two of the three required reverse-Z state changes are applied correctly, but the depth comparison function is not flipped. With `glDepthRange(1, 0)` the NDC-to-window-depth mapping is `depth = 0.5 - 0.5 * z_ndc`, which still lies in `[0,1]`. The depth buffer is cleared to `0.0`, and `GL_LESS` requires new fragments to be strictly less than the buffered value. No fragment depth is less than `0.0`, so the depth test rejects everything. Switching to `GL_GREATER` (or reverting `glClearDepth` and `glDepthRange` to their defaults) restores visibility.
+## Ground Truth
+The renderer enables a reverse-Z configuration (`glClearDepth(0.0)` +
+`glDepthRange(1.0, 0.0)`) but leaves `glDepthFunc` at the default
+`GL_LESS`. Every post-transform fragment depth lands in `[0,1]` and is
+never less than the cleared value `0.0`, so every fragment is rejected
+and only the clear color ever reaches the framebuffer.
+
+Two of the three required reverse-Z state changes are applied correctly,
+but the depth comparison function is not flipped. With `glDepthRange(1, 0)`
+the NDC-to-window-depth mapping is `depth = 0.5 - 0.5 * z_ndc`, which
+still lies in `[0,1]`. The depth buffer is cleared to `0.0`, and `GL_LESS`
+requires new fragments to be strictly less than the buffered value. No
+fragment depth is less than `0.0`, so the depth test rejects everything.
+Switching to `GL_GREATER` (or reverting `glClearDepth` and `glDepthRange`
+to their defaults) restores visibility.
 
 ## Difficulty Rating
 **Hard (4/5)**
@@ -23,13 +42,9 @@ All three reverse-Z signals are adjacent in the source and read as an intentiona
 
 ## How OpenGPA Helps
 
-The specific query that reveals the bug:
-
-```
-query_scene(frame_id="current", include=["depth_state"])
-```
-
-`query_scene` returns the full depth-test configuration together: `depth_range=[1.0, 0.0]`, `clear_depth=0.0`, `depth_func=GL_LESS`. Seeing those three values side-by-side makes the contradiction obvious — the range and clear are configured for reverse-Z but the comparison function is not — which pinpoints the missing `glDepthFunc(GL_GREATER)` immediately.
+OpenGPA returns the full depth-test configuration (range, clear value,
+function) together as a single snapshot, so contradictory combinations
+across the three knobs are visible at a glance.
 
 ## Tier
 core

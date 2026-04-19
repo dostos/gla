@@ -1,11 +1,13 @@
 # E23_DEPTH_WRITE_DISABLED_GL_FALSE_FOR_OPAQUE_GEOMETRY_LATER_DRAW: Depth writes disabled on opaque pass, far geometry stomps near
 
-## Bug
-`glDepthMask(GL_FALSE)` leaked from a previous transparent pass is still in
-effect when two opaque quads are drawn. Depth testing is enabled so each
-quad passes `GL_LESS` against the cleared buffer, but because nothing ever
-writes to the depth buffer the far quad is never rejected and overwrites
-the near one.
+## User Report
+I draw two opaque quads — a near red one at z=-0.5 and a far blue one at
+z=+0.5 — with depth test enabled and `GL_LESS`. The center pixel should be
+red (the near quad occluding the far one) but it comes out blue: the far
+quad covers the whole framebuffer and the near red draw seems to vanish
+even though `glDrawArrays` is called for it. There's a setup helper that
+runs before the loop to "configure transparent pass" but I'm not in a
+transparent pass here. No GL errors.
 
 ## Expected Correct Output
 Center pixel RGBA ≈ `255 0 0 255` (the near red quad at z=-0.5 should
@@ -16,14 +18,21 @@ Center pixel RGBA = `0 0 255 255`. The far blue quad covers the whole
 framebuffer — the near red draw is visually gone even though it was
 submitted and its fragments did pass the depth test.
 
-## Ground Truth Diagnosis
+## Ground Truth
+`glDepthMask(GL_FALSE)` leaked from a previous transparent pass is still
+in effect when two opaque quads are drawn. Depth testing is enabled so
+each quad passes `GL_LESS` against the cleared buffer, but because
+nothing ever writes to the depth buffer the far quad is never rejected
+and overwrites the near one.
+
 With `GL_DEPTH_TEST` enabled and `glDepthFunc(GL_LESS)`, the first draw's
 fragments pass because the cleared depth is 1.0. But `glDepthMask(GL_FALSE)`
 suppresses the write, so the depth buffer remains at 1.0 everywhere. The
 second (farther) draw then also passes `GL_LESS` against 1.0 and its
 fragments overwrite the color buffer. The root cause is a legacy state
 leak: an earlier transparent pass disabled depth writes and the opaque
-pass was not re-enabling them before drawing.
+pass was not re-enabling them. Fix: call `glDepthMask(GL_TRUE)` before
+the opaque pass.
 
 ## Difficulty Rating
 **Medium (3/5)**
@@ -43,17 +52,9 @@ like a vertex-ordering or z-fighting issue at first glance.
 
 ## How OpenGPA Helps
 
-The specific query that reveals the bug:
-
-```
-inspect_drawcall(frame=1, draw_call_index=1)
-```
-
-`inspect_drawcall` reports the full pipeline state for the far-quad draw:
-`depth_test=GL_TRUE`, `depth_func=GL_LESS`, **`depth_mask=GL_FALSE`**. That
-single flag directly explains why the earlier red draw didn't occlude this
-one — fragments passed the test but no depth was written, so every later
-draw also passes.
+OpenGPA exposes the full depth-related pipeline state per draw call,
+including `depth_mask`, so a depth-test-on / depth-write-off combination
+is directly visible in the per-draw record.
 
 ## Tier
 core

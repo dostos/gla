@@ -1,12 +1,35 @@
 # R21_CLEARCOAT_BRDF_NAN_UNDER_BLOOM: Clearcoat BRDF produces NaN pixels that leak through occluders under bloom
 
-## Bug
-A fragment shader implementing a GGX-style clearcoat distribution writes NaN
-to an HDR color attachment for configurations where the clearcoat roughness
-is clamped to zero (and NdotH ≈ 1). The NaN is invisible in a direct
-tonemap but contaminates any downstream blur/downsample stage — exactly
-matching the reported "lights visible through all objects" flicker when glow
-is enabled in the Godot forward renderer.
+## User Report
+### Tested versions
+
+Found in v4.2.1.stable.official [b09f793f5]
+and v4.3.stable.steam [77dcf97d8]
+
+### System information
+
+Godot v4.2.1.stable - Windows 11 (22621.2861) - Vulkan (Forward+) - dedicated NVIDIA GeForce RTX 3060 (NVIDIA; 31.0.15.4633) - 11th Gen Intel(R) Core(TM) i7-11700 @ 2.50GHz (16 Threads)
+
+**Update** January 9 2025 system information,
+Godot 4.3.stable.steam - Windows 11 (22631) - nVIDIA GeForce RTX 4070 Super (32.0.15.6636)
+
+### Issue description
+
+Lights are visible through objects with a material with Clearcoat enabled. It looks like a lens flare with a black point center, and it flickers between visible and invisible every frame that the camera is moved. Changing the Glow parameters affects how the artifact appears.
+
+With a camera parameters with auto-exposure enabled it will cause the auto-exposure to jump all over the place to compensate for the bright spot.
+
+### Steps to reproduce
+
+- Make a new project
+- 3D scene, with the default environment on, Glow on.
+- Add a mesh instance in the scene, cube, with a standard material, enable Clearcoat.
+- Add an OmniLight to the scene and move it away from the mesh.
+- View the mesh with the light behind it (occluded). Moving the camera around shows the flicker.
+
+### Minimal reproduction project (MRP)
+
+MRP.zip (attached)
 
 ## Expected Correct Output
 A uniformly-shaded 256×256 quad whose HDR RGBA16F target contains only finite,
@@ -21,7 +44,14 @@ on a real GPU with HDR + bloom the NaN propagates through the separable
 Gaussian kernel and blooms out to a bright speck that appears to pass
 through any geometry in front of the poisoned pixel.
 
-## Ground Truth Diagnosis
+## Ground Truth
+A fragment shader implementing a GGX-style clearcoat distribution writes NaN
+to an HDR color attachment for configurations where the clearcoat roughness
+is clamped to zero (and NdotH ≈ 1). The NaN is invisible in a direct
+tonemap but contaminates any downstream blur/downsample stage — exactly
+matching the reported "lights visible through all objects" flicker when glow
+is enabled in the Godot forward renderer.
+
 The upstream issue's title states the root cause in one line:
 
 > Lights are visible through all objects with a material with Clearcoat enabled due to NaN pixels being rendered
@@ -106,6 +136,14 @@ spec:
     Any NaN or Inf pixel, or any value above 1e6, indicates the
     GGX-denominator-collapses-to-zero path has been hit.
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/godotengine/godot
+- **SHA**: 4d1f26e1fd1fa46f2223fe0b6ac300744bf79b88
+- **Relevant Files**:
+  - servers/rendering/renderer_rd/shaders/scene_forward_lights_inc.glsl  # base of fix PR #108378 (clearcoat BRDF epsilon)
+  - servers/rendering/renderer_rd/shaders/scene_forward_clustered.glsl
+  - servers/rendering/renderer_rd/shaders/scene_forward_mobile.glsl
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes

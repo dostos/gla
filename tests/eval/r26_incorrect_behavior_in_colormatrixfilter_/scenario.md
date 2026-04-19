@@ -1,13 +1,47 @@
 # R9_INCORRECT_BEHAVIOR_IN_COLORMATRIXFILTER_: pixi.js ColorMatrixFilter over-normalizes offset column in multiply mode
 
-## Bug
-`ColorMatrixFilter._colorMatrix` divides the rightmost (offset) column of the
-4x5 color matrix by 255. `_loadMatrix` only invokes `_colorMatrix` when
-`multiply=true`, so identical logical operations (e.g. `contrast(1)` on an
-identity matrix) yield different matrices depending on the `multiply` flag.
-The filter's fragment shader consumes offsets in the same unit space as the
-matrix scalars, so the 255x discrepancy directly corrupts the rendered
-frame.
+## User Report
+### Expected Behavior
+
+`ColorMatrixFilter.contrast(1, true)` produces the same matrix as
+`ColorMatrixFilter.contrast(1, false)` when the current matrix is the
+identity.
+
+### Current Behavior
+
+`ColorMatrixFilter.contrast(1, true)` produces a broken matrix that mostly
+updates the brightness, even making dark colors brighter.
+
+### Possible Solution
+
+The core of the problem is in `ColorMatrixFilter._loadMatrix` which calls
+`ColorMatrixFilter._colorMatrix` only when `multiply=true`. Then,
+`_colorMatrix` divides the rightmost column (the offset) by 255. To be honest,
+I don't understand the reasoning behind that normalization. I don't see any
+other code that produces an offset that's in the range 0..255 that needs to
+be normalized, and even if that existed, calling it only in multiply mode
+doesn't seem correct.
+
+Dropping the normalization fixes this bug, but I'm unsure about the side
+effects of this change. I think fixing this safely also requires improving
+the tests of the filter, to verify the effects of each method on the matrix.
+
+### Steps to Reproduce
+
+```js
+const node = /* Some PIXI node, it doesn't matter */
+const filter = new PIXI.filters.ColorMatrixFilter();
+node.filters = [filter];
+filter.reset(); /* Not necessary, but to clarify that we start with the identity matrix */
+filter.contrast(1, true);
+```
+
+### Environment
+
+- **`pixi.js` version**: Both 5.3 and 6.3
+- **Browser & Version**: Chrome 101 (doesn't matter)
+- **OS & Version**: Ubuntu 21.10 (doesn't matter)
+- **Running Example**: https://www.pixiplayground.com/#/edit/NrJ3oM-_T-rL1gp0R98tY
 
 ## Expected Correct Output
 `contrast(1, multiply=true)` starting from the identity matrix should
@@ -21,7 +55,7 @@ input of RGB 0.7 the shader outputs `2*0.7 - 0.502 ~= 0.898` -- near-white
 instead of black. "It mostly updates the brightness, even making dark
 colors brighter," as the reporter describes.
 
-## Ground Truth Diagnosis
+## Ground Truth
 The over-normalization lives in `_colorMatrix` at
 `packages/filters/filter-color-matrix/src/ColorMatrixFilter.ts` L265-278
 (pinned commit `45052e29c4`). The maintainer @bigtimebuddy confirmed the
@@ -86,6 +120,13 @@ spec:
   actual_rgb_min: [200, 200, 200]
   note: "expected clamped-black (offset -128 in non-multiply path) but buggy multiply-mode offset -0.502 produces near-white ~0.898"
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/pixijs/pixijs
+- **SHA**: b44db4bc32a6e58611a6afe3c9492e02ab51b596
+- **Relevant Files**:
+  - src/filters/defaults/color-matrix/ColorMatrixFilter.ts  # base of fix PR #11925 (offset normalization)
+  - packages/filters/filter-color-matrix/src/ColorMatrixFilter.ts
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes

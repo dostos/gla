@@ -1,11 +1,43 @@
 # R14_USING_QUADMESH_WITH_A_CUSTOM_VERTEXNODE_: Custom vertex positions emitted in clockwise order get culled
 
-## Bug
-The program defines a triangle with positions `(-1,-1,0)`, `(0,1,0)`, `(1,-1,0)` —
-the exact same sequence the upstream user supplied to their custom `vertexNode`.
-Viewed from the default +Z camera, this sequence is clockwise. Backface culling
-is enabled with the default CCW front-face convention, so the (only) triangle is
-classified as back-facing and discarded. The resulting frame is blank.
+## User Report
+### Description
+
+As code
+
+### Reproduction steps
+
+...
+
+### Code
+
+```js
+import * as THREE from 'three/webgpu'
+import { vec3, vec4, array, vertexIndex } from 'three/tsl'
+
+const renderer = new THREE.WebGPURenderer()
+document.body.appendChild(renderer.domElement)
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace
+renderer.setSize(window.innerWidth, window.innerHeight)
+
+const material = new THREE.MeshBasicNodeMaterial()
+const positions = array([vec3(-1, -1, 0), vec3(0, 1, 0), vec3(1, -1, 0)]).toVar('positions')
+material.vertexNode = vec4(positions.element(vertexIndex))
+material.fragmentNode = vec4(1, 0, 0, 1)
+
+const quad = new THREE.QuadMesh(material)
+quad.geometry.drawRange.count = 3
+
+quad.render(renderer)
+```
+
+### Live example
+
+https://jsfiddle.net/ganqian/kjcx9yhL/7/
+
+### Version
+
+r173
 
 ## Expected Correct Output
 A solid red triangle covering most of the 256x256 framebuffer, since the
@@ -15,7 +47,13 @@ fragment shader unconditionally writes `vec4(1,0,0,1)`.
 An entirely black framebuffer — the draw call executes but the triangle is
 culled before rasterization, so no fragments are shaded.
 
-## Ground Truth Diagnosis
+## Ground Truth
+The program defines a triangle with positions `(-1,-1,0)`, `(0,1,0)`, `(1,-1,0)` —
+the exact same sequence the upstream user supplied to their custom `vertexNode`.
+Viewed from the default +Z camera, this sequence is clockwise. Backface culling
+is enabled with the default CCW front-face convention, so the (only) triangle is
+classified as back-facing and discarded. The resulting frame is blank.
+
 The upstream user's custom vertex positions are emitted in clockwise order
 relative to the camera, which collides with the renderer's CCW-front-face /
 back-face-cull default. The maintainer confirms this directly:
@@ -71,6 +109,14 @@ spec:
   tolerance: 16
   min_coverage: 0.60
 ```
+
+## Upstream Snapshot
+- **Repo**: https://github.com/mrdoob/three.js
+- **SHA**: f35ec72554d15f925cf383cdddd52f3668573103
+- **Relevant Files**:
+  - src/objects/QuadMesh.js  # default-branch SHA at issue close (winding was user error; no upstream fix); (inferred)
+  - src/renderers/common/nodes/NodeMaterial.js
+  - src/renderers/webgpu/WebGPUBackend.js
 
 ## Predicted OpenGPA Helpfulness
 - **Verdict**: yes
