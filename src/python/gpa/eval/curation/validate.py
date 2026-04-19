@@ -21,6 +21,94 @@ class ValidationResult:
     metadata: Optional[dict] = None
 
 
+# Patterns that reveal the diagnosis if present in source files or
+# scenario.md's User Report section. These defeat the eval by leaking the
+# answer to the agent. See `prompts/draft_core_system.md` and
+# `prompts/synth_core_system.md` for the human-facing rules.
+_SOURCE_HINT_PATTERNS = [
+    r"//\s*BUG\b",
+    r"//\s*FIX\b",
+    r"//\s*WRONG\b",
+    r"//\s*CORRECT\b",
+    r"//\s*BUG\s*PATTERN\b",
+    r"//\s*buggy\b",
+    r"//\s*intentionally\s+(omitted|wrong)",
+    r"//\s*should\s+be\b",
+    r"//\s*this\s+is\s+the\s+missing",
+    r"<--\s*MISSING",
+    r"<--\s*the\s+bug",
+    r"/\*[^*]*\bBUG\b",
+    r"/\*[^*]*\bshould\s+be\b",
+]
+_SOURCE_HINT_RE = re.compile("|".join(_SOURCE_HINT_PATTERNS), re.IGNORECASE)
+
+# Forbidden runtime-output strings in source files (printf, fprintf,
+# window titles, etc.) that announce the diagnosis at runtime. The
+# character classes exclude newlines so the match stays inside a single
+# string literal — a following comment on another line containing
+# `leaked` or `ACNE` is not a runtime leak.
+_RUNTIME_LEAK_PATTERNS = [
+    r'"\s*bug\s+reproduced\b',
+    r'"\s*bug\s+fixed\b',
+    r'"\s*verdict\s*:',
+    r'"[^"\n]*\bleaked\b[^"\n]*"',
+    r'"[^"\n]*\bACNE\s*\([^"\n]*"',
+]
+_RUNTIME_LEAK_RE = re.compile("|".join(_RUNTIME_LEAK_PATTERNS), re.IGNORECASE)
+
+def check_contamination(scenario_dir: Path) -> Optional[str]:
+    """Return a rejection reason string if the scenario leaks its diagnosis
+    to the eval agent, else None. Checked against:
+
+    - All source files in the scenario dir (main.c, *.h, *.glsl, *.vert,
+      *.frag) — no hint comments, no runtime-output leak strings.
+    - scenario.md must have both `## User Report` and `## Ground Truth`
+      sections.
+
+    The User Report text itself is NOT checked for "the bug is"-style
+    phrases, because real-world issues mined from GitHub legitimately
+    include the reporter's own (possibly partial or wrong) hypothesis.
+    Matching how real bug reports read is the point of the eval.
+    """
+    # Source-file checks
+    for ext in (".c", ".h", ".glsl", ".vert", ".frag"):
+        for src in scenario_dir.rglob(f"*{ext}"):
+            try:
+                text = src.read_text()
+            except (OSError, UnicodeDecodeError):
+                continue
+            m = _SOURCE_HINT_RE.search(text)
+            if m:
+                return (
+                    f"source file {src.name} contains hint comment "
+                    f"matching pattern '{m.group(0)}' (line "
+                    f"{text[:m.start()].count(chr(10)) + 1})"
+                )
+            m = _RUNTIME_LEAK_RE.search(text)
+            if m:
+                return (
+                    f"source file {src.name} contains runtime-output leak "
+                    f"string '{m.group(0)}' (line "
+                    f"{text[:m.start()].count(chr(10)) + 1})"
+                )
+
+    # scenario.md structural checks
+    md_path = scenario_dir / "scenario.md"
+    if not md_path.exists():
+        return "scenario.md missing"
+    md_text = md_path.read_text()
+
+    # Must have both sections. User Report content itself is not policed —
+    # real issue reporters often guess at the cause, and exposing that
+    # guess to the eval agent is realistic.
+    if not re.search(r"^##\s+User Report\s*$", md_text, re.MULTILINE):
+        return "scenario.md missing `## User Report` section"
+    if not re.search(r"^##\s+Ground Truth\s*$", md_text, re.MULTILINE):
+        return "scenario.md missing `## Ground Truth` section"
+
+    return None
+
+
 class Validator:
     """Builds, runs, and validates a drafted scenario."""
 
@@ -60,6 +148,15 @@ class Validator:
     def _validate_inner(
         self, draft: DraftResult, scenario_dir: Path
     ) -> ValidationResult:
+        # Contamination check runs before anything else — a scenario that
+        # leaks its diagnosis to the agent is unusable regardless of whether
+        # it builds and captures correctly. Reject early and cheaply.
+        contamination_reason = check_contamination(scenario_dir)
+        if contamination_reason:
+            return ValidationResult(
+                ok=False, reason=f"contamination: {contamination_reason}"
+            )
+
         # Parse the md for the signature
         try:
             scenario = ScenarioLoader(eval_dir=str(self.eval_dir)).load(draft.scenario_id)

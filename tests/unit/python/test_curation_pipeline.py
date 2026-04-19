@@ -69,9 +69,9 @@ def _eval_result(mode, correct, total):
 
 def _draft_md() -> str:
     return (
-        "# R1_FAKE\n## Bug\nb\n## Expected Correct Output\ne\n"
+        "# R1_FAKE\n## User Report\nb\n## Expected Correct Output\ne\n"
         "## Actual Broken Output\na\n"
-        "## Ground Truth Diagnosis\n> q\nd\n"
+        "## Ground Truth\n> q\nd\n"
         "## Difficulty Rating\n3/5\n"
         "## Adversarial Principles\n- p\n"
         "## How GPA Helps\nh\n"
@@ -148,6 +148,62 @@ def test_pipeline_happy_path_commits_one_scenario(tmp_path):
     assert (eval_dir / "r1_fake" / "scenario.md").exists()
     assert log_path.exists()
     assert "Scenarios committed: 1" in summary_path.read_text()
+
+
+def test_pipeline_skips_previously_seen_url_without_retriage(tmp_path):
+    """A URL already in the coverage log (committed OR rejected in a prior
+    run) must be short-circuited before we re-fetch/re-triage it — otherwise
+    repeated mining runs re-burn API tokens on the same threads."""
+    eval_dir = tmp_path / "eval"
+    workdir_root = tmp_path / ".wd"
+    log_path = tmp_path / "coverage-log.jsonl"
+    summary_path = tmp_path / "coverage-gaps.md"
+
+    # Seed the coverage log with a pre-existing rejection for this URL.
+    from gpa.eval.curation.coverage_log import CoverageLog, CoverageEntry
+    seeded = CoverageLog(log_path)
+    seeded.append(CoverageEntry(
+        issue_url="https://github.com/x/y/issues/1",
+        reviewed_at=datetime.now(timezone.utc).isoformat(),
+        source_type="issue",
+        triage_verdict="out_of_scope",
+        root_cause_fingerprint="other:n_a",
+        outcome="rejected",
+        scenario_id=None,
+        tier=None,
+        rejection_reason="out_of_scope_not_rendering_bug",
+        predicted_helps=None,
+        observed_helps=None,
+        failure_mode=None,
+        eval_summary=None,
+    ))
+
+    candidate = DiscoveryCandidate(
+        url="https://github.com/x/y/issues/1", source_type="issue", title="t"
+    )
+    discoverer = MagicMock()
+    discoverer.run.return_value = [candidate]
+    fetch = MagicMock()
+    triager = MagicMock()
+
+    p = CurationPipeline(
+        discoverer=discoverer,
+        fetch_thread=fetch,
+        triager=triager,
+        drafter=MagicMock(),
+        validator=MagicMock(),
+        run_eval=MagicMock(),
+        failure_mode_fn=MagicMock(),
+        eval_dir=eval_dir,
+        workdir_root=workdir_root,
+        coverage_log_path=log_path,
+        summary_path=summary_path,
+    )
+    p.run_batch()
+
+    # Fetch / triage must NOT have been called — URL was already reviewed.
+    fetch.assert_not_called()
+    triager.triage.assert_not_called()
 
 
 def test_pipeline_out_of_scope_is_rejected_before_drafting(tmp_path):
@@ -257,8 +313,8 @@ def test_pipeline_ambiguous_drafter_succeeds(tmp_path):
     draft = DraftResult(
         scenario_id="r1_fake",
         c_source="// SOURCE: https://github.com/x/y/issues/1\nint main(){}",
-        md_body=("# R1_FAKE\n## Bug\nb\n## Expected Correct Output\ne\n"
-                 "## Actual Broken Output\na\n## Ground Truth Diagnosis\n> q\nd\n"
+        md_body=("# R1_FAKE\n## User Report\nb\n## Expected Correct Output\ne\n"
+                 "## Actual Broken Output\na\n## Ground Truth\n> q\nd\n"
                  "## Difficulty Rating\n3/5\n## Adversarial Principles\n- p\n"
                  "## How GPA Helps\nh\n## Source\n- **URL**: https://github.com/x/y/issues/1\n"
                  "## Tier\ncore\n## API\nopengl\n## Framework\nnone\n"
@@ -483,10 +539,10 @@ def test_pipeline_end_to_end_with_fixture(tmp_path):
              '#include <GL/gl.h>\nint main(){return 0;}\n')
     md_body = (
         "# R1_MATERIAL_CLONE: Second mesh inherits first mesh's texture\n\n"
-        "## Bug\nx\n\n"
+        "## User Report\nx\n\n"
         "## Expected Correct Output\nDifferent textures per mesh.\n\n"
         "## Actual Broken Output\nSame texture on both meshes.\n\n"
-        "## Ground Truth Diagnosis\n"
+        "## Ground Truth\n"
         '> "known state-leak caused by the cloned material not re-binding its texture" '
         '(from upstream maintainer)\n\n'
         "## Difficulty Rating\n3/5\n\n"
@@ -651,8 +707,8 @@ def test_pipeline_resolves_snapshot_sha_from_pr_ref(tmp_path):
 
     md_with_sentinel = (
         "# R1\n"
-        "## Bug\nb\n## Expected Correct Output\ne\n## Actual Broken Output\na\n"
-        "## Ground Truth Diagnosis\n> q from PR #1234\n"
+        "## User Report\nb\n## Expected Correct Output\ne\n## Actual Broken Output\na\n"
+        "## Ground Truth\n> q from PR #1234\n"
         "## Difficulty Rating\n3/5\n## Adversarial Principles\n- p\n"
         "## How OpenGPA Helps\nh\n"
         "## Source\n- **URL**: https://github.com/mrdoob/three.js/issues/1\n"

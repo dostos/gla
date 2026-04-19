@@ -251,11 +251,14 @@ class Draft:
         if not md_body:
             raise ValueError("scenario.md missing")
 
-        # Ground Truth Diagnosis section must exist
-        m = re.search(r"##\s+Ground Truth Diagnosis\s*\n(.+?)(?=\n##\s+|\Z)",
-                      md_body, re.DOTALL | re.IGNORECASE)
+        # Ground Truth section must exist (accepts both the new
+        # `## Ground Truth` heading and the legacy `## Ground Truth Diagnosis`)
+        m = re.search(
+            r"##\s+Ground Truth(?:\s+Diagnosis)?\s*\n(.+?)(?=\n##\s+|\Z)",
+            md_body, re.DOTALL | re.IGNORECASE,
+        )
         if not m:
-            raise ValueError("Ground Truth Diagnosis section missing")
+            raise ValueError("Ground Truth section missing")
         diagnosis_body = m.group(1)
 
         # Diagnosis must cite upstream via ONE of:

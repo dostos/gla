@@ -210,6 +210,14 @@ class CurationPipeline:
         return max(nums, default=0) + 1
 
     def _process(self, cand, index: int) -> None:
+        # URL dedup — short-circuit if this exact URL has already been
+        # reviewed in a previous run (committed OR rejected). Prevents
+        # re-triaging, re-drafting, and re-burning API tokens on threads
+        # whose disposition is already recorded. Fingerprint dedup below
+        # still catches semantic duplicates across different URLs.
+        if self._log.contains_url(cand.url):
+            return
+
         workdir = IssueWorkdir.for_url(self._workdir_root, cand.url)
 
         try:

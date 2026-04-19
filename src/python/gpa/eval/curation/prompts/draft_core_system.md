@@ -53,13 +53,45 @@ Constraints on filenames:
 - The bug must manifest on the first rendered frame.
 - Top comment: `// SOURCE: <issue_url>`.
 
+### main.c contamination rules (CRITICAL — enforced by validator)
+
+The eval agent sees the scenario's source files as input. ANY comment or
+runtime output that names the diagnosis, the root cause, the missing/wrong
+GL call, or describes code as "intentionally buggy" defeats the eval. The
+validator greps for these patterns and rejects drafts that match.
+
+**Forbidden comment content** (any language — `//`, `/* */`, shader comments):
+- `// BUG`, `// FIX`, `// WRONG`, `// CORRECT`, `// BUG PATTERN`, `// buggy`
+- `// intentionally omitted`, `// intentionally wrong`
+- `// should be X`, `// should be here`, `// should emit`
+- `// this is the missing call`, `// <-- MISSING`
+- Any narrative sentence explaining WHY the code is wrong (e.g., "texture unit 0 is still bound to the old texture, causing the leak")
+- Pointing-arrow comments like `// <-- the bug`
+
+**Allowed comment content**:
+- The `// SOURCE: <url>` attribution at the top
+- License headers
+- Neutral WHAT-the-code-does comments: `// upload shadow map texture`, `// draw the transparent pass`, `// second render target`. The test: would a user who doesn't know the bug still write this comment?
+
+**Forbidden runtime output** (printf/fprintf strings, window titles, log lines):
+- No strings like `"bug reproduced"`, `"bug fixed"`, `"expected vs actual"`, `"verdict: ACNE"`, `"leaked texture"`. Diagnostic printfs that measure a pixel value are fine (`"center pixel rgba=%d,%d,%d,%d"`), but the interpretation must NOT name the bug.
+
+If you cannot describe the code without stating the bug, the scenario is not self-contained enough — port the pattern more carefully or mark the scenario as `tier: snapshot` and let the upstream context carry the diagnosis.
+
 ## `scenario.md` template
+
+**CRITICAL**: The eval harness serves `## User Report` to the agent as input and WITHHOLDS `## Ground Truth`. Both sections MUST be present (validator rejects drafts without them).
+
+For mined (real-world) scenarios, the User Report should be a faithful copy of the original issue body — including the reporter's own hypothesis or partial diagnosis, if any. That matches what a real debugger would see when opening the issue, and the eval measures the agent against that realistic input. The Ground Truth section carries the authoritative diagnosis and fix; it is used only for scoring.
 
 ```markdown
 # <scenario_id_uppercase>: <short title>
 
-## Bug
-<textual description of what's wrong>
+## User Report
+<The reporter's own description of the bug, from the GitHub issue. Keep
+their voice — guesses and partial hypotheses are fine, because real
+debuggers would see them too. Do NOT inject your own diagnosis into this
+section; the agent must do its own reasoning.>
 
 ## Expected Correct Output
 <what the frame should show>
@@ -67,7 +99,7 @@ Constraints on filenames:
 ## Actual Broken Output
 <what the frame actually shows>
 
-## Ground Truth Diagnosis
+## Ground Truth
 <root cause, citing the upstream thread with at least one quoted passage>
 
 ## Difficulty Rating

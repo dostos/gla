@@ -11,10 +11,10 @@ def test_validator_builds_runs_and_signature_matches(tmp_path):
         c_source="// SOURCE: https://x/1\nint main(){return 0;}",
         md_body=(
             "# R_TEST_OK\n"
-            "## Bug\nb\n"
+            "## User Report\nb\n"
             "## Expected Correct Output\ne\n"
             "## Actual Broken Output\na\n"
-            "## Ground Truth Diagnosis\n> quote\ndiag\n"
+            "## Ground Truth\n> quote\ndiag\n"
             "## Difficulty Rating\n3/5\n"
             "## Adversarial Principles\n- p\n"
             "## How GPA Helps\nh\n"
@@ -57,8 +57,8 @@ def test_validator_fails_on_signature_mismatch(tmp_path):
         c_source="// SOURCE: https://x/1\nint main(){return 0;}",
         md_body=(
             "# R_TEST_MISMATCH\n"
-            "## Bug\nb\n## Expected Correct Output\ne\n## Actual Broken Output\na\n"
-            "## Ground Truth Diagnosis\n> quote\ndiag\n## Difficulty Rating\n3/5\n"
+            "## User Report\nb\n## Expected Correct Output\ne\n## Actual Broken Output\na\n"
+            "## Ground Truth\n> quote\ndiag\n## Difficulty Rating\n3/5\n"
             "## Adversarial Principles\n- p\n## How GPA Helps\nh\n"
             "## Source\n- **URL**: https://x/1\n## Tier\ncore\n## API\nopengl\n"
             "## Framework\nnone\n"
@@ -93,8 +93,8 @@ def test_validator_cleans_up_on_mismatch(tmp_path):
         c_source="// SOURCE: https://x/1\nint main(){return 0;}",
         md_body=(
             "# R_TEST_CLEANUP\n"
-            "## Bug\nb\n## Expected Correct Output\ne\n## Actual Broken Output\na\n"
-            "## Ground Truth Diagnosis\n> quote\ndiag\n## Difficulty Rating\n3/5\n"
+            "## User Report\nb\n## Expected Correct Output\ne\n## Actual Broken Output\na\n"
+            "## Ground Truth\n> quote\ndiag\n## Difficulty Rating\n3/5\n"
             "## Adversarial Principles\n- p\n## How GPA Helps\nh\n"
             "## Source\n- **URL**: https://x/1\n## Tier\ncore\n## API\nopengl\n"
             "## Framework\nnone\n"
@@ -128,8 +128,8 @@ def test_validator_cleans_up_when_build_fails(tmp_path):
         c_source="// SOURCE: https://x/1\nint main(){return 0;}",
         md_body=(
             "# R_TEST_BUILD_FAIL\n"
-            "## Bug\nb\n## Expected Correct Output\ne\n## Actual Broken Output\na\n"
-            "## Ground Truth Diagnosis\n> quote\ndiag\n## Difficulty Rating\n3/5\n"
+            "## User Report\nb\n## Expected Correct Output\ne\n## Actual Broken Output\na\n"
+            "## Ground Truth\n> quote\ndiag\n## Difficulty Rating\n3/5\n"
             "## Adversarial Principles\n- p\n## How GPA Helps\nh\n"
             "## Source\n- **URL**: https://x/1\n## Tier\ncore\n## API\nopengl\n"
             "## Framework\nnone\n"
@@ -158,8 +158,8 @@ def test_validator_keeps_files_on_success(tmp_path):
         c_source="// SOURCE: https://x/1\nint main(){return 0;}",
         md_body=(
             "# R_TEST_OK_KEEP\n"
-            "## Bug\nb\n## Expected Correct Output\ne\n## Actual Broken Output\na\n"
-            "## Ground Truth Diagnosis\n> quote\ndiag\n## Difficulty Rating\n3/5\n"
+            "## User Report\nb\n## Expected Correct Output\ne\n## Actual Broken Output\na\n"
+            "## Ground Truth\n> quote\ndiag\n## Difficulty Rating\n3/5\n"
             "## Adversarial Principles\n- p\n## How GPA Helps\nh\n"
             "## Source\n- **URL**: https://x/1\n## Tier\ncore\n## API\nopengl\n"
             "## Framework\nnone\n"
@@ -194,9 +194,9 @@ def test_validator_writes_multiple_files_to_scenario_dir(tmp_path):
             "helper.c": "void helper(void) {}",
             "scenario.md": (
                 "# R_MULTI\n"
-                "## Bug\nb\n## Expected Correct Output\ne\n"
+                "## User Report\nb\n## Expected Correct Output\ne\n"
                 "## Actual Broken Output\na\n"
-                "## Ground Truth Diagnosis\n> quote\ndiag\n"
+                "## Ground Truth\n> quote\ndiag\n"
                 "## Difficulty Rating\n3/5\n"
                 "## Adversarial Principles\n- p\n"
                 "## How GPA Helps\nh\n## Source\n- **URL**: https://x/1\n"
@@ -237,8 +237,8 @@ def test_validator_cleans_up_whole_dir_on_failure(tmp_path):
             "main.c": "// SOURCE: https://x/1\nint main(){return 0;}",
             "helper.c": "void helper(void) {}",
             "scenario.md": (
-                "# R_FAIL\n## Bug\nb\n## Expected Correct Output\ne\n"
-                "## Actual Broken Output\na\n## Ground Truth Diagnosis\n> q\nd\n"
+                "# R_FAIL\n## User Report\nb\n## Expected Correct Output\ne\n"
+                "## Actual Broken Output\na\n## Ground Truth\n> q\nd\n"
                 "## Difficulty Rating\n3/5\n## Adversarial Principles\n- p\n"
                 "## How GPA Helps\nh\n## Source\n- **URL**: https://x/1\n"
                 "## Tier\ncore\n## API\nopengl\n## Framework\nnone\n"
@@ -297,8 +297,8 @@ def test_validator_uses_llm_fallback_on_ambiguous(tmp_path):
     )
     # Use a signature of type unknown_x which the matcher reports ambiguous for
     md_body = (
-        "# R_X\n## Bug\nb\n## Expected Correct Output\ne\n"
-        "## Actual Broken Output\na\n## Ground Truth Diagnosis\n> q\nd\n"
+        "# R_X\n## User Report\nb\n## Expected Correct Output\ne\n"
+        "## Actual Broken Output\na\n## Ground Truth\n> q\nd\n"
         "## Difficulty Rating\n3/5\n## Adversarial Principles\n- p\n"
         "## How GPA Helps\nh\n## Source\n- **URL**: https://x/1\n"
         "## Tier\ncore\n## API\nopengl\n## Framework\nnone\n"

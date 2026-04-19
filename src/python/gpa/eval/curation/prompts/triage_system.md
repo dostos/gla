@@ -16,7 +16,7 @@ Respond in a single JSON block with exactly these fields:
 ```
 
 ## Rules
-- `in_scope` = rendering bug with an observable GPU-level symptom AND a discoverable ground-truth diagnosis.
+- `in_scope` = rendering bug with an observable GPU-level symptom AND a discoverable ground-truth diagnosis. The symptom must manifest in captured GL/Vulkan state (pixels, draw call count, bindings, uniforms, pipeline state, etc.) — which is true of essentially every visual rendering bug, regardless of where the *root cause* code lives. Tracing the captured anomaly back to the upstream cause is the eval agent's job, not a triage filter.
 - `out_of_scope` = host-side build bugs, docs, non-visual logic, feature requests, API questions, shader compilation failures, GLSL syntax errors, link errors.
 - `ambiguous` = plausibly in-scope but ground-truth diagnosis unclear or symptom vague.
 - `root_cause_fingerprint` uses the format `<category>:<specifics>`. Categories (closed set; pick exactly one): `state_leak`, `uniform_lifecycle`, `matrix_math`, `numeric_precision`, `depth_precision`, `winding_culling`, `sync`, `shader_compile`, `bind_point_collision`, `other`.

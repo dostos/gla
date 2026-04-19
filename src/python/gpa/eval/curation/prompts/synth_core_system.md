@@ -44,8 +44,12 @@ Each file is introduced by an HTML comment marker of the form
 ```markdown
 # <SCENARIO_ID_UPPER>: <short title>
 
-## Bug
-<1-2 sentence description of the defect>
+## User Report
+<Symptom description from the user's perspective — what someone running
+the app would see. For synthetic scenarios, write as if you don't yet
+know the cause: describe pixel values, visible artifacts, what seems
+off, anything the reporter tried. 2-4 sentences. Avoid diagnosing the
+bug in this section — the Ground Truth section below carries that.>
 
 ## Expected Correct Output
 <what the frame should show, with specific pixel values/colors if applicable>
@@ -53,8 +57,9 @@ Each file is introduced by an HTML comment marker of the form
 ## Actual Broken Output
 <what it actually shows>
 
-## Ground Truth Diagnosis
+## Ground Truth
 <root cause explanation — describe WHY the bug produces the symptom.
+This section is withheld from the agent; used only for scoring.
 No citation required — this is synthetic.>
 
 ## Difficulty Rating
@@ -104,6 +109,26 @@ spec:
 ```
 ```
 
+## Contamination rules (CRITICAL — enforced by validator)
+
+The eval agent sees main.c as input. ANY comment or runtime output that
+names the diagnosis, root cause, or describes code as "intentionally
+buggy" defeats the eval.
+
+**Forbidden comment content** (any language — `//`, `/* */`, shader):
+- `// BUG`, `// FIX`, `// WRONG`, `// CORRECT`, `// BUG PATTERN`, `// buggy`
+- `// intentionally omitted`, `// intentionally wrong`, `// should be`
+- `// <-- MISSING`, `// this is the missing call`
+- Narrative sentences explaining WHY the code is wrong
+- Arrow comments like `// <-- the bug`
+
+**Allowed comments**: the top SOURCE line, license headers, and neutral
+WHAT-the-code-does comments (`// upload shadow map texture`).
+
+**Forbidden runtime output**: no printf/fprintf strings like
+`"bug reproduced"`, `"bug fixed"`, `"verdict"`, `"leaked"`. Measurement
+printfs are fine (`"center pixel rgba=%d,%d,%d,%d"`); interpretation is not.
+
 ## Rules for main.c
 
 - Single C file, 100-280 lines total
@@ -129,10 +154,12 @@ spec:
 ## Rules for scenario.md
 
 - `# <ID>: Title` — use the SCENARIO_ID_UPPER from the input
-- ALL of these sections present in this order: Bug, Expected Correct
-  Output, Actual Broken Output, Ground Truth Diagnosis, Difficulty Rating,
+- ALL of these sections present in this order: User Report, Expected
+  Correct Output, Actual Broken Output, Ground Truth, Difficulty Rating,
   Adversarial Principles, How OpenGPA Helps, Tier, API, Framework,
   Bug Signature
+- `## User Report` MUST be symptom-only; see contamination rules above for
+  forbidden diagnostic phrases
 - Tier is always `core` for these synthetics
 - API is always `opengl`
 - Framework is always `none`
