@@ -10,4 +10,4 @@ Tier-3 framework integration layer for OpenGPA. Accepts scene graph metadata fro
 
 ## See Also
 - `src/python/gla/api/README.md` — REST endpoint that accepts metadata
-- `tests/python/README.md` — tests covering this layer
+- `tests/unit/python/README.md` — tests covering this layer

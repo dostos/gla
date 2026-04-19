@@ -366,14 +366,14 @@ The weakest link in the pipeline. Concrete approach:
 
 ## 5. Testing strategy
 
-**Unit tests** (`tests/python/eval/curation/`):
+**Unit tests** (`tests/unit/python/eval/curation/`):
 - `test_discovery.py` — stubbed GitHub/SO API responses; assert correct queries, dedup, rate-limit handling.
 - `test_triage.py` — 20 hand-labeled fixture issues; assert triage verdicts are stable.
 - `test_scenario_schema.py` — round-trip parse of generated scenarios through `ScenarioLoader`; assert all new fields extract cleanly and existing E1-E10 still parse.
 - `test_signature_matcher.py` — per-signature-type cases with synthetic framebuffer PNGs.
 - `test_coverage_log.py` — append / read / regenerate cycle for JSONL + markdown summary.
 
-**Integration test** (`tests/python/eval/curation/test_pipeline_end_to_end.py`):
+**Integration test** (`tests/unit/python/eval/curation/test_pipeline_end_to_end.py`):
 Runs the whole pipeline against a fixture of 3 issues covering: (a) one that should become a committed scenario, (b) one that should be rejected at triage, (c) one that should fail at validate. Asserts correct outcome and that the coverage log has 3 new rows.
 
 **Meta-eval** (one-time): human reviews 10% random sample of first batch; findings regenerate pipeline prompts.
@@ -433,7 +433,7 @@ tests/eval/
       scenario.md
     ...
 
-tests/python/eval/curation/          # NEW tests
+tests/unit/python/eval/curation/          # NEW tests
   test_discovery.py
   test_triage.py
   test_scenario_schema.py

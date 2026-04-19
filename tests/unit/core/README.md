@@ -12,4 +12,4 @@ Google Test suite for OpenGPA's C++ core engine. Tests are hermetic (no GPU requ
 
 ## See Also
 - `src/core/README.md` — code under test
-- `tests/shims/README.md` — separate C unit tests for the GL shim
+- `tests/unit/shims/README.md` — separate C unit tests for the GL shim

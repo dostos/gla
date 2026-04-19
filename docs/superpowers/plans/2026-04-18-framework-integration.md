@@ -69,7 +69,7 @@ tests/
 **Files:**
 - Modify: `src/shims/gl/shadow_state.h`
 - Modify: `src/shims/gl/shadow_state.c`
-- Modify: `tests/shims/test_shadow_state.c`
+- Modify: `tests/unit/shims/test_shadow_state.c`
 
 - [ ] **Step 1: Add debug group data to shadow state header**
 
@@ -98,7 +98,7 @@ int gla_shadow_get_debug_group_path(const GlaShadowState* state, char* buf, size
 
 - [ ] **Step 2: Write failing tests**
 
-Add to `tests/shims/test_shadow_state.c`:
+Add to `tests/unit/shims/test_shadow_state.c`:
 ```c
 void test_debug_group_push_pop(void) {
     GlaShadowState s;
@@ -139,7 +139,7 @@ void test_debug_group_path(void) {
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `bazel test //tests/shims:test_shadow_state`
+Run: `bazel test //tests/unit/shims:test_shadow_state`
 
 - [ ] **Step 4: Implement shadow state functions**
 
@@ -315,7 +315,7 @@ In `py_gla.cpp`, add to the NormalizedDrawCall binding:
 
 - [ ] **Step 7: Verify full build and tests**
 
-Run: `bazel build //... && bazel test //tests/core/... //tests/shims/...`
+Run: `bazel build //... && bazel test //tests/unit/core/... //tests/unit/shims/...`
 
 - [ ] **Step 8: Commit**
 
@@ -333,8 +333,8 @@ feat: serialize debug group path through capture pipeline
 - Create: `src/python/gla/framework/metadata_store.py`
 - Create: `src/python/gla/api/routes_metadata.py`
 - Modify: `src/python/gla/api/app.py`
-- Create: `tests/python/test_metadata_store.py`
-- Create: `tests/python/test_api_metadata.py`
+- Create: `tests/unit/python/test_metadata_store.py`
+- Create: `tests/unit/python/test_api_metadata.py`
 
 - [ ] **Step 1: Create framework types**
 
@@ -461,7 +461,7 @@ class MetadataStore:
 
 - [ ] **Step 3: Write MetadataStore tests**
 
-`tests/python/test_metadata_store.py`:
+`tests/unit/python/test_metadata_store.py`:
 - `test_store_and_get` — store metadata, retrieve by frame_id
 - `test_not_found` — get non-existent frame_id returns None
 - `test_capacity_eviction` — store more than capacity, oldest evicted
@@ -472,7 +472,7 @@ class MetadataStore:
 
 - [ ] **Step 4: Run MetadataStore tests**
 
-Run: `PYTHONPATH=src/python python -m pytest tests/python/test_metadata_store.py -v`
+Run: `PYTHONPATH=src/python python -m pytest tests/unit/python/test_metadata_store.py -v`
 
 - [ ] **Step 5: Create metadata POST endpoint**
 
@@ -517,7 +517,7 @@ app.include_router(metadata_router, prefix="/api/v1")
 
 - [ ] **Step 7: Write API tests, verify all pass**
 
-Run: `PYTHONPATH=src/python python -m pytest tests/python/ -v`
+Run: `PYTHONPATH=src/python python -m pytest tests/unit/python/ -v`
 
 - [ ] **Step 8: Commit**
 
@@ -531,7 +531,7 @@ feat: metadata sidecar endpoint + storage for framework plugins
 
 **Files:**
 - Create: `src/python/gla/framework/debug_groups.py`
-- Create: `tests/python/test_debug_groups.py`
+- Create: `tests/unit/python/test_debug_groups.py`
 
 - [ ] **Step 1: Implement DebugGroupNode and tree builder**
 
@@ -596,8 +596,8 @@ feat: debug group tree builder from draw call paths
 **Files:**
 - Create: `src/python/gla/framework/correlation.py`
 - Create: `src/python/gla/framework/query_engine.py`
-- Create: `tests/python/test_correlation.py`
-- Create: `tests/python/test_framework_query.py`
+- Create: `tests/unit/python/test_correlation.py`
+- Create: `tests/unit/python/test_framework_query.py`
 
 - [ ] **Step 1: Implement correlation logic**
 
@@ -676,8 +676,8 @@ feat: correlation engine + FrameworkQueryEngine
 - Create: `src/python/gla/api/routes_passes.py`
 - Create: `src/python/gla/api/routes_explain.py`
 - Modify: `src/python/gla/api/app.py`
-- Create: `tests/python/test_api_objects.py`
-- Create: `tests/python/test_api_explain.py`
+- Create: `tests/unit/python/test_api_objects.py`
+- Create: `tests/unit/python/test_api_explain.py`
 
 - [ ] **Step 1: Create object query routes**
 

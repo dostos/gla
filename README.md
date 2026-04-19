@@ -278,14 +278,14 @@ pnpm build
 **C++ unit tests:**
 
 ```bash
-bazel test //tests/core/...
-bazel test //tests/shims/...
+bazel test //tests/unit/core/...
+bazel test //tests/unit/shims/...
 ```
 
 **Python tests:**
 
 ```bash
-pytest tests/python/
+pytest tests/unit/python/
 ```
 
 Test coverage includes: frame store, IPC (control socket, shm ring buffer),

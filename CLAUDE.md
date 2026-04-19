@@ -8,8 +8,8 @@ OpenGPA (Open Graphics Profiler for Agents) — a live graphics debugger for AI 
 
 ```bash
 bazel build //...                                          # build everything
-bazel test //tests/core/... //tests/shims/...              # C++ tests
-PYTHONPATH=src/python python -m pytest tests/python/ -q    # Python tests
+bazel test //tests/unit/core/... //tests/unit/shims/...     # C++ tests
+PYTHONPATH=src/python python -m pytest tests/unit/python/ -q  # Python tests
 ```
 
 Python 3.11 (Bazel-managed) is required for the pybind11 module. System Python 3.10 works for pytest only.
@@ -87,7 +87,7 @@ See `native.py` and `renderdoc.py` for examples.
 1. Create `src/python/gla/api/routes_NAME.py`
 2. Use `safe_json_response()` for ALL returns (prevents pydantic bytes crash)
 3. Register in `src/python/gla/api/app.py`
-4. Add tests in `tests/python/test_api_NAME.py`
+4. Add tests in `tests/unit/python/test_api_NAME.py`
 
 ## Known Issues
 
@@ -109,6 +109,10 @@ See `native.py` and `renderdoc.py` for examples.
 | Framework integration | `src/python/gla/framework/` |
 | Capture backends | `src/python/gla/backends/` |
 | Eval harness | `src/python/gla/eval/` |
+| C++ unit tests | `tests/unit/core/` |
+| Shim unit tests | `tests/unit/shims/` |
+| Python unit tests | `tests/unit/python/` |
 | Eval scenarios | `tests/eval/` |
+| Integration tests | `tests/integration/` |
 | Design specs | `docs/superpowers/specs/` |
 | Plans | `docs/superpowers/plans/` |

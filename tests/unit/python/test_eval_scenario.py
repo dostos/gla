@@ -15,7 +15,7 @@ from gla.eval.scenario import ScenarioLoader, ScenarioMetadata
 # Helpers
 # ---------------------------------------------------------------------------
 
-EVAL_DIR = Path(__file__).parent.parent / "eval"
+EVAL_DIR = Path(__file__).parent.parent.parent / "eval"
 
 
 def _make_result(

@@ -110,8 +110,8 @@ gla/
 - Create: `src/core/BUILD.bazel`
 - Create: `src/bindings/BUILD.bazel`
 - Create: `schemas/BUILD.bazel`
-- Create: `tests/core/BUILD.bazel`
-- Create: `tests/shims/BUILD.bazel`
+- Create: `tests/unit/core/BUILD.bazel`
+- Create: `tests/unit/shims/BUILD.bazel`
 - Create: `pyproject.toml`
 - Create: `src/python/gla/__init__.py`
 
@@ -156,7 +156,7 @@ cc_library(
     name = "shadow_state",
     srcs = ["shadow_state.c"],
     hdrs = ["shadow_state.h"],
-    visibility = ["//tests/shims:__pkg__"],
+    visibility = ["//tests/unit/shims:__pkg__"],
 )
 
 # The full LD_PRELOAD shared library
@@ -236,7 +236,7 @@ flatbuffer_cc_library(
 )
 ```
 
-- [ ] **Step 6: Create tests/core/BUILD.bazel**
+- [ ] **Step 6: Create tests/unit/core/BUILD.bazel**
 
 ```starlark
 cc_test(
@@ -285,7 +285,7 @@ cc_test(
 )
 ```
 
-- [ ] **Step 7: Create tests/shims/BUILD.bazel**
+- [ ] **Step 7: Create tests/unit/shims/BUILD.bazel**
 
 ```starlark
 cc_test(
@@ -504,7 +504,7 @@ git commit -m "feat: add FlatBuffers schema for frame capture IPC"
 **Files:**
 - Create: `src/core/ipc/shm_ring_buffer.h`
 - Create: `src/core/ipc/shm_ring_buffer.cpp`
-- Create: `tests/core/test_shm_ring_buffer.cpp`
+- Create: `tests/unit/core/test_shm_ring_buffer.cpp`
 
 - [ ] **Step 1: Write failing tests for ring buffer**
 
@@ -517,7 +517,7 @@ Test cases:
 6. Multiple sequential write/read cycles
 
 ```cpp
-// tests/core/test_shm_ring_buffer.cpp
+// tests/unit/core/test_shm_ring_buffer.cpp
 #include <gtest/gtest.h>
 #include "ipc/shm_ring_buffer.h"
 
@@ -568,7 +568,7 @@ TEST(ShmRingBuffer, FullRingReturnsNull) {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `bazel test //tests/core:test_shm_ring_buffer`
+Run: `bazel test //tests/unit/core:test_shm_ring_buffer`
 Expected: FAIL (functions not defined)
 
 - [ ] **Step 3: Implement ShmRingBuffer**
@@ -638,13 +638,13 @@ Implement in `shm_ring_buffer.cpp`: shm_open/ftruncate/mmap for create, shm_open
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `bazel test //tests/core:test_shm_ring_buffer`
+Run: `bazel test //tests/unit/core:test_shm_ring_buffer`
 Expected: All PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/core/ipc/shm_ring_buffer.{h,cpp} tests/core/test_shm_ring_buffer.cpp
+git add src/core/ipc/shm_ring_buffer.{h,cpp} tests/unit/core/test_shm_ring_buffer.cpp
 git commit -m "feat: shared memory ring buffer with CAS-based slot protocol"
 ```
 
@@ -656,7 +656,7 @@ git commit -m "feat: shared memory ring buffer with CAS-based slot protocol"
 - Create: `src/core/ipc/protocol.h`
 - Create: `src/core/ipc/control_socket.h`
 - Create: `src/core/ipc/control_socket.cpp`
-- Create: `tests/core/test_control_socket.cpp`
+- Create: `tests/unit/core/test_control_socket.cpp`
 
 - [ ] **Step 1: Write failing tests**
 
@@ -682,7 +682,7 @@ Server: bind/listen on Unix socket, accept connections, read/write messages with
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/core/ipc/protocol.h src/core/ipc/control_socket.{h,cpp} tests/core/test_control_socket.cpp
+git add src/core/ipc/protocol.h src/core/ipc/control_socket.{h,cpp} tests/unit/core/test_control_socket.cpp
 git commit -m "feat: Unix domain socket control channel with handshake"
 ```
 
@@ -693,7 +693,7 @@ git commit -m "feat: Unix domain socket control channel with handshake"
 **Files:**
 - Create: `src/shims/gl/shadow_state.h`
 - Create: `src/shims/gl/shadow_state.c`
-- Create: `tests/shims/test_shadow_state.c`
+- Create: `tests/unit/shims/test_shadow_state.c`
 
 - [ ] **Step 1: Write failing tests**
 
@@ -747,7 +747,7 @@ Functions: `gla_shadow_init()`, `gla_shadow_bind_texture()`, `gla_shadow_use_pro
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/shims/gl/shadow_state.{h,c} tests/shims/test_shadow_state.c
+git add src/shims/gl/shadow_state.{h,c} tests/unit/shims/test_shadow_state.c
 git commit -m "feat: GL shadow state tracker for stateless capture"
 ```
 
@@ -921,7 +921,7 @@ git commit -m "feat: frame capture at swap boundary with shm + socket IPC"
 - Create: `src/core/store/raw_frame.h`
 - Create: `src/core/store/frame_store.h`
 - Create: `src/core/store/frame_store.cpp`
-- Create: `tests/core/test_frame_store.cpp`
+- Create: `tests/unit/core/test_frame_store.cpp`
 
 - [ ] **Step 1: Write failing tests**
 
@@ -945,7 +945,7 @@ Test cases:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/core/store/ tests/core/test_frame_store.cpp
+git add src/core/store/ tests/unit/core/test_frame_store.cpp
 git commit -m "feat: frame store with ring buffer eviction"
 ```
 
@@ -1011,7 +1011,7 @@ git commit -m "feat: engine main loop with capture ingestion"
 - Create: `src/core/normalize/normalized_types.h`
 - Create: `src/core/normalize/normalizer.h`
 - Create: `src/core/normalize/normalizer.cpp`
-- Create: `tests/core/test_normalizer.cpp`
+- Create: `tests/unit/core/test_normalizer.cpp`
 
 - [ ] **Step 1: Define normalized types**
 
@@ -1085,7 +1085,7 @@ Test: create a RawFrame with mock GL draw calls, normalize it, verify Normalized
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/core/normalize/ tests/core/test_normalizer.cpp
+git add src/core/normalize/ tests/unit/core/test_normalizer.cpp
 git commit -m "feat: normalizer converts raw GL captures to API-agnostic format"
 ```
 
@@ -1096,7 +1096,7 @@ git commit -m "feat: normalizer converts raw GL captures to API-agnostic format"
 **Files:**
 - Create: `src/core/query/query_engine.h`
 - Create: `src/core/query/query_engine.cpp`
-- Create: `tests/core/test_query_engine.cpp`
+- Create: `tests/unit/core/test_query_engine.cpp`
 
 - [ ] **Step 1: Write failing tests**
 
@@ -1158,7 +1158,7 @@ private:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/core/query/ tests/core/test_query_engine.cpp
+git add src/core/query/ tests/unit/core/test_query_engine.cpp
 git commit -m "feat: query engine with frame overview, draw call list, pixel lookup"
 ```
 
@@ -1247,18 +1247,18 @@ git commit -m "feat: pybind11 bindings for engine + query engine"
 - Create: `src/python/gla/api/routes_drawcalls.py`
 - Create: `src/python/gla/api/routes_pixel.py`
 - Create: `src/python/gla/api/routes_control.py`
-- Create: `tests/python/conftest.py`
-- Create: `tests/python/test_api_frames.py`
-- Create: `tests/python/test_api_drawcalls.py`
-- Create: `tests/python/test_api_pixel.py`
-- Create: `tests/python/test_api_control.py`
+- Create: `tests/unit/python/conftest.py`
+- Create: `tests/unit/python/test_api_frames.py`
+- Create: `tests/unit/python/test_api_drawcalls.py`
+- Create: `tests/unit/python/test_api_pixel.py`
+- Create: `tests/unit/python/test_api_control.py`
 
 - [ ] **Step 1: Write failing API tests**
 
 Use `httpx.AsyncClient` with FastAPI's `TestClient`. Mock the C++ engine/query engine at the Python layer for unit testing.
 
 ```python
-# tests/python/conftest.py
+# tests/unit/python/conftest.py
 import pytest
 from unittest.mock import MagicMock
 from gla.api.app import create_app
@@ -1280,7 +1280,7 @@ def client(mock_query_engine):
 ```
 
 ```python
-# tests/python/test_api_frames.py
+# tests/unit/python/test_api_frames.py
 def test_frame_overview(client):
     resp = client.get("/api/v1/frames/1/overview",
                       headers={"Authorization": "Bearer test-token"})
@@ -1302,7 +1302,7 @@ def test_frame_not_found(client, mock_query_engine):
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pytest tests/python/ -v`
+Run: `pytest tests/unit/python/ -v`
 Expected: FAIL (modules don't exist)
 
 - [ ] **Step 3: Implement app.py with auth middleware**
@@ -1386,13 +1386,13 @@ def _format_overview(o):
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `pytest tests/python/ -v`
+Run: `pytest tests/unit/python/ -v`
 Expected: All PASS
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/python/ tests/python/
+git add src/python/ tests/unit/python/
 git commit -m "feat: FastAPI REST API with auth, frame/drawcall/pixel/control endpoints"
 ```
 

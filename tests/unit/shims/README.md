@@ -11,4 +11,4 @@ C unit tests for OpenGPA's GL shadow state tracker. Uses `assert()` and a `main(
 
 ## See Also
 - `src/shims/gl/README.md` — shadow state implementation under test
-- `tests/core/README.md` — gtest-based tests for the engine layer
+- `tests/unit/core/README.md` — gtest-based tests for the engine layer

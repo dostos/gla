@@ -12,4 +12,4 @@ pytest suite for OpenGPA's Python layer. All tests run without a live GPU; the n
 
 ## See Also
 - `src/python/gla/README.md` — package under test
-- `tests/core/README.md` — C++ unit tests for the engine layer
+- `tests/unit/core/README.md` — C++ unit tests for the engine layer

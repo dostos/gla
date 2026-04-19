@@ -11,4 +11,4 @@ C++ core engine for OpenGPA. Receives frame captures from shims over shared memo
 ## See Also
 - `src/bindings/README.md` — pybind11 wrapper around this engine
 - `schemas/README.md` — FlatBuffers IPC schema
-- `tests/core/README.md` — unit tests for this layer
+- `tests/unit/core/README.md` — unit tests for this layer

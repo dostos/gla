@@ -39,7 +39,7 @@ src/python/gla/eval/
       classify_failure_mode_system.md    # Failure-mode attribution prompt
       symptom_match_fallback_system.md   # LLM visual fallback prompt
 
-tests/python/                            # Existing flat layout
+tests/unit/python/                            # Existing flat layout
   test_curation_scenario_schema.py       # Extended schema parsing
   test_curation_coverage_log.py
   test_curation_workdir.py
@@ -80,7 +80,7 @@ pyproject.toml                           # MODIFIED: add anthropic, PyYAML, Pill
 ## Conventions
 
 - **Imports:** Relative imports inside `gla.eval.curation`; external module boundaries use absolute imports (`from gla.eval.scenario import ScenarioMetadata`).
-- **Testing:** pytest, flat `tests/python/test_curation_*.py` files. LLM calls are stubbed at the `llm_client` boundary using `unittest.mock.patch` or a custom fake client; never make real API calls in tests.
+- **Testing:** pytest, flat `tests/unit/python/test_curation_*.py` files. LLM calls are stubbed at the `llm_client` boundary using `unittest.mock.patch` or a custom fake client; never make real API calls in tests.
 - **Subagent prompts:** Stored as separate `.md` files under `src/python/gla/eval/curation/prompts/` and loaded at runtime. Keeps prompts reviewable as text; keeps Python code focused on orchestration.
 - **Error handling:** Stages emit structured `StageResult` (dataclass with `ok: bool`, `reason: str`, `output: dict`) rather than raising. The pipeline orchestrator decides what to do with failures (log + skip vs abort).
 - **No real LLM calls in tests.** Integration test uses a fake LLM client that returns canned responses.
@@ -92,12 +92,12 @@ pyproject.toml                           # MODIFIED: add anthropic, PyYAML, Pill
 
 **Files:**
 - Modify: `src/python/gla/eval/scenario.py`
-- Test: `tests/python/test_curation_scenario_schema.py` (new)
+- Test: `tests/unit/python/test_curation_scenario_schema.py` (new)
 
 - [ ] **Step 1: Write failing test for extended dataclass**
 
 ```python
-# tests/python/test_curation_scenario_schema.py
+# tests/unit/python/test_curation_scenario_schema.py
 from gla.eval.scenario import ScenarioMetadata
 
 def test_scenario_metadata_has_new_fields():
@@ -142,7 +142,7 @@ def test_scenario_metadata_has_new_fields():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/python/test_curation_scenario_schema.py::test_scenario_metadata_has_new_fields -v`
+Run: `pytest tests/unit/python/test_curation_scenario_schema.py::test_scenario_metadata_has_new_fields -v`
 Expected: FAIL with `TypeError` about unexpected keyword arguments.
 
 - [ ] **Step 3: Add the new fields to the dataclass**
@@ -187,18 +187,18 @@ class ScenarioMetadata:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pytest tests/python/test_curation_scenario_schema.py::test_scenario_metadata_has_new_fields -v`
+Run: `pytest tests/unit/python/test_curation_scenario_schema.py::test_scenario_metadata_has_new_fields -v`
 Expected: PASS.
 
 - [ ] **Step 5: Run existing scenario tests to verify no regression**
 
-Run: `pytest tests/python/test_eval_scenario.py -v`
+Run: `pytest tests/unit/python/test_eval_scenario.py -v`
 Expected: all existing tests still pass (fields are optional with defaults).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/python/gla/eval/scenario.py tests/python/test_curation_scenario_schema.py
+git add src/python/gla/eval/scenario.py tests/unit/python/test_curation_scenario_schema.py
 git commit -m "feat(eval): extend ScenarioMetadata with real-world fields"
 ```
 
@@ -208,12 +208,12 @@ git commit -m "feat(eval): extend ScenarioMetadata with real-world fields"
 
 **Files:**
 - Modify: `src/python/gla/eval/scenario.py`
-- Test: `tests/python/test_curation_scenario_schema.py`
+- Test: `tests/unit/python/test_curation_scenario_schema.py`
 
 - [ ] **Step 1: Add failing test for parser extension**
 
 ```python
-# tests/python/test_curation_scenario_schema.py
+# tests/unit/python/test_curation_scenario_schema.py
 import textwrap
 from pathlib import Path
 from gla.eval.scenario import ScenarioLoader
@@ -304,7 +304,7 @@ def test_parser_backward_compatible_with_e1(monkeypatch):
 
 - [ ] **Step 2: Run tests to verify failures**
 
-Run: `pytest tests/python/test_curation_scenario_schema.py -v`
+Run: `pytest tests/unit/python/test_curation_scenario_schema.py -v`
 Expected: `test_parser_extracts_new_sections` fails; `test_parser_backward_compatible_with_e1` passes (old behavior preserved since parser ignores unknown sections currently).
 
 - [ ] **Step 3: Add `PyYAML` dependency and extend parser**
@@ -404,13 +404,13 @@ Pass them to the `ScenarioMetadata` constructor.
 
 - [ ] **Step 4: Run tests — all should pass**
 
-Run: `pytest tests/python/test_curation_scenario_schema.py tests/python/test_eval_scenario.py -v`
+Run: `pytest tests/unit/python/test_curation_scenario_schema.py tests/unit/python/test_eval_scenario.py -v`
 Expected: all pass, including `test_parser_backward_compatible_with_e1`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/python/gla/eval/scenario.py tests/python/test_curation_scenario_schema.py pyproject.toml
+git add src/python/gla/eval/scenario.py tests/unit/python/test_curation_scenario_schema.py pyproject.toml
 git commit -m "feat(eval): parse real-world scenario sections from markdown"
 ```
 
@@ -420,7 +420,7 @@ git commit -m "feat(eval): parse real-world scenario sections from markdown"
 
 **Files:**
 - Modify: `src/python/gla/eval/scenario.py`
-- Test: `tests/python/test_curation_scenario_schema.py`
+- Test: `tests/unit/python/test_curation_scenario_schema.py`
 
 - [ ] **Step 1: Add failing test**
 
@@ -451,7 +451,7 @@ This is a smoke check; if it passes, no code changes needed. If something is mis
 
 **Files:**
 - Modify: `src/python/gla/eval/metrics.py`
-- Test: `tests/python/test_eval_scenario.py`
+- Test: `tests/unit/python/test_eval_scenario.py`
 
 - [ ] **Step 1: Failing test**
 
@@ -483,12 +483,12 @@ class EvalResult:
 
 - [ ] **Step 4: Run tests — pass**
 
-Run: `pytest tests/python/test_eval_scenario.py -v`
+Run: `pytest tests/unit/python/test_eval_scenario.py -v`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/python/gla/eval/metrics.py tests/python/test_eval_scenario.py
+git add src/python/gla/eval/metrics.py tests/unit/python/test_eval_scenario.py
 git commit -m "feat(eval): add observed_helps and failure_mode to EvalResult"
 ```
 
@@ -499,12 +499,12 @@ git commit -m "feat(eval): add observed_helps and failure_mode to EvalResult"
 **Files:**
 - Create: `src/python/gla/eval/curation/__init__.py`
 - Create: `src/python/gla/eval/curation/coverage_log.py`
-- Test: `tests/python/test_curation_coverage_log.py`
+- Test: `tests/unit/python/test_curation_coverage_log.py`
 
 - [ ] **Step 1: Failing test**
 
 ```python
-# tests/python/test_curation_coverage_log.py
+# tests/unit/python/test_curation_coverage_log.py
 import json
 from gla.eval.curation.coverage_log import CoverageLog, CoverageEntry
 
@@ -615,7 +615,7 @@ Also create `src/python/gla/eval/curation/__init__.py` (empty).
 ```bash
 git add src/python/gla/eval/curation/__init__.py \
         src/python/gla/eval/curation/coverage_log.py \
-        tests/python/test_curation_coverage_log.py
+        tests/unit/python/test_curation_coverage_log.py
 git commit -m "feat(curation): coverage log append/read/dedup"
 ```
 
@@ -625,7 +625,7 @@ git commit -m "feat(curation): coverage log append/read/dedup"
 
 **Files:**
 - Modify: `src/python/gla/eval/curation/coverage_log.py`
-- Test: `tests/python/test_curation_coverage_log.py`
+- Test: `tests/unit/python/test_curation_coverage_log.py`
 
 - [ ] **Step 1: Failing test**
 
@@ -737,7 +737,7 @@ class CoverageLog:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/python/gla/eval/curation/coverage_log.py tests/python/test_curation_coverage_log.py
+git add src/python/gla/eval/curation/coverage_log.py tests/unit/python/test_curation_coverage_log.py
 git commit -m "feat(curation): regenerate coverage-gaps.md from log"
 ```
 
@@ -780,12 +780,12 @@ git commit -m "build: auto-discover eval scenarios via glob"
 
 **Files:**
 - Create: `src/python/gla/eval/curation/workdir.py`
-- Test: `tests/python/test_curation_workdir.py`
+- Test: `tests/unit/python/test_curation_workdir.py`
 
 - [ ] **Step 1: Failing test**
 
 ```python
-# tests/python/test_curation_workdir.py
+# tests/unit/python/test_curation_workdir.py
 import json
 from gla.eval.curation.workdir import IssueWorkdir
 
@@ -879,7 +879,7 @@ class IssueWorkdir:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/python/gla/eval/curation/workdir.py tests/python/test_curation_workdir.py
+git add src/python/gla/eval/curation/workdir.py tests/unit/python/test_curation_workdir.py
 git commit -m "feat(curation): per-issue workdir with hash-based caching"
 ```
 
@@ -889,12 +889,12 @@ git commit -m "feat(curation): per-issue workdir with hash-based caching"
 
 **Files:**
 - Create: `src/python/gla/eval/curation/llm_client.py`
-- Test: `tests/python/test_curation_llm_client.py`
+- Test: `tests/unit/python/test_curation_llm_client.py`
 
 - [ ] **Step 1: Failing test**
 
 ```python
-# tests/python/test_curation_llm_client.py
+# tests/unit/python/test_curation_llm_client.py
 from unittest.mock import MagicMock
 from gla.eval.curation.llm_client import LLMClient, LLMResponse
 
@@ -1005,7 +1005,7 @@ class LLMClient:
 
 ```bash
 git add src/python/gla/eval/curation/llm_client.py \
-        tests/python/test_curation_llm_client.py pyproject.toml
+        tests/unit/python/test_curation_llm_client.py pyproject.toml
 git commit -m "feat(curation): Anthropic SDK wrapper with prompt caching"
 ```
 
@@ -1015,12 +1015,12 @@ git commit -m "feat(curation): Anthropic SDK wrapper with prompt caching"
 
 **Files:**
 - Create: `src/python/gla/eval/curation/discover.py`
-- Test: `tests/python/test_curation_discovery.py`
+- Test: `tests/unit/python/test_curation_discovery.py`
 
 - [ ] **Step 1: Failing test**
 
 ```python
-# tests/python/test_curation_discovery.py
+# tests/unit/python/test_curation_discovery.py
 import json
 import subprocess
 from unittest.mock import patch, MagicMock
@@ -1128,7 +1128,7 @@ class GitHubSearch:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/python/gla/eval/curation/discover.py tests/python/test_curation_discovery.py
+git add src/python/gla/eval/curation/discover.py tests/unit/python/test_curation_discovery.py
 git commit -m "feat(curation): discover issues via gh api"
 ```
 
@@ -1138,7 +1138,7 @@ git commit -m "feat(curation): discover issues via gh api"
 
 **Files:**
 - Modify: `src/python/gla/eval/curation/discover.py`
-- Test: `tests/python/test_curation_discovery.py`
+- Test: `tests/unit/python/test_curation_discovery.py`
 
 - [ ] **Step 1: Failing test**
 
@@ -1255,7 +1255,7 @@ class Discoverer:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/python/gla/eval/curation/discover.py tests/python/test_curation_discovery.py
+git add src/python/gla/eval/curation/discover.py tests/unit/python/test_curation_discovery.py
 git commit -m "feat(curation): Discoverer orchestrates queries + dedupes"
 ```
 
@@ -1267,8 +1267,8 @@ git commit -m "feat(curation): Discoverer orchestrates queries + dedupes"
 - Create: `src/python/gla/eval/curation/prompts/__init__.py`
 - Create: `src/python/gla/eval/curation/prompts/triage_system.md`
 - Create: `src/python/gla/eval/curation/triage.py`
-- Test: `tests/python/test_curation_triage.py`
-- Fixture: `tests/python/fixtures/curation/issue_threads/threejs_12345.json`
+- Test: `tests/unit/python/test_curation_triage.py`
+- Fixture: `tests/unit/python/fixtures/curation/issue_threads/threejs_12345.json`
 
 - [ ] **Step 1: Write the triage system prompt**
 
@@ -1305,7 +1305,7 @@ Respond in a single JSON block with exactly these fields:
 - [ ] **Step 2: Failing test for triage**
 
 ```python
-# tests/python/test_curation_triage.py
+# tests/unit/python/test_curation_triage.py
 import json
 from unittest.mock import MagicMock
 from gla.eval.curation.triage import Triage, TriageResult, IssueThread
@@ -1465,7 +1465,7 @@ class Triage:
 git add src/python/gla/eval/curation/prompts/__init__.py \
         src/python/gla/eval/curation/prompts/triage_system.md \
         src/python/gla/eval/curation/triage.py \
-        tests/python/test_curation_triage.py
+        tests/unit/python/test_curation_triage.py
 git commit -m "feat(curation): triage subagent with fingerprint extraction"
 ```
 
@@ -1475,7 +1475,7 @@ git commit -m "feat(curation): triage subagent with fingerprint extraction"
 
 **Files:**
 - Modify: `src/python/gla/eval/curation/triage.py` (add `fetch_thread` function)
-- Test: `tests/python/test_curation_triage.py`
+- Test: `tests/unit/python/test_curation_triage.py`
 
 - [ ] **Step 1: Failing test**
 
@@ -1537,7 +1537,7 @@ def fetch_issue_thread(url: str) -> IssueThread:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/python/gla/eval/curation/triage.py tests/python/test_curation_triage.py
+git add src/python/gla/eval/curation/triage.py tests/unit/python/test_curation_triage.py
 git commit -m "feat(curation): fetch issue threads via gh api"
 ```
 
@@ -1548,7 +1548,7 @@ git commit -m "feat(curation): fetch issue threads via gh api"
 **Files:**
 - Create: `src/python/gla/eval/curation/prompts/draft_core_system.md`
 - Create: `src/python/gla/eval/curation/draft.py`
-- Test: `tests/python/test_curation_draft.py`
+- Test: `tests/unit/python/test_curation_draft.py`
 
 - [ ] **Step 1: Write the draft system prompt**
 
@@ -1636,7 +1636,7 @@ spec:
 - [ ] **Step 2: Failing test for draft output parsing**
 
 ```python
-# tests/python/test_curation_draft.py
+# tests/unit/python/test_curation_draft.py
 from unittest.mock import MagicMock
 from gla.eval.curation.draft import Draft, DraftResult
 from gla.eval.curation.llm_client import LLMResponse
@@ -1832,7 +1832,7 @@ class Draft:
 ```bash
 git add src/python/gla/eval/curation/prompts/draft_core_system.md \
         src/python/gla/eval/curation/draft.py \
-        tests/python/test_curation_draft.py
+        tests/unit/python/test_curation_draft.py
 git commit -m "feat(curation): core-tier drafting subagent"
 ```
 
@@ -1842,13 +1842,13 @@ git commit -m "feat(curation): core-tier drafting subagent"
 
 **Files:**
 - Create: `src/python/gla/eval/curation/signature_matchers.py`
-- Test: `tests/python/test_curation_signature_matchers.py`
-- Fixture dir: `tests/python/fixtures/curation/framebuffers/`
+- Test: `tests/unit/python/test_curation_signature_matchers.py`
+- Fixture dir: `tests/unit/python/fixtures/curation/framebuffers/`
 
 - [ ] **Step 1: Create fixture PNGs**
 
 ```python
-# tests/python/fixtures/curation/framebuffers/_generate.py  (helper, run once)
+# tests/unit/python/fixtures/curation/framebuffers/_generate.py  (helper, run once)
 from PIL import Image
 Image.new("RGBA", (64, 64), (255, 0, 0, 255)).save("solid_red.png")
 Image.new("RGBA", (64, 64), (0, 0, 255, 255)).save("solid_blue.png")
@@ -1860,12 +1860,12 @@ for x in range(24, 40):
 img.save("red_center_blue_bg.png")
 ```
 
-Generate the three PNGs and commit them to `tests/python/fixtures/curation/framebuffers/`.
+Generate the three PNGs and commit them to `tests/unit/python/fixtures/curation/framebuffers/`.
 
 - [ ] **Step 2: Failing test**
 
 ```python
-# tests/python/test_curation_signature_matchers.py
+# tests/unit/python/test_curation_signature_matchers.py
 from pathlib import Path
 from gla.eval.curation.signature_matchers import match_signature, SignatureMatchResult
 
@@ -1975,8 +1975,8 @@ def _match_fb_dominant(image_png: bytes, spec: dict) -> SignatureMatchResult:
 
 ```bash
 git add src/python/gla/eval/curation/signature_matchers.py \
-        tests/python/test_curation_signature_matchers.py \
-        tests/python/fixtures/curation/framebuffers/*.png pyproject.toml
+        tests/unit/python/test_curation_signature_matchers.py \
+        tests/unit/python/fixtures/curation/framebuffers/*.png pyproject.toml
 git commit -m "feat(curation): signature matcher framework + dominant-color"
 ```
 
@@ -1986,7 +1986,7 @@ git commit -m "feat(curation): signature matcher framework + dominant-color"
 
 **Files:**
 - Modify: `src/python/gla/eval/curation/signature_matchers.py`
-- Test: `tests/python/test_curation_signature_matchers.py`
+- Test: `tests/unit/python/test_curation_signature_matchers.py`
 
 - [ ] **Step 1: Failing test**
 
@@ -2047,7 +2047,7 @@ def _match_region_histogram(image_png: bytes, spec: dict) -> SignatureMatchResul
 
 ```bash
 git add src/python/gla/eval/curation/signature_matchers.py \
-        tests/python/test_curation_signature_matchers.py
+        tests/unit/python/test_curation_signature_matchers.py
 git commit -m "feat(curation): color_histogram_in_region matcher"
 ```
 
@@ -2057,7 +2057,7 @@ git commit -m "feat(curation): color_histogram_in_region matcher"
 
 **Files:**
 - Modify: `src/python/gla/eval/curation/signature_matchers.py`
-- Test: `tests/python/test_curation_signature_matchers.py`
+- Test: `tests/unit/python/test_curation_signature_matchers.py`
 
 These matchers consume OpenGPA capture *metadata* (draw call list, pipeline state, uniform values) in addition to the framebuffer PNG. Extend the matcher signature to accept an optional `metadata` dict.
 
@@ -2196,7 +2196,7 @@ def _match_nan(image_png, spec, metadata):
 
 ```bash
 git add src/python/gla/eval/curation/signature_matchers.py \
-        tests/python/test_curation_signature_matchers.py
+        tests/unit/python/test_curation_signature_matchers.py
 git commit -m "feat(curation): metadata-driven signature matchers"
 ```
 
@@ -2206,7 +2206,7 @@ git commit -m "feat(curation): metadata-driven signature matchers"
 
 **Files:**
 - Create: `src/python/gla/eval/curation/validate.py`
-- Test: `tests/python/test_curation_validate.py`
+- Test: `tests/unit/python/test_curation_validate.py`
 
 The stage's responsibilities: write the drafted C source into `tests/eval/`, build via Bazel, run under Xvfb with the existing OpenGPA shim+engine, fetch the captured framebuffer + metadata via the REST API (or the in-process `ScenarioRunner` already used by the eval harness), and invoke `match_signature`.
 
@@ -2215,7 +2215,7 @@ The stage's responsibilities: write the drafted C source into `tests/eval/`, bui
 Test writes a small dummy drafted scenario, stubs `ScenarioRunner.build_and_run`, stubs the framebuffer fetcher, and asserts the validate stage returns success.
 
 ```python
-# tests/python/test_curation_validate.py
+# tests/unit/python/test_curation_validate.py
 from unittest.mock import MagicMock
 from pathlib import Path
 from gla.eval.curation.validate import Validator, ValidationResult
@@ -2345,7 +2345,7 @@ class Validator:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/python/gla/eval/curation/validate.py tests/python/test_curation_validate.py
+git add src/python/gla/eval/curation/validate.py tests/unit/python/test_curation_validate.py
 git commit -m "feat(curation): validate stage builds, runs, matches signature"
 ```
 
@@ -2355,7 +2355,7 @@ git commit -m "feat(curation): validate stage builds, runs, matches signature"
 
 **Files:**
 - Modify: `src/python/gla/eval/runner.py` (add `build_and_capture`)
-- Test: `tests/python/test_eval_runner.py` (new)
+- Test: `tests/unit/python/test_eval_runner.py` (new)
 
 The validate stage needs a runner that builds the scenario via Bazel, starts it under Xvfb with the OpenGPA shim, waits for frame capture, and returns the framebuffer PNG + metadata dict.
 
@@ -2370,7 +2370,7 @@ If the real constructor uses different parameter names than the test snippet bel
 - [ ] **Step 2: Failing test (adjust constructor args to match real signature)**
 
 ```python
-# tests/python/test_eval_runner.py
+# tests/unit/python/test_eval_runner.py
 from unittest.mock import MagicMock, patch
 from gla.eval.runner import ScenarioRunner
 
@@ -2474,7 +2474,7 @@ Note: the existing `ScenarioRunner` may already have private attribute names lik
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/python/gla/eval/runner.py tests/python/test_eval_runner.py
+git add src/python/gla/eval/runner.py tests/unit/python/test_eval_runner.py
 git commit -m "feat(eval): ScenarioRunner.build_and_capture for curation"
 ```
 
@@ -2484,14 +2484,14 @@ git commit -m "feat(eval): ScenarioRunner.build_and_capture for curation"
 
 **Files:**
 - Create: `src/python/gla/eval/curation/run_eval.py`
-- Test: `tests/python/test_curation_run_eval.py`
+- Test: `tests/unit/python/test_curation_run_eval.py`
 
 Invokes the existing `EvalHarness` on a committed-but-not-classified scenario, returning the two `EvalResult` objects (with_gla + code_only).
 
 - [ ] **Step 1: Failing test**
 
 ```python
-# tests/python/test_curation_run_eval.py
+# tests/unit/python/test_curation_run_eval.py
 from unittest.mock import MagicMock
 from datetime import datetime, timezone
 from gla.eval.curation.run_eval import RunEval, RunEvalResult
@@ -2557,7 +2557,7 @@ class RunEval:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/python/gla/eval/curation/run_eval.py tests/python/test_curation_run_eval.py
+git add src/python/gla/eval/curation/run_eval.py tests/unit/python/test_curation_run_eval.py
 git commit -m "feat(curation): run-eval stage wrapping EvalHarness"
 ```
 
@@ -2567,12 +2567,12 @@ git commit -m "feat(curation): run-eval stage wrapping EvalHarness"
 
 **Files:**
 - Create: `src/python/gla/eval/curation/classify.py`
-- Test: `tests/python/test_curation_classify.py`
+- Test: `tests/unit/python/test_curation_classify.py`
 
 - [ ] **Step 1: Failing test**
 
 ```python
-# tests/python/test_curation_classify.py
+# tests/unit/python/test_curation_classify.py
 from datetime import datetime, timezone
 from gla.eval.curation.classify import classify_observed_helps, ObservedClassification
 from gla.eval.metrics import EvalResult
@@ -2670,7 +2670,7 @@ def classify_observed_helps(
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/python/gla/eval/curation/classify.py tests/python/test_curation_classify.py
+git add src/python/gla/eval/curation/classify.py tests/unit/python/test_curation_classify.py
 git commit -m "feat(curation): observed helpfulness rules"
 ```
 
@@ -2681,7 +2681,7 @@ git commit -m "feat(curation): observed helpfulness rules"
 **Files:**
 - Create: `src/python/gla/eval/curation/prompts/classify_failure_mode_system.md`
 - Modify: `src/python/gla/eval/curation/classify.py`
-- Test: `tests/python/test_curation_classify.py`
+- Test: `tests/unit/python/test_curation_classify.py`
 
 - [ ] **Step 1: Write the prompt**
 
@@ -2802,7 +2802,7 @@ def attribute_failure_mode(
 ```bash
 git add src/python/gla/eval/curation/prompts/classify_failure_mode_system.md \
         src/python/gla/eval/curation/classify.py \
-        tests/python/test_curation_classify.py
+        tests/unit/python/test_curation_classify.py
 git commit -m "feat(curation): failure-mode attribution subagent"
 ```
 
@@ -2812,12 +2812,12 @@ git commit -m "feat(curation): failure-mode attribution subagent"
 
 **Files:**
 - Create: `src/python/gla/eval/curation/commit.py`
-- Test: `tests/python/test_curation_commit.py`
+- Test: `tests/unit/python/test_curation_commit.py`
 
 - [ ] **Step 1: Failing test**
 
 ```python
-# tests/python/test_curation_commit.py
+# tests/unit/python/test_curation_commit.py
 from pathlib import Path
 from datetime import datetime, timezone
 from gla.eval.curation.commit import commit_scenario
@@ -2944,7 +2944,7 @@ def log_rejection(
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/python/gla/eval/curation/commit.py tests/python/test_curation_commit.py
+git add src/python/gla/eval/curation/commit.py tests/unit/python/test_curation_commit.py
 git commit -m "feat(curation): commit stage + rejection logging"
 ```
 
@@ -2954,7 +2954,7 @@ git commit -m "feat(curation): commit stage + rejection logging"
 
 **Files:**
 - Create: `src/python/gla/eval/curation/pipeline.py`
-- Test: `tests/python/test_curation_pipeline.py`
+- Test: `tests/unit/python/test_curation_pipeline.py`
 
 The orchestrator wires all stages together:
 1. Load config (queries, paths, `batch_quota`).
@@ -2972,7 +2972,7 @@ The orchestrator wires all stages together:
 Uses a fully-stubbed pipeline (no real LLM, no real Bazel):
 
 ```python
-# tests/python/test_curation_pipeline.py
+# tests/unit/python/test_curation_pipeline.py
 from unittest.mock import MagicMock, patch
 from pathlib import Path
 from gla.eval.curation.pipeline import CurationPipeline
@@ -3324,13 +3324,13 @@ class CurationPipeline:
 
 - [ ] **Step 4: Run tests — pass**
 
-Run: `pytest tests/python/test_curation_pipeline.py -v`
+Run: `pytest tests/unit/python/test_curation_pipeline.py -v`
 Expected: all three tests pass.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/python/gla/eval/curation/pipeline.py tests/python/test_curation_pipeline.py
+git add src/python/gla/eval/curation/pipeline.py tests/unit/python/test_curation_pipeline.py
 git commit -m "feat(curation): orchestrator with fingerprint dedup + stages wired"
 ```
 
@@ -3345,7 +3345,7 @@ git commit -m "feat(curation): orchestrator with fingerprint dedup + stages wire
 - [ ] **Step 1: Add test for CLI arg parsing**
 
 ```python
-# tests/python/test_curation_pipeline.py
+# tests/unit/python/test_curation_pipeline.py
 from gla.eval.curation.pipeline import parse_args
 
 def test_parse_args_defaults():
@@ -3463,7 +3463,7 @@ Expected: help text displayed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/python/gla/eval/curation/pipeline.py tests/python/test_curation_pipeline.py pyproject.toml
+git add src/python/gla/eval/curation/pipeline.py tests/unit/python/test_curation_pipeline.py pyproject.toml
 git commit -m "feat(curation): CLI entry point for pipeline"
 ```
 
@@ -3472,14 +3472,14 @@ git commit -m "feat(curation): CLI entry point for pipeline"
 ## Task 26: End-to-end smoke test with a canned fixture issue
 
 **Files:**
-- Create: `tests/python/fixtures/curation/issue_threads/threejs_simple_state_leak.json`
-- Modify: `tests/python/test_curation_pipeline.py` (add end-to-end test)
+- Create: `tests/unit/python/fixtures/curation/issue_threads/threejs_simple_state_leak.json`
+- Modify: `tests/unit/python/test_curation_pipeline.py` (add end-to-end test)
 
 This test exercises the orchestrator with all real components *except* the LLM (stubbed) and the Bazel build (stubbed), using a single canned issue fixture.
 
 - [ ] **Step 1: Create fixture**
 
-`tests/python/fixtures/curation/issue_threads/threejs_simple_state_leak.json`:
+`tests/unit/python/fixtures/curation/issue_threads/threejs_simple_state_leak.json`:
 ```json
 {
   "url": "https://github.com/mrdoob/three.js/issues/00000",
@@ -3621,8 +3621,8 @@ def test_pipeline_end_to_end_with_fixture(tmp_path):
 - [ ] **Step 4: Commit**
 
 ```bash
-git add tests/python/fixtures/curation/issue_threads/threejs_simple_state_leak.json \
-        tests/python/test_curation_pipeline.py
+git add tests/unit/python/fixtures/curation/issue_threads/threejs_simple_state_leak.json \
+        tests/unit/python/test_curation_pipeline.py
 git commit -m "test(curation): end-to-end pipeline smoke test"
 ```
 
@@ -3633,7 +3633,7 @@ git commit -m "test(curation): end-to-end pipeline smoke test"
 **Files:**
 - Modify: `src/python/gla/eval/curation/pipeline.py` (load `config.yaml`)
 - Create: `docs/superpowers/eval/example-config.yaml`
-- Test: `tests/python/test_curation_pipeline.py`
+- Test: `tests/unit/python/test_curation_pipeline.py`
 
 - [ ] **Step 1: Failing test for config loading**
 
@@ -3686,7 +3686,7 @@ queries:
 ```bash
 git add src/python/gla/eval/curation/pipeline.py \
         docs/superpowers/eval/example-config.yaml \
-        tests/python/test_curation_pipeline.py
+        tests/unit/python/test_curation_pipeline.py
 git commit -m "feat(curation): config file support + example"
 ```
 
@@ -3697,7 +3697,7 @@ git commit -m "feat(curation): config file support + example"
 **Files:**
 - Create: `src/python/gla/eval/curation/prompts/symptom_match_fallback_system.md`
 - Modify: `src/python/gla/eval/curation/validate.py`
-- Test: `tests/python/test_curation_validate.py`
+- Test: `tests/unit/python/test_curation_validate.py`
 
 When `match_signature` returns `ambiguous=True`, call an LLM to judge the framebuffer against the scenario's `Actual Broken Output` section.
 
@@ -3826,7 +3826,7 @@ class Validator:
 ```bash
 git add src/python/gla/eval/curation/prompts/symptom_match_fallback_system.md \
         src/python/gla/eval/curation/validate.py \
-        tests/python/test_curation_validate.py
+        tests/unit/python/test_curation_validate.py
 git commit -m "feat(curation): LLM visual fallback in validator"
 ```
 
@@ -3922,8 +3922,8 @@ git commit -m "eval: first mined batch of real-world scenarios"
 
 ## Acceptance criteria (end of plan)
 
-- [ ] `pytest tests/python/test_curation_*.py -v` — all pass.
-- [ ] `pytest tests/python/test_eval_*.py -v` — existing harness tests still pass (no regression).
+- [ ] `pytest tests/unit/python/test_curation_*.py -v` — all pass.
+- [ ] `pytest tests/unit/python/test_eval_*.py -v` — existing harness tests still pass (no regression).
 - [ ] `bazel build //tests/eval:all` — succeeds on all existing + mined scenarios.
 - [ ] `python -m gla.eval.curation.pipeline --help` — prints help.
 - [ ] At least 30 `r*_*.{c,md}` scenarios committed to `tests/eval/`.
