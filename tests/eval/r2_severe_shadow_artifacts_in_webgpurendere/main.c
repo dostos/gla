@@ -124,10 +124,6 @@ int main(void){
   glBindFramebuffer(GL_FRAMEBUFFER,sFbo);
   glViewport(0,0,SM,SM);
   glClear(GL_DEPTH_BUFFER_BIT);
-  // BUG: shadow pass inherits the main-pass cull mode (GL_BACK) instead of
-  // inverting to GL_FRONT. The depth texture therefore stores front-face
-  // depths, and the later shadow compare for those same front faces degenerates
-  // into near-equal-depth z-fighting -> shadow acne on lit surfaces.
   glCullFace(GL_BACK);
   glUseProgram(pD);
   glUniformMatrix4fv(glGetUniformLocation(pD,"uMVP"),1,0,lmvp);
@@ -158,7 +154,6 @@ int main(void){
   int bright=0, dark=0;
   for(int i=0;i<32*32;i++){ int v=buf[i*4]; if(v>160)bright++; else if(v<80)dark++; }
   printf("lit-face probe: bright=%d dark=%d\n", bright, dark);
-  printf("verdict: %s\n", (dark>50) ? "ACNE (bug reproduced)" : "clean (bug fixed)");
 
   glXMakeCurrent(dpy,None,NULL);
   glXDestroyContext(dpy,ctx);

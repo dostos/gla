@@ -1,17 +1,4 @@
 // SOURCE: https://github.com/mrdoob/three.js/issues/26762
-//
-// R3: 3D model with transparent material rendered incorrectly
-//
-// Two overlapping triangles rendered with GL_DEPTH_TEST enabled but depth
-// writes DISABLED (glDepthMask(GL_FALSE)). The front (green) triangle is
-// drawn first; the behind (red) triangle is drawn second. Because neither
-// draw writes depth, the second draw's fragments always pass the depth test
-// (cleared depth = 1.0) and overwrite color where they overlap.  Result:
-// the region where green SHOULD occlude red comes out red.
-//
-// This reproduces the three.js wasp-GLTF z-fighting/stitching bug: when
-// materials have depthWrite=false, overlapping geometry loses correct
-// occlusion and later-drawn surfaces win regardless of depth.
 
 #include <X11/Xlib.h>
 #include <GL/gl.h>
@@ -180,17 +167,13 @@ int main(void)
         glUseProgram(prog);
         glBindVertexArray(vao);
 
-        /* THE BUG: depth writes disabled while drawing opaque overlapping
-         * geometry. Mirrors three.js materials with depthWrite=false. */
         glDepthMask(GL_FALSE);
 
         /* Draw T1 (front, green) first. */
         glUniform4f(colorLoc, 0.0f, 0.9f, 0.0f, 1.0f);
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
-        /* Draw T2 (behind, red) second. Without depth writes, T2's fragments
-         * pass the depth test against the cleared buffer and overwrite T1
-         * in the overlap region — correct occlusion is lost. */
+        /* Draw T2 (behind, red) second. */
         glUniform4f(colorLoc, 0.9f, 0.0f, 0.0f, 1.0f);
         glDrawArrays(GL_TRIANGLES, 3, 3);
 

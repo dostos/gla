@@ -1,9 +1,5 @@
 // SOURCE: https://github.com/godotengine/godot/issues/75201
-// Pattern: particle spawns with intended random initial rotation, but the
-// first rendered frame uses the default (unrotated) value because the
-// particle-logic tick that assigns the random rotation runs at a lower rate
-// than the render tick, and the interpolator does not carry property curves
-// (rotation/scale/color) through the first render.
+// Renders a single particle (rectangle) with a u_rotation uniform on its first frame.
 
 #include <GL/gl.h>
 #include <GL/glx.h>
@@ -108,15 +104,8 @@ int main(void) {
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
-    // Simulates the bug: the particle's random initial rotation is INTENDED
-    // to be ~90 degrees (1.5708 rad), computed by the particle-logic tick.
-    // But on the first render frame after spawn, that tick has not yet run
-    // for this new particle, so the rotation uniform stays at its default 0.
-    // The interpolator passes through property curves unchanged (see #51318),
-    // so frame 0 shows the unrotated quad.
     GLint uRot = glGetUniformLocation(prog, "u_rotation");
-    float first_frame_rotation = 0.0f;   // buggy: default, pre-tick
-    // float intended_rotation = 1.5708f; // correct: set by particle tick
+    float first_frame_rotation = 0.0f;
 
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);

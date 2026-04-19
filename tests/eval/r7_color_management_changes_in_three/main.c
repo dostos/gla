@@ -1,12 +1,5 @@
 // SOURCE: https://github.com/aframevr/aframe/issues/5302
-// sRGB-encoded texture data uploaded with a linear internal format (GL_RGB8)
-// while GL_FRAMEBUFFER_SRGB is enabled. The shader samples the sRGB bytes as
-// if they were linear, then the framebuffer re-encodes them to sRGB — so the
-// output is brighter/"washed out" relative to the input. This is the same
-// failure mode A-Frame hit after three.js r152 made colorManagement the
-// default: apps that forgot to mark diffuse textures as SRGBColorSpace saw
-// their scenes wash out. A 2x2 mid-gray (0x80) texture renders at ~188
-// instead of 128.
+// 2x2 mid-gray (0x80) texture rendered to a framebuffer with GL_FRAMEBUFFER_SRGB enabled.
 #define _POSIX_C_SOURCE 200809L
 #define GL_GLEXT_PROTOTYPES
 #include <stdio.h>
@@ -67,17 +60,13 @@ int main(void) {
     GLXContext ctx = glXCreateContext(dpy, vi, NULL, True);
     glXMakeCurrent(dpy, win, ctx);
 
-    // 2x2 texture filled with sRGB mid-gray (0x80 = 128).
-    // Treated as sRGB (GL_SRGB8), the hardware decodes 128 -> ~0.216 linear.
-    // Treated as linear (GL_RGB8, the bug), the shader sees 0.502 directly.
-    // FRAMEBUFFER_SRGB then encodes to sRGB: 0.502 linear -> ~188 in 8-bit.
+    // 2x2 texture filled with mid-gray (0x80 = 128).
     unsigned char pixels[2 * 2 * 3];
     memset(pixels, 0x80, sizeof(pixels));
 
     GLuint tex;
     glGenTextures(1, &tex);
     glBindTexture(GL_TEXTURE_2D, tex);
-    // BUG PATTERN: sRGB-encoded pixels uploaded with a linear internal format.
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 2, 2, 0,
                  GL_RGB, GL_UNSIGNED_BYTE, pixels);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -116,8 +105,6 @@ int main(void) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, tex);
 
-    // colorManagement on: output gets gamma-encoded to sRGB. Combined with the
-    // wrong texture internal format above, this is the r152 washout.
     glEnable(GL_FRAMEBUFFER_SRGB);
     glViewport(0, 0, 256, 256);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);

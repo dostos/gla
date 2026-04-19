@@ -99,13 +99,9 @@ int main(void){
     glVertexAttribPointer_(0,2,GL_FLOAT,GL_FALSE,2*sizeof(float),(void*)0);
     glEnableVertexAttribArray_(0);
 
-    /* "Quadrant" instance buffer: 4 tiles in one batch, size > 1.
+    /* Quadrant instance buffer: 4 tiles in one batch.
        Port of the pattern from Godot's canvas_item renderer: batched
-       transforms streamed into a single VBO, then drawn in one call.
-       Instance 2 here has a STALE transform (left from a prior quadrant
-       upload) — this mirrors the observed intermittent tile displacement
-       described in the thread where a tile briefly renders at the wrong
-       location inside a quadrant-batched draw. */
+       transforms streamed into a single VBO, then drawn in one call. */
     /*                  tx     ty     sx    sy    r    g    b         */
     float inst_good[] = {
          16.0f,  16.0f, 1.0f, 1.0f, 0.2f, 0.8f, 0.2f,
@@ -113,12 +109,10 @@ int main(void){
         208.0f,  16.0f, 1.0f, 1.0f, 0.2f, 0.8f, 0.2f,
         304.0f,  16.0f, 1.0f, 1.0f, 0.2f, 0.8f, 0.2f,
     };
-    /* The "stale transform" that leaks across quadrant boundaries: */
     float stale_xform[] = { 900.0f, 900.0f, 1.0f, 1.0f };
 
     GLuint ibo; glGenBuffers_(1,&ibo); glBindBuffer_(GL_ARRAY_BUFFER, ibo);
     glBufferData_(GL_ARRAY_BUFFER, sizeof(inst_good), inst_good, GL_DYNAMIC_DRAW);
-    /* Overwrite instance 2's transform with stale data: the bug pattern. */
     glBufferSubData_(GL_ARRAY_BUFFER, 2*7*sizeof(float), 4*sizeof(float), stale_xform);
 
     glVertexAttribPointer_(1,4,GL_FLOAT,GL_FALSE,7*sizeof(float),(void*)0);

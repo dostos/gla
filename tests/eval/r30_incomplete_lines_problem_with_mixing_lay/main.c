@@ -1,10 +1,4 @@
 // SOURCE: https://github.com/mapbox/mapbox-gl-js/issues/13206
-// Pattern port: Mapbox-GL's layer "slot" system advertises an ordering
-// contract (slot=top renders above slot=middle), but the renderer
-// batches layers in registration order for performance, causing the
-// second-registered "middle" layer to paint over the first-registered
-// "top" layer. The bug reveals itself as a blue line (slot=top) being
-// occluded by a gray building shadow (slot=middle) at the overlap.
 #define GL_GLEXT_PROTOTYPES
 #include <X11/Xlib.h>
 #include <GL/gl.h>
@@ -62,9 +56,7 @@ static GLuint make_quad(float x0, float y0, float x1, float y1) {
     return vao;
 }
 
-// Simulated slot system. In a correct renderer, "top" layers always
-// render above "middle" layers regardless of registration order. The
-// buggy loop below iterates in registration order, ignoring slot.
+// Slot system: layers carry a slot tag (top/middle).
 enum { SLOT_MIDDLE = 0, SLOT_TOP = 1 };
 typedef struct { int slot; GLuint vao; float r,g,b; } Layer;
 
@@ -104,8 +96,8 @@ int main(void) {
     glUseProgram_(prog);
     GLint ul = glGetUniformLocation_(prog, "u_color");
 
-    // Registration order mirrors the reported bug: top FIRST, middle
-    // SECOND. The buggy scheduler iterates the registry directly.
+    // Registration order: top first, middle second. The scheduler
+    // iterates the registry directly.
     Layer registry[] = {
         { SLOT_TOP,    vao_top_line, 0.10f, 0.20f, 1.00f },  // blue
         { SLOT_MIDDLE, vao_mid_bldg, 0.25f, 0.25f, 0.25f },  // gray
@@ -119,8 +111,7 @@ int main(void) {
     glFlush();
     glXSwapBuffers(dpy, win);
 
-    // Probe the center: the top line should be blue here; with the
-    // bug, the middle building has painted over it (gray).
+    // Probe the center pixel.
     unsigned char px[4] = {0};
     glReadPixels(200, 200, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
     fprintf(stderr, "center pixel rgba: %u %u %u %u\n", px[0], px[1], px[2], px[3]);

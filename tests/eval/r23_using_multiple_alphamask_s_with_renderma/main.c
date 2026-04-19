@@ -1,17 +1,7 @@
 // SOURCE: https://github.com/pixijs/pixijs/issues/11995
-// Pattern: a pooled texture object is handed back to a second consumer with
-// new contents, but a uniform that derives from the *intended* sub-region of
-// that texture is left stale because the upstream setter early-returns when
-// the texture *handle* hasn't changed:
-//
-//     set texture(v) { if (this.texture === v) return; ... this.update(); }
-//
-// In PixiJS the stale uniform is `mapCoord` on MaskFilter._textureMatrix.
-// Here we model it as `uMapCoord` — a vec2 that scales UVs into the active
-// sub-region of the 128x128 pooled mask texture. The first draw sets the
-// uniform correctly for its 100x80 mask; the second draw repopulates the
-// pooled texture with a 70x110 mask but skips the uniform update, so the
-// shader samples the new texture contents through the OLD UV transform.
+// Models a pooled mask texture (128x128) reused for two consecutive draws,
+// each with its own active sub-region (100x80 then 70x110). `uMapCoord` is a
+// vec2 that scales UVs into the active sub-region.
 #define GL_GLEXT_PROTOTYPES
 #include <GL/gl.h>
 #include <GL/glext.h>
@@ -56,8 +46,7 @@ static GLuint compile_shader(GLenum kind, const char *src) {
 #define POOL 128
 
 // Repopulate the entire pooled texture: white in [0,sub_w) x [0,sub_h),
-// black elsewhere. Models TexturePool handing back the same GL texture
-// object (no glGenTextures) with fresh sub-region contents drawn into it.
+// black elsewhere.
 static void upload_mask_into_pool(GLuint tex, int sub_w, int sub_h) {
     static unsigned char data[POOL * POOL];
     memset(data, 0, sizeof(data));
@@ -108,8 +97,7 @@ int main(void) {
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
 
-    // === Allocate ONE pooled mask texture (128x128 R8). Same object will be ===
-    // === reused across both mask passes — this is the crux of the bug.     ===
+    // === Allocate ONE pooled mask texture (128x128 R8) reused across both passes. ===
     GLuint pool;
     glGenTextures(1, &pool);
     glBindTexture(GL_TEXTURE_2D, pool);
@@ -135,28 +123,20 @@ int main(void) {
     glClearColor(0.08f, 0.08f, 0.10f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    // ---- Mask A pass: pool now holds a 100x80 white block in its top-left.
+    // ---- Mask A pass: pool holds a 100x80 white block in its top-left.
     upload_mask_into_pool(pool, 100, 80);
 
-    // Draw squareA (green) on the LEFT — mapCoord set correctly.
+    // Draw squareA (green) on the LEFT.
     glUniform2f(locOffset,   -0.45f, 0.0f);
     glUniform2f(locMapCoord, 100.0f / (float)POOL, 80.0f / (float)POOL);
     glUniform3f(locTint,     0.10f, 0.85f, 0.40f);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-    // ---- Pool returns + reacquires the SAME texture object for mask B.
-    // ---- Mask B is 70x110 — taller and narrower than mask A.
+    // ---- Reuse the SAME texture object for mask B (70x110).
     upload_mask_into_pool(pool, 70, 110);
 
     // Draw squareB (blue) on the RIGHT.
-    // BUG: the upstream setter sees the texture handle is unchanged
-    //   (same `pool` object) and short-circuits, so uMapCoord is NEVER
-    //   updated for mask B. The shader keeps sampling through mask A's
-    //   transform (100/128, 80/128) even though the live region is now
-    //   (70/128, 110/128). Result: vertical stretch + horizontal squash,
-    //   visible as a mask whose proportions don't match either intent.
     glUniform2f(locOffset, 0.45f, 0.0f);
-    // glUniform2f(locMapCoord, 70.0f / (float)POOL, 110.0f / (float)POOL);  // <-- the missing call
     glUniform3f(locTint,   0.20f, 0.45f, 0.95f);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 

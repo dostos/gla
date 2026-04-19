@@ -1,11 +1,4 @@
 // SOURCE: https://github.com/mrdoob/three.js/issues/13857
-// Two transparent quads whose object origins and bounding-sphere centers
-// disagree on Z order. The old WebGLRenderer sorted transparent draw calls
-// by object origin (the bug), producing the wrong blended color versus
-// sorting by the bounding-sphere center (the fix in three.js PR #25913).
-//
-// Here we emulate the buggy sort by drawing the "back-by-origin" quad
-// first, even though its actual geometry is in front of the other quad's.
 
 #define GL_GLEXT_PROTOTYPES 1
 #include <GL/gl.h>
@@ -127,11 +120,6 @@ int main(void) {
 
     // Quad A: local z = +3, "origin" at z = -2. World z = +1 (nearer viewer).
     // Quad B: local z = -3, "origin" at z = +2. World z = -1 (farther viewer).
-    //
-    // Correct sort (by bounding-sphere center, back-to-front, camera at +Z):
-    //   B (center z=-1) first, then A (center z=+1).
-    // Buggy sort (by origin, back-to-front):
-    //   A (origin z=-2) first, then B (origin z=+2).  <-- we render THIS.
     GLuint quadA = make_quad(+3.0f);
     GLuint quadB = make_quad(-3.0f);
 
@@ -142,7 +130,6 @@ int main(void) {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST);
 
-    // --- Buggy order (what a sort-by-origin renderer would emit) ---
     glBindVertexArray(quadA);
     glUniform3f(uOrigin, 0.0f, 0.0f, -2.0f);
     glUniform4f(uColor,  1.0f, 0.0f, 0.0f, 0.5f); // red, 50%

@@ -177,7 +177,7 @@ int main(void)
         0, 5, 6,
         0, 6, 1,
     };
-    int n_indices = 18;  // correct count
+    int n_indices = 18;
 
     GLuint vao, vbo, ebo;
     glGenVertexArrays(1, &vao);

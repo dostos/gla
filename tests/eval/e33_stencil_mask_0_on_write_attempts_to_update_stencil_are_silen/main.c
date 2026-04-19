@@ -1,12 +1,9 @@
 // SOURCE: synthetic (no upstream)
-// Stencil mask is 0 when the "stencil prepass" attempts to write; later
-// stencil test sees all zeros and the masked draw shows through everywhere.
 //
 // Minimal OpenGL 2.1 / 3.3 compatible program. Uses GLX for context.
 // Link: -lGL -lX11 -lm only. Compiles with:
 //   gcc -Wall -std=gnu11 main.c -lGL -lX11 -lm
 // Runs under Xvfb; exits cleanly after rendering 3-5 frames.
-// The bug manifests on the first rendered frame.
 #include <X11/Xlib.h>
 #include <GL/gl.h>
 #include <GL/glx.h>
@@ -134,14 +131,9 @@ int main(void) {
 
     glEnable(GL_STENCIL_TEST);
 
-    // We want: stencil prepass writes 1 in the center region, then a
-    // "masked draw" renders red everywhere but only passes where stencil==1.
-    // Expected: red only in the center half. Background clear is blue.
-    // BUG: a lingering glStencilMask(0x00) from an earlier setup path (here
-    // set right before the prepass, as it would be after some UI/text code
-    // disabled writes) causes the prepass to be a silent no-op. Stencil
-    // stays all zero; the masked draw therefore fails everywhere and
-    // nothing red is shown.
+    // Stencil prepass writes 1 in the center region, then a "masked draw"
+    // renders red everywhere but only passes where stencil==1.
+    // Background clear is blue.
 
     for (int frame = 0; frame < 3; ++frame) {
         glViewport(0, 0, 400, 300);
@@ -149,7 +141,6 @@ int main(void) {
         glClearStencil(0);
         glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-        // "Text/UI subsystem earlier turned writes off and forgot to restore."
         glStencilMask(0x00);
 
         // --- Stencil prepass: draw center quad, try to write 1 everywhere it covers. ---

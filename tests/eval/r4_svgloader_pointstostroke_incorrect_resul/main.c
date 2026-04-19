@@ -1,19 +1,4 @@
 // SOURCE: https://github.com/mrdoob/three.js/issues/26784
-//
-// R4: SVGLoader pointsToStroke incorrect results when linejoin=bevel
-//
-// Reproduces the upstream pattern as a minimal GL program:
-// - A V-shaped polyline (P0=(-0.5,-0.5), P1=(0,0), P2=(0.5,-0.5)) is stroked
-//   into triangles offline (mimicking SVGLoader.pointsToStroke with style
-//   linejoin='bevel').
-// - Both segment quads are emitted CCW (consistent with GL_CCW front-face).
-// - The bevel-join fill triangle at P1 is emitted with REVERSED (CW) winding,
-//   matching the upstream bug where the bevel triangle indices are swapped.
-// - GL_CULL_FACE is enabled with the default GL_BACK + GL_CCW, so the bevel
-//   triangle is silently culled while the segment quads render normally.
-// Window: 400x400. Clear: white. Stroke: black. The bevel wedge centered
-// just above (0,0) in NDC (pixel column ~200, rows ~200-210) should be
-// black but is white on the first frame.
 
 #include <X11/Xlib.h>
 #include <GL/gl.h>
@@ -100,8 +85,7 @@ int main(void)
 
     glViewport(0, 0, 400, 400);
 
-    // Match three.js default: CCW front, cull back. SVGLoader geometry is
-    // expected to be CCW; a miswound bevel triangle is silently culled.
+    // CCW front, cull back.
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
@@ -143,9 +127,7 @@ int main(void)
          0.4646f, -0.5354f,
          0.5354f, -0.4646f,
 
-        // --- Bevel join triangle at P1, REVERSED winding (CW) ---
-        // Correct CCW would be: LA1, P1, LB1
-        // Buggy CW (upstream bug): LA1, LB1, P1
+        // --- Bevel join triangle at P1 ---
         -0.0354f,  0.0354f,
          0.0354f,  0.0354f,
          0.0000f,  0.0000f,

@@ -1,10 +1,6 @@
 // SOURCE: https://github.com/mapbox/mapbox-gl-js/issues/13367
-// Minimal OpenGL 3.3 reproduction of the "two overlapping symbol icons
-// sharing a source, only one is drawn" pattern.  The upstream bug is in
-// mapbox-gl-js's symbol placement/collision code; here we model the
-// symptom with two textured quads drawn at the same screen-space position,
-// where a shared-state bug (a dangling VBO binding) causes the second
-// draw to silently consume the wrong vertex data and miss the viewport.
+// Two textured quads ("animated" icon and "static" icon) drawn at the same
+// screen-space position from a shared geometry source.
 #include <GL/gl.h>
 #include <GL/glx.h>
 #include <X11/Xlib.h>
@@ -123,9 +119,6 @@ int main(void) {
     glBindVertexArray(vaoB);
     glBindBuffer(GL_ARRAY_BUFFER, vboB);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertsB), vertsB, GL_STATIC_DRAW);
-    // BUG pattern: forget to bind ebo while vaoB is current.  Symbol layer B
-    // ends up sharing vaoA's element buffer but with an inconsistent vertex
-    // binding, so its draw silently degenerates.
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4*sizeof(float), (void*)0);
     glEnableVertexAttribArray(1);

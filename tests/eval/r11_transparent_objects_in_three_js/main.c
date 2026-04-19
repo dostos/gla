@@ -1,9 +1,4 @@
 // SOURCE: https://stackoverflow.com/questions/15994944/transparent-objects-in-three-js
-// Two overlapping transparent quads are drawn front-to-back with depth writes
-// enabled. The back quad fails the depth test and contributes zero fragments,
-// even though its draw call is issued. This is the pattern Three.js hits when
-// two transparent meshes are equidistant from the camera: sort order is
-// ambiguous, the outer one gets drawn first, and the inner one is culled.
 #define GL_GLEXT_PROTOTYPES
 #include <X11/Xlib.h>
 #include <GL/gl.h>
@@ -84,12 +79,12 @@ int main(void) {
 
     GLuint prog = make_program();
 
-    // Outer (front in depth) quad at z = 0.2 — the "larger sphere" analogue.
+    // Outer quad at z = 0.2.
     float outer[] = {
         -0.5f,-0.5f,0.2f,  0.5f,-0.5f,0.2f,  0.5f, 0.5f,0.2f,
         -0.5f,-0.5f,0.2f,  0.5f, 0.5f,0.2f, -0.5f, 0.5f,0.2f,
     };
-    // Inner (behind) quad at z = 0.8 — the "smaller sphere" analogue.
+    // Inner quad at z = 0.8.
     float inner[] = {
         -0.3f,-0.3f,0.8f,  0.3f,-0.3f,0.8f,  0.3f, 0.3f,0.8f,
         -0.3f,-0.3f,0.8f,  0.3f, 0.3f,0.8f, -0.3f, 0.3f,0.8f,
@@ -98,7 +93,7 @@ int main(void) {
     GLuint vaoInner = make_quad(inner, sizeof(inner));
 
     glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);              // transparent draws writing depth: the trap
+    glDepthMask(GL_TRUE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -107,13 +102,12 @@ int main(void) {
     glUseProgram_(prog);
     GLint ul = glGetUniformLocation_(prog, "u_color");
 
-    // Wrong order: front first, then back. Front writes depth=0.2,
-    // back at 0.8 fails GL_LESS and emits zero fragments.
+    // Front first, then back.
     glUniform4f_(ul, 0.0f, 1.0f, 0.0f, 0.5f);   // green outer
     glBindVertexArray_(vaoOuter);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
-    glUniform4f_(ul, 0.0f, 0.0f, 1.0f, 0.5f);   // blue inner (will be culled)
+    glUniform4f_(ul, 0.0f, 0.0f, 1.0f, 0.5f);   // blue inner
     glBindVertexArray_(vaoInner);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 

@@ -1,5 +1,4 @@
 // SOURCE: synthetic (no upstream)
-// State leak: GL_TEXTURE_CUBE_MAP binding from skybox retained across terrain draw.
 //
 // Minimal OpenGL 2.1 / GLSL 120 program. Uses GLX for context.
 // Link: -lGL -lX11 -lm only. Compiles with:
@@ -81,8 +80,7 @@ static const char* TERRAIN_VS =
     "void main() { gl_Position = vec4(aPos, 0.5, 1.0); }\n";
 
 // Terrain modulates its green base color with an environment cube map
-// (for neutral ambient lighting). The caller is expected to bind a white
-// env probe before drawing; without rebinding, the skybox cube map bleeds in.
+// (for neutral ambient lighting).
 static const char* TERRAIN_FS =
     "#version 120\n"
     "uniform samplerCube uEnv;\n"
@@ -187,11 +185,8 @@ int main(void) {
         glVertexAttribPointer((GLuint)aS, 2, GL_FLOAT, GL_FALSE, 0, 0);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-        // ---- terrain pass: should bind envTex before sampling uEnv.
-        // BUG: the rebind is missing. GL_TEXTURE_CUBE_MAP on unit 0 is still skyTex,
-        //      so the terrain's "neutral env probe" is actually the blue skybox.
+        // ---- terrain pass.
         glUseProgram(terrProg);
-        /* glBindTexture(GL_TEXTURE_CUBE_MAP, envTex);  <-- MISSING */
         glUniform1i(glGetUniformLocation(terrProg, "uEnv"), 0);
         GLint aT = glGetAttribLocation(terrProg, "aPos");
         glEnableVertexAttribArray((GLuint)aT);
