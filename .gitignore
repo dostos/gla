@@ -14,3 +14,5 @@ __pycache__/
 examples/vulkan/minimal_app
 node_modules/
 core.*
+# Curation pipeline workdir — per-issue LLM caches + intermediate state
+.eval-pipeline/
