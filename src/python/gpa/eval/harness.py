@@ -166,16 +166,81 @@ class EvalHarness:
         """
         tools: dict = {
             "read_source": lambda: self.runner.read_source(scenario),
+            # Directory-form scenarios include extra .c/.h/.glsl/.vert/.frag
+            # files beyond main.c. Expose them through a pair of scoped
+            # tools that deny any access to scenario.md (which carries
+            # Ground Truth). read_source still returns main.c contents for
+            # backward compatibility.
+            "list_scenario_files": lambda: self._list_scenario_files(scenario),
+            "read_scenario_file": lambda path: self._read_scenario_file(scenario, path),
         }
         if mode == "with_gla":
             tools["run_with_capture"] = lambda: self.runner.run_with_capture(scenario)
 
-        # Add snapshot tools when the scenario references an upstream snapshot
+        # Add snapshot tools when the scenario references an upstream snapshot.
+        # Agents should be able to walk, read, and grep across the full
+        # snapshot — not just the `relevant_files` hint list.
         if scenario.upstream_snapshot_repo and scenario.upstream_snapshot_sha:
             tools["read_upstream"] = lambda path: self._read_snapshot_file(scenario, path)
             tools["list_upstream_files"] = lambda subdir="": self._list_snapshot_files(scenario, subdir)
+            tools["grep_upstream"] = lambda pattern, subdir="", glob="", max_matches=200: (
+                self._grep_snapshot(scenario, pattern, subdir=subdir,
+                                    glob=glob, max_matches=max_matches)
+            )
 
         return tools
+
+    # ------------------------------------------------------------------
+    # Scenario-directory helpers (must exclude scenario.md to avoid
+    # leaking Ground Truth to the agent)
+    # ------------------------------------------------------------------
+
+    _SCENARIO_ALLOWED_EXTS = (".c", ".h", ".glsl", ".vert", ".frag", ".txt")
+    _SCENARIO_DENIED_NAMES = frozenset({"scenario.md"})
+
+    def _scenario_root(self, scenario: ScenarioMetadata) -> Optional[Path]:
+        sdir = getattr(scenario, "scenario_dir", None)
+        return Path(sdir) if sdir else None
+
+    def _is_agent_visible(self, rel: str) -> bool:
+        """Policy: agent-visible files are source/shader files only. Never
+        scenario.md (Ground Truth lives there). Never hidden dotfiles."""
+        name = Path(rel).name
+        if name in self._SCENARIO_DENIED_NAMES:
+            return False
+        if name.startswith("."):
+            return False
+        return Path(rel).suffix.lower() in self._SCENARIO_ALLOWED_EXTS
+
+    def _list_scenario_files(self, scenario: ScenarioMetadata) -> str:
+        root = self._scenario_root(scenario)
+        if root is None or not root.exists():
+            return "ERROR: scenario directory not available"
+        names = []
+        for p in sorted(root.iterdir()):
+            if p.is_file() and self._is_agent_visible(p.name):
+                names.append(p.name)
+        return "\n".join(names)
+
+    def _read_scenario_file(self, scenario: ScenarioMetadata, path: str) -> str:
+        root = self._scenario_root(scenario)
+        if root is None or not root.exists():
+            return "ERROR: scenario directory not available"
+        try:
+            target = (root / path).resolve()
+            if not str(target).startswith(str(root.resolve())):
+                return f"ERROR: path traversal not allowed: {path!r}"
+        except Exception as exc:
+            return f"ERROR: invalid path {path!r}: {exc}"
+        if not target.exists() or not target.is_file():
+            return f"ERROR: file not found: {path!r}"
+        rel = str(target.relative_to(root.resolve()))
+        if not self._is_agent_visible(rel):
+            return f"ERROR: file {path!r} is not agent-visible (scenario.md is withheld to prevent Ground Truth leakage)"
+        try:
+            return target.read_text(encoding="utf-8", errors="replace")
+        except Exception as exc:
+            return f"ERROR: could not read {path!r}: {exc}"
 
     # ------------------------------------------------------------------
     # Snapshot helpers
@@ -272,3 +337,85 @@ class EvalHarness:
             return f"ERROR: could not list {subdir!r}: {exc}"
 
         return "\n".join(names)
+
+    def _grep_snapshot(
+        self,
+        scenario: ScenarioMetadata,
+        pattern: str,
+        subdir: str = "",
+        glob: str = "",
+        max_matches: int = 200,
+    ) -> str:
+        """Grep for `pattern` across files in the upstream snapshot.
+
+        Powered by ripgrep (`rg`) when available; falls back to python
+        regex if not. Returns matches in ``path:line:text`` form, capped
+        to ``max_matches`` lines. ``glob`` filters by filename (e.g.
+        ``"*.ts"``); ``subdir`` narrows the search root.
+        """
+        import re as _re
+        import shutil as _shutil
+        import subprocess as _subprocess
+
+        try:
+            root = self._ensure_snapshot(scenario)
+        except Exception as exc:
+            return f"ERROR: could not fetch upstream snapshot: {exc}"
+
+        try:
+            search_root = (root / subdir).resolve() if subdir else root.resolve()
+            if not str(search_root).startswith(str(root.resolve())):
+                return f"ERROR: path traversal not allowed: {subdir!r}"
+        except Exception as exc:
+            return f"ERROR: invalid subdir {subdir!r}: {exc}"
+        if not search_root.exists() or not search_root.is_dir():
+            return f"ERROR: {subdir!r} is not a directory in the snapshot"
+
+        rg_path = _shutil.which("rg")
+        if rg_path:
+            argv = [rg_path, "-n", "--no-heading", "--color", "never",
+                    "-m", str(max_matches), pattern]
+            if glob:
+                argv.extend(["-g", glob])
+            argv.append(str(search_root))
+            try:
+                out = _subprocess.run(
+                    argv, capture_output=True, text=True, timeout=20,
+                )
+            except Exception as exc:
+                return f"ERROR: ripgrep invocation failed: {exc}"
+            if out.returncode not in (0, 1):  # 1 == no matches
+                return f"ERROR: ripgrep: {out.stderr[:300]}"
+            lines = out.stdout.splitlines()[:max_matches]
+            # Strip the absolute snapshot prefix so paths are snapshot-relative.
+            prefix = str(root.resolve()) + "/"
+            return "\n".join(
+                line[len(prefix):] if line.startswith(prefix) else line
+                for line in lines
+            ) or "(no matches)"
+
+        # Python fallback — fine for small snapshots, slow for large ones
+        try:
+            cre = _re.compile(pattern)
+        except _re.error as exc:
+            return f"ERROR: invalid regex {pattern!r}: {exc}"
+        from fnmatch import fnmatch
+        matches: list[str] = []
+        for p in search_root.rglob("*"):
+            if not p.is_file():
+                continue
+            rel = str(p.relative_to(root))
+            if glob and not fnmatch(p.name, glob):
+                continue
+            try:
+                text = p.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                continue
+            for i, line in enumerate(text.splitlines(), 1):
+                if cre.search(line):
+                    matches.append(f"{rel}:{i}:{line}")
+                    if len(matches) >= max_matches:
+                        break
+            if len(matches) >= max_matches:
+                break
+        return "\n".join(matches) or "(no matches)"

@@ -60,16 +60,17 @@ class TestScenarioLoader:
         assert scenario.id == "e1_state_leak"
         assert "State Leak" in scenario.title
         assert scenario.difficulty == 1
-        # Bug section should mention missing bind
-        assert "glBindTexture" in scenario.bug_description
+        # User Report describes the symptom (two quads, both end up red)
+        assert "red" in scenario.bug_description.lower()
         # Expected output should mention red and blue
         assert "red" in scenario.expected_output.lower()
         assert "blue" in scenario.expected_output.lower()
         # Actual output — both quads appear red
         assert "red" in scenario.actual_output.lower()
-        # Ground truth diagnosis should explain the state machine
-        assert "tex_red" in scenario.ground_truth_diagnosis or \
-               "texture" in scenario.ground_truth_diagnosis.lower()
+        # Ground Truth carries the diagnosis — must name the missing bind
+        # or the texture state machine
+        gt = scenario.ground_truth_diagnosis.lower()
+        assert "glbindtexture" in gt or "texture" in gt
         # At least one adversarial principle
         assert len(scenario.adversarial_principles) > 0
         # GPA advantage text present

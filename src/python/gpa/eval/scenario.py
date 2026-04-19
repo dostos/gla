@@ -55,10 +55,10 @@ class ScenarioMetadata:
 
 # Section heading aliases — maps canonical name -> list of accepted headings
 _SECTION_ALIASES: dict[str, list[str]] = {
-    "bug": ["bug"],
+    "bug": ["user report", "bug"],
     "expected_output": ["expected correct output", "expected output"],
     "actual_output": ["actual broken output", "actual output"],
-    "ground_truth_diagnosis": ["ground truth diagnosis"],
+    "ground_truth_diagnosis": ["ground truth", "ground truth diagnosis"],
     "difficulty": ["difficulty rating", "difficulty"],
     "adversarial_principles": ["adversarial principles"],
     "gpa_advantage": ["how gpa helps", "how opengpa helps", "gpa advantage", "opengpa advantage"],

@@ -91,6 +91,134 @@ def test_snapshot_tools_present_when_refs_set(tmp_path):
 
     assert "read_upstream" in tools
     assert "list_upstream_files" in tools
+    assert "grep_upstream" in tools
+
+
+def test_grep_upstream_finds_matches(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.ts").write_text(
+        "export const maxZoom = 16.58;\nfunction foo() {}\n", encoding="utf-8"
+    )
+    (tmp_path / "src" / "b.ts").write_text(
+        "function bar() { return maxZoom; }\n", encoding="utf-8"
+    )
+    (tmp_path / ".complete").write_text("")
+
+    harness, _ = _make_harness(tmp_path)
+    scenario = _make_scenario(
+        upstream_snapshot_repo="https://github.com/x/y",
+        upstream_snapshot_sha="abc123",
+    )
+
+    hits = harness._grep_snapshot(scenario, "maxZoom", glob="*.ts")
+    assert "src/a.ts" in hits
+    assert "src/b.ts" in hits
+    # Line numbers included
+    assert ":1:" in hits  # a.ts line 1
+    # Snapshot-relative paths only — no absolute prefix leaks
+    assert str(tmp_path) not in hits
+
+
+def test_grep_upstream_respects_subdir(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "src" / "a.ts").write_text("inside src\n", encoding="utf-8")
+    (tmp_path / "docs" / "b.md").write_text("inside docs\n", encoding="utf-8")
+    (tmp_path / ".complete").write_text("")
+
+    harness, _ = _make_harness(tmp_path)
+    scenario = _make_scenario(
+        upstream_snapshot_repo="https://github.com/x/y",
+        upstream_snapshot_sha="abc123",
+    )
+    out = harness._grep_snapshot(scenario, "inside", subdir="src")
+    assert "a.ts" in out
+    assert "b.md" not in out
+
+
+def test_grep_upstream_rejects_path_traversal(tmp_path):
+    (tmp_path / ".complete").write_text("")
+    harness, _ = _make_harness(tmp_path)
+    scenario = _make_scenario(
+        upstream_snapshot_repo="https://github.com/x/y",
+        upstream_snapshot_sha="abc123",
+    )
+    out = harness._grep_snapshot(scenario, "x", subdir="../../etc")
+    assert out.startswith("ERROR:")
+
+
+def test_scenario_file_tools_always_present():
+    harness = EvalHarness.__new__(EvalHarness)
+    harness.results = []
+    harness._model = "test"
+    harness._snapshot_fetcher = None
+    harness.runner = MagicMock()
+    harness.runner.read_source.return_value = "src"
+    harness.loader = MagicMock()
+    harness._scorer = MagicMock()
+
+    scenario = _make_scenario()
+    tools = harness._build_tools(scenario, mode="code_only")
+    assert "read_scenario_file" in tools
+    assert "list_scenario_files" in tools
+
+
+def test_list_scenario_files_hides_scenario_md(tmp_path):
+    (tmp_path / "main.c").write_text("// SOURCE: x\nint main(){}")
+    (tmp_path / "shader.glsl").write_text("void main(){}")
+    (tmp_path / "scenario.md").write_text("## Ground Truth\nsecret")
+
+    harness = EvalHarness.__new__(EvalHarness)
+    harness.results = []
+    harness._model = "test"
+    harness._snapshot_fetcher = None
+    harness.runner = MagicMock()
+    harness.loader = MagicMock()
+    harness._scorer = MagicMock()
+
+    scenario = _make_scenario(scenario_dir=str(tmp_path))
+    listing = harness._list_scenario_files(scenario)
+    names = listing.split("\n")
+    assert "main.c" in names
+    assert "shader.glsl" in names
+    assert "scenario.md" not in names
+
+
+def test_read_scenario_file_refuses_scenario_md(tmp_path):
+    (tmp_path / "main.c").write_text("int main(){}")
+    (tmp_path / "scenario.md").write_text("## Ground Truth\nSENTINEL_GT")
+
+    harness = EvalHarness.__new__(EvalHarness)
+    harness.results = []
+    harness._model = "test"
+    harness._snapshot_fetcher = None
+    harness.runner = MagicMock()
+    harness.loader = MagicMock()
+    harness._scorer = MagicMock()
+
+    scenario = _make_scenario(scenario_dir=str(tmp_path))
+    # Direct read of scenario.md denied
+    result = harness._read_scenario_file(scenario, "scenario.md")
+    assert result.startswith("ERROR:")
+    assert "SENTINEL_GT" not in result
+    # Allowed extensions still read normally
+    assert harness._read_scenario_file(scenario, "main.c") == "int main(){}"
+
+
+def test_read_scenario_file_rejects_path_traversal(tmp_path):
+    (tmp_path / "main.c").write_text("ok")
+
+    harness = EvalHarness.__new__(EvalHarness)
+    harness.results = []
+    harness._model = "test"
+    harness._snapshot_fetcher = None
+    harness.runner = MagicMock()
+    harness.loader = MagicMock()
+    harness._scorer = MagicMock()
+
+    scenario = _make_scenario(scenario_dir=str(tmp_path))
+    result = harness._read_scenario_file(scenario, "../../etc/passwd")
+    assert result.startswith("ERROR:")
 
 
 # ---------------------------------------------------------------------------
