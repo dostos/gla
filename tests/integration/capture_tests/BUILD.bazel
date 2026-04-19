@@ -1,0 +1,15 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+# Capture pipeline integration tests — verify OpenGPA correctly captures
+# specific GL state (texture bindings, blend state, depth clears, FBO attachments).
+# These are NOT eval scenarios for LLM debugging.
+
+_TESTS = glob(["*/main.c"])
+_DIRS = [t.rsplit("/", 1)[0] for t in _TESTS]
+
+[cc_binary(
+    name = d,
+    srcs = [d + "/main.c"],
+    linkopts = ["-lGL", "-lX11", "-lm"],
+    visibility = ["//visibility:public"],
+) for d in _DIRS]
