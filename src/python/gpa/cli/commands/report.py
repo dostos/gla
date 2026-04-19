@@ -145,7 +145,14 @@ def _format_text(
 
     lines.append("")
     if warning_count == 0:
-        lines.append("0 warnings.")
+        lines.append("0 warnings. GPA found no state-level issues in this frame.")
+        lines.append(
+            "If the symptom is still visible, the bug is outside GPA's capture layer"
+        )
+        lines.append(
+            "(framework logic, shader math, or driver-specific behavior) — read the"
+        )
+        lines.append("app/framework source or reason through the shader.")
     else:
         plural = "" if warning_count == 1 else "s"
         lines.append(f"{warning_count} warning{plural}.")

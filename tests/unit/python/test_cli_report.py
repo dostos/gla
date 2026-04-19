@@ -280,3 +280,66 @@ def test_report_no_hints_in_json_mode(session_dir, injected_rest, monkeypatch):
     )
     out = buf.getvalue()
     assert "drill" not in out
+
+
+# --------------------------------------------------------------------------- #
+# Closure signal when the frame is clean (R7 regression fix)
+# --------------------------------------------------------------------------- #
+
+
+def _clean_results():
+    return [
+        CheckResult(name="empty-capture", status="ok"),
+        CheckResult(name="feedback-loops", status="ok"),
+        CheckResult(name="nan-uniforms", status="ok"),
+        CheckResult(name="missing-clear", status="ok"),
+    ]
+
+
+def test_report_closure_signal_on_zero_warnings_plain():
+    out = _render(_clean_results(), frame_id=2)
+    assert "0 warnings." in out
+    assert "GPA found no state-level issues" in out
+    assert "outside GPA's capture layer" in out
+    # The old "Run `gpa check …`" footer must not reappear.
+    assert "Run `gpa check" not in out
+
+
+def test_report_no_closure_signal_with_warnings():
+    results = [
+        CheckResult(
+            name="feedback-loops",
+            status="warn",
+            findings=[
+                Finding(
+                    summary="draw call 3: texture 7 bound as sampler (slot 0) AND COLOR_ATTACHMENT0",
+                    detail={"dc_id": 3, "texture_id": 7},
+                ),
+            ],
+        ),
+    ]
+    out = _render(results, frame_id=2)
+    assert "GPA found no state-level issues" not in out
+    assert "outside GPA's capture layer" not in out
+    # Drill hints must still be present.
+    assert "→ drill: gpa check feedback-loops --frame 2 --dc 3" in out
+
+
+def test_report_json_mode_has_no_closure_text(
+    session_dir, injected_rest, monkeypatch
+):
+    """JSON output already carries warning_count; closure string must not leak in."""
+    monkeypatch.setenv("GPA_SESSION", str(session_dir))
+    buf = io.StringIO()
+    # Use only=[empty-capture] to force a clean (0-warning) JSON payload
+    # against the mock app.
+    report_cmd.run(
+        frame=1,
+        json_output=True,
+        only=["empty-capture"],
+        client=injected_rest,
+        print_stream=buf,
+    )
+    out = buf.getvalue()
+    assert "no state-level issues" not in out
+    assert "outside GPA's capture layer" not in out
