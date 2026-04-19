@@ -1,0 +1,35 @@
+R6 runs: 80  R5 runs: 78
+R6 total cost: $34.03
+
+## Per-mode averages (R6)
+mode      model     n    cost  turns   cache_r   cache_c  files  gpa_q
+code_only haiku    20   0.275   22.2   1388503     67974    3.7    0.0
+code_only sonnet   20   0.577   23.4    807824     47342    4.9    0.0
+with_gpa  haiku    20   0.294   26.2   1639985     64762    3.4    3.1
+with_gpa  sonnet   20   0.555   21.8    744046     47762    3.0    4.6
+
+## Per-mode averages (R5, reference)
+mode      model     n    cost  turns   cache_r   cache_c  files  gpa_q
+code_only haiku    20   0.295   23.7   1514649     73650    4.2    0.0
+code_only sonnet   20   0.473   18.6    550077     46154    3.6    0.0
+with_gpa  haiku    19   0.343   29.3   1898888     77429    5.3    3.6
+with_gpa  sonnet   19   0.478   20.5    607309     42683    2.5    4.5
+
+## R5 vs R6 Δ (with_gpa minus code_only)
+round model        Δcost   Δturns    Δcache_r    Δcache_c
+R5    haiku       +0.048     +5.6     +384239       +3779
+R5    sonnet      +0.005     +1.9      +57232       -3471
+R6    haiku       +0.019     +4.1     +251481       -3212
+R6    sonnet      -0.022     -1.6      -63778        +420
+
+## Pair-wise cost+cache_read deltas (with_gpa − code_only)
+R5 haiku: cost cheaper 5/19, costlier 14/19, net Δ=$+1.146   cache_r cheaper 5/19, net Δ=+9580424 tok
+R5 sonnet: cost cheaper 8/19, costlier 11/19, net Δ=$+0.115   cache_r cheaper 8/19, net Δ=+1201264 tok
+R6 haiku: cost cheaper 9/20, costlier 11/20, net Δ=$+0.381   cache_r cheaper 6/20, net Δ=+5029628 tok
+R6 sonnet: cost cheaper 8/20, costlier 12/20, net Δ=$-0.439   cache_r cheaper 10/20, net Δ=-1275560 tok
+
+## CLI tool adoption (with_gpa runs, self-reported gpa_queries_made)
+R6 haiku: 19/20 ran gpa; mean queries=3.15
+R5 haiku: 18/19 ran gpa; mean queries=3.63
+R6 sonnet: 19/20 ran gpa; mean queries=4.60
+R5 sonnet: 18/19 ran gpa; mean queries=4.47
