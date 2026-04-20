@@ -30,6 +30,7 @@ from gpa.cli.commands import env as env_cmd
 from gpa.cli.commands import frames as frames_cmd
 from gpa.cli.commands import report as report_cmd
 from gpa.cli.commands import run as run_cmd
+from gpa.cli.commands import run_browser as run_browser_cmd
 from gpa.cli.commands import start as start_cmd
 from gpa.cli.commands import stop as stop_cmd
 from gpa.cli.commands import trace as trace_cmd
@@ -93,6 +94,23 @@ def build_parser() -> argparse.ArgumentParser:
         nargs=argparse.REMAINDER,
         help="Target command and arguments",
     )
+
+    # ---- run-browser ------------------------------------------------------
+    p_runb = sub.add_parser(
+        "run-browser",
+        help="Run a browser-mode eval scenario under Chromium + WebGL shim",
+    )
+    _add_session_arg(p_runb)
+    p_runb.add_argument("--scenario", required=True,
+                        help="Scenario name (directory under tests/eval-browser/)")
+    p_runb.add_argument("--timeout", type=int, default=30,
+                        help="Max seconds to wait for capture (default 30)")
+    p_runb.add_argument("--chromium-path", default=None,
+                        help="Path to chromium binary (default: autodetect)")
+    p_runb.add_argument("--keep-open", action="store_true",
+                        help="Do not terminate chromium on finish")
+    p_runb.add_argument("--port", type=int, default=18080,
+                        help="REST API port (only used if a new session is created)")
 
     # ---- report -----------------------------------------------------------
     p_report = sub.add_parser(
@@ -222,6 +240,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             cmd,
             session_dir=args.session,
             timeout=args.timeout,
+            port=args.port,
+        )
+    if args.cmd == "run-browser":
+        return run_browser_cmd.run(
+            scenario=args.scenario,
+            timeout=args.timeout,
+            chromium_path=args.chromium_path,
+            keep_open=args.keep_open,
+            session_dir=args.session,
             port=args.port,
         )
     if args.cmd == "report":
