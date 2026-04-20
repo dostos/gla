@@ -202,6 +202,65 @@ def parse_stream_json(path: str) -> dict[str, Any]:
     }
 
 
+def classify_verdict(run: dict, max_turns_budget: int = 40) -> str:
+    """Bucket a scored run row into one of four verdicts.
+
+    Verdicts:
+      - ``solved`` — correct diagnosis within budget.
+      - ``timeout`` — hit the turn cap; trajectory was plausible but ran out.
+      - ``wrong`` — confidently-wrong diagnosis (agent chose to stop with a
+        bad answer).
+      - ``infra`` — build/capture/engine failure (no meaningful trajectory).
+
+    Args:
+      run: dict with keys ``correct`` (bool | None), ``turns`` (int),
+        ``result`` (str), optionally ``error`` / ``stop_reason``.
+      max_turns_budget: the turn cap used for the round (default 40).
+
+    Returns: one of ``"solved"``, ``"timeout"``, ``"wrong"``, ``"infra"``.
+
+    Rules:
+      1. Explicit infra signal: ``error`` field set, ``stop_reason == "infra"``,
+         or empty result with ``turns == 0`` → ``infra``.
+      2. ``correct is True`` → ``solved``.
+      3. ``correct is False`` and ``turns >= max_turns_budget - 1`` → ``timeout``.
+         (The ``-1`` accounts for off-by-one in ``claude -p``'s turn accounting,
+         which sometimes reports 40 when the cap is 40 and sometimes 39.)
+      4. ``correct is False`` otherwise → ``wrong`` (whether ``root_cause`` is
+         empty/near-empty or confidently wrong, the agent chose to stop without
+         a correct answer).
+      5. ``correct is None`` with a non-zero turn count falls through to
+         ``wrong`` — without a score signal we cannot separate timeout from
+         wrong beyond what rule 3 already catches.
+    """
+    # Rule 1: explicit infrastructure failures.
+    if run.get("error"):
+        return "infra"
+    if run.get("stop_reason") == "infra":
+        return "infra"
+    result_text = run.get("result") or run.get("result_text") or ""
+    turns = int(run.get("turns") or 0)
+    if not str(result_text).strip() and turns == 0:
+        # No result, no turns — the run never got off the ground.
+        # Only classify as infra when we *also* lack a correctness signal;
+        # a scored row with correct=False but turns=0 is still a wrong answer.
+        if run.get("correct") is None:
+            return "infra"
+
+    correct = run.get("correct")
+
+    # Rule 2: solved.
+    if correct is True:
+        return "solved"
+
+    # Rule 3: timeout.
+    if turns >= max_turns_budget - 1:
+        return "timeout"
+
+    # Rules 4 + 5: wrong.
+    return "wrong"
+
+
 def _empty(num_turns, total_cost_usd, tool_calls, tool_counts,
            total_tokens_in, total_tokens_out, cache_read, cache_creation,
            result_text, session_id):
