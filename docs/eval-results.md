@@ -276,6 +276,20 @@ one — three.js, mapbox-gl-js, pixijs, postprocessing) + optional GPA curl.
 - Avg turns: code_only 18–24; with_gpa 20–29.
 - Avg framework files opened: 2.6–5.3. Avg GPA queries (with_gpa only): 3.6–4.7.
 
+#### Verdict breakdown
+
+| Mode      | Model  | Solved | Timeout | Wrong | Infra |
+|-----------|--------|-------:|--------:|------:|------:|
+| code_only | haiku  |     20 |       0 |     0 |     0 |
+| code_only | sonnet |     17 |       0 |     3 |     0 |
+| with_gpa  | haiku  |     17 |       0 |     2 |     0 |
+| with_gpa  | sonnet |     16 |       0 |     3 |     0 |
+
+R5 had zero timeouts — every incorrect run was a confidently-wrong
+diagnosis. This is consistent with the rich-scenario hypothesis: once a
+framework snapshot is available, the 40-turn budget is more than enough
+and any failure is a quality-of-evidence problem, not a budget problem.
+
 ### Per-Scenario Matrix
 
 `co_h / co_s` = code_only Haiku / Sonnet; `gp_h / gp_s` = with_gpa Haiku / Sonnet.
@@ -386,6 +400,21 @@ universally hard for both modes this round: r27 (anisotropic GGX),
 r28 (GLB 65 K index overflow), r29 (Mapbox icon regression) — all 0/4.
 The r27/r28 failures match R5; r29 is new because we finally captured
 it so code_only agents now see the same scenario file both modes see.
+
+#### Verdict breakdown
+
+| Mode      | Model  | Solved | Timeout | Wrong | Infra |
+|-----------|--------|-------:|--------:|------:|------:|
+| code_only | haiku  |     16 |       2 |     2 |     0 |
+| code_only | sonnet |     17 |       1 |     2 |     0 |
+| with_gpa  | haiku  |     17 |       1 |     2 |     0 |
+| with_gpa  | sonnet |     15 |       2 |     3 |     0 |
+
+Timeouts appear for the first time in R6 (6/80) — the new `gpa` CLI
+prompt overhead and the harder carryovers pushed a handful of runs past
+the 40-turn budget. Wrong-class failures (9/80) still dominate, matching
+R5's signal that the three universal-hard scenarios (r27/r28/r29) are
+data-quality limited.
 
 ### Token & Cost Deltas — R5 vs R6
 
@@ -505,6 +534,21 @@ See `docs/superpowers/eval/round6-findings.md` for the discussion.
 
 Total cost: **$27.88** (R6 was $34.03, a −18 % drop driven almost entirely
 by Sonnet with_gpa — $0.5552 → $0.3513).
+
+#### Verdict breakdown
+
+| Mode      | Model  | Solved | Timeout | Wrong | Infra |
+|-----------|--------|-------:|--------:|------:|------:|
+| code_only | haiku  |     16 |       3 |     1 |     0 |
+| code_only | sonnet |     16 |       1 |     3 |     0 |
+| with_gpa  | haiku  |     13 |       7 |     0 |     0 |
+| with_gpa  | sonnet |     15 |       0 |     5 |     0 |
+
+R7's Haiku 65 % with_gpa accuracy is **entirely timeout-driven** (7/20
+timeouts, 0 wrong answers) — the headline number masks a
+budget/closure problem, not a tool-misleads-agent problem. Sonnet
+with_gpa is the mirror image: 0 timeouts, 5 confidently-wrong answers.
+This split directly motivated R8's closure-signal work.
 
 ### R5 / R6 / R7 Accuracy Comparison
 
@@ -672,6 +716,21 @@ collision scenarios are, by design, easier for a diligent code reader —
 the bug is "two names refer to the same GL object" — and (b) the
 carryovers are scenarios that the existing pipeline already solves
 cleanly.
+
+#### Verdict breakdown
+
+| Mode      | Model  | Solved | Timeout | Wrong | Infra |
+|-----------|--------|-------:|--------:|------:|------:|
+| code_only | haiku  |     13 |       2 |     0 |     0 |
+| code_only | sonnet |     15 |       0 |     0 |     0 |
+| with_gpa  | haiku  |      9 |       2 |     0 |     0 |
+| with_gpa  | sonnet |     11 |       0 |     0 |     0 |
+
+Every R8 failure is a timeout — zero wrong-class and zero infra. The
+closure signal converted R7's wrong-class Sonnet failures into solves
+(5 → 0) and cut Haiku with_gpa timeouts from 7 → 2. Remaining timeouts
+cluster on the two scenarios where the warning surfaces a symptom but
+not the root cause (see `r10_feedback_loop`, `r13_cubecamera`).
 
 ### Tool counts (mean per run)
 

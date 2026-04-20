@@ -20,7 +20,8 @@
     "offending_symbol": "refreshUniformsPhysical @ line 515 (WebGLMaterials.js) / renderTransmissionPass @ lines 2012-2047 (WebGLRenderer.js)",
     "root_cause": "During renderTransmissionPass when MSAA extension is unavailable, transmissionSamplerMap is unconditionally bound to transmissionRenderTarget.texture while rendering TO that same target, creating a feedback loop. The shader samples from the texture it's being rendered into.",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r10_feedback_loop_error_with_transmission_an",
@@ -44,7 +45,8 @@
     "offending_symbol": "renderTransmissionPass (lines 2016-2038 block)",
     "root_cause": "Lines 2016-2038 render DoubleSide transmissive backfaces while transmissionRenderTarget is active, causing the same texture to be both render output and shader input simultaneously.",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r10_feedback_loop_error_with_transmission_an",
@@ -67,7 +69,8 @@
     "offending_symbol": "",
     "root_cause": "",
     "timed_out": true,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "timeout"
   },
   {
     "scenario": "r10_feedback_loop_error_with_transmission_an",
@@ -91,7 +94,8 @@
     "offending_symbol": "renderObject at WebGLRenderer.js:2029 within DoubleSide handling block",
     "root_cause": "DoubleSide back-face rendering (WebGLRenderer.js:2029) binds transmissionRenderTarget.texture as a sampler uniform while simultaneously rendering to it as the active framebuffer, creating a feedback loop when samples=0.",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r13_cubecamera_render_target_displaying_rand",
@@ -114,7 +118,8 @@
     "offending_symbol": "setTexture2D (src/renderers/webgl/WebGLTextures.js:512) / bindTexture call at line 543",
     "root_cause": "WebGL texture objects are target-typed: once a texture is bound as GL_TEXTURE_CUBE_MAP (by CubeCamera rendering), it cannot be rebound as GL_TEXTURE_2D. When setTexture2D() attempts to bind the CubeTexture, WebGL throws GL_INVALID_OPERATION and the bind fails silently, leaving a stale texture from a",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r13_cubecamera_render_target_displaying_rand",
@@ -136,7 +141,8 @@
     "offending_symbol": "setTexture2D",
     "root_cause": "Using a CubeTexture from WebGLCubeRenderTarget as a material's 2D map property causes setTexture2D to attempt binding a cube map texture to a TEXTURE_2D target, resulting in texture binding state corruption.",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r13_cubecamera_render_target_displaying_rand",
@@ -160,7 +166,8 @@
     "offending_symbol": "",
     "root_cause": "",
     "timed_out": true,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "timeout"
   },
   {
     "scenario": "r13_cubecamera_render_target_displaying_rand",
@@ -183,7 +190,8 @@
     "offending_symbol": "setTexture2D",
     "root_cause": "setTexture2D attempts to bind a cube render target texture to GL_TEXTURE_2D without checking texture.isCubeTexture, causing incorrect texture binding when cube textures are used in 2D sampler slots",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r16_lightprobegenerator_does_not_work_with_e",
@@ -206,7 +214,8 @@
     "offending_symbol": "readRenderTargetPixelsAsync (WebGLRenderer.js:3046) and textureTypeReadable (WebGLCapabilities.js:40)",
     "root_cause": "WebGLRenderer.readRenderTargetPixelsAsync accepts FloatType without verifying that the browser supports reading FLOAT-type texture data. Most WebGL implementations require the EXT_color_buffer_float extension for this capability, but the code only validates this for HalfFloatType, not FloatType.",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r16_lightprobegenerator_does_not_work_with_e",
@@ -228,7 +237,8 @@
     "offending_symbol": "textureTypeReadable",
     "root_cause": "The textureTypeReadable function in WebGLCapabilities.js unconditionally allows FloatType without checking for required WebGL extensions (EXT_color_buffer_float), while HalfFloatType has proper extension validation.",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r17_viewport_rendering_with_postprocessing_r",
@@ -251,7 +261,8 @@
     "offending_symbol": "",
     "root_cause": "",
     "timed_out": true,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "timeout"
   },
   {
     "scenario": "r17_viewport_rendering_with_postprocessing_r",
@@ -274,7 +285,8 @@
     "offending_symbol": "Background.update",
     "root_cause": "Background.update() uses OR logic between autoClear and forceClear (line 185), allowing scenes with color backgrounds to trigger clearing even when renderer.autoClear is false",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r18_webglrenderer_reversed_depth_not_working",
@@ -300,7 +312,8 @@
     "offending_symbol": "PMREMGenerator/fromScene, line 126 (cubeUVRenderTarget.depthBuffer = true)",
     "root_cause": "When reversed depth buffer is enabled on the renderer, PMREMGenerator.fromScene() unconditionally enables a depth buffer on the render target without checking for reversed depth state compatibility. During scene rendering, materials perform depth tests that conflict with the render target's depth bu",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r18_webglrenderer_reversed_depth_not_working",
@@ -323,7 +336,8 @@
     "offending_symbol": "_cleanup",
     "root_cause": "The _cleanup() method modifies cubeUVRenderTarget's viewport and scissor state after switching away from it, causing WebGL depth buffer state corruption with reversed depth buffers.",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r19_depthtexture_share_source_after_renderta",
@@ -346,7 +360,8 @@
     "offending_symbol": "RenderTarget.copy() method at line 370",
     "root_cause": "RenderTarget.copy() fails to apply the 'ensure image object is not shared' pattern to depthTexture like it does for color textures (lines 351-362 vs line 370). This causes cloned RenderTargets to share the same GPU texture Source for their depth textures, resulting in feedback loop errors when one i",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r19_depthtexture_share_source_after_renderta",
@@ -369,7 +384,8 @@
     "offending_symbol": "RenderTarget.copy",
     "root_cause": "RenderTarget.copy() clones depthTexture without creating a new Source object, causing original and clone to share the same Source, which creates a GL feedback loop when used in different framebuffers.",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r22_point_sprite_rendering_issues_with_three",
@@ -392,7 +408,8 @@
     "offending_symbol": "reversePainterSortStable (RenderList.js) + z-calculation in Renderer.js line 2900",
     "root_cause": "Point clouds use bounding sphere center for transparent depth sorting, not per-point depths. All 100,000 points are treated as one depth value, breaking painter's algorithm and creating visual artifacts when points overlap at different depths.",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r22_point_sprite_rendering_issues_with_three",
@@ -416,7 +433,8 @@
     "offending_symbol": "projectObject (WebGLRenderer.js:1891)",
     "root_cause": "Points objects are depth-sorted as a single entity using their bounding sphere center, not per-sprite. All 100,000 transparent point sprites share one z-value and render in buffer order, causing incorrect transparency compositing and rendering artifacts.",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r22_point_sprite_rendering_issues_with_three",
@@ -440,7 +458,8 @@
     "offending_symbol": "Material.prototype.depthWrite and WebGLState.setMaterialProperties",
     "root_cause": "PointsMaterial inherits depthWrite=true from Material base class without disabling it for transparent rendering. This causes the depth buffer to be written during transparent sprite rendering, preventing overlapping sprites from compositing correctly when at similar depths. The fragment shader then ",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r22_point_sprite_rendering_issues_with_three",
@@ -464,7 +483,8 @@
     "offending_symbol": "Material.depthWrite",
     "root_cause": "PointsMaterial with transparent=true does not automatically set depthWrite=false, causing transparent sprites to write depth values that incorrectly occlude overlapping sprites behind them instead of blending properly.",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r25_filters_with_backbuffers_seem_not_to_wor",
@@ -490,7 +510,8 @@
     "offending_symbol": "_setupBindGroupsAndRender (FilterSystem.ts)",
     "root_cause": "The backTexture uniform (binding point 3) is set in `_applyFiltersToTexture` but is not re-established in `_setupBindGroupsAndRender`, causing the shader to either use uninitialized data or the wrong texture when sampling from uBackTexture.",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r25_filters_with_backbuffers_seem_not_to_wor",
@@ -513,7 +534,8 @@
     "offending_symbol": "Filter.blendRequired",
     "root_cause": "User's custom filter missing `blendRequired: true` option, causing uBackTexture to not be populated with background. Filter system only captures background when blendRequired flag is set.",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r25_filters_with_backbuffers_seem_not_to_wor",
@@ -541,7 +563,8 @@
     "offending_symbol": "FilterSystem._setupFilterTextures + FilterSystem.getBackTexture + FilterSystem.push",
     "root_cause": "The filter system copies the backTexture from the current render surface after finishRenderPass() is called, but this timing causes it to capture content that includes the target sprite instead of what's truly behind it. Additionally, texture bounds are calculated as 1x1 instead of the actual sprite",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r25_filters_with_backbuffers_seem_not_to_wor",
@@ -565,7 +588,8 @@
     "offending_symbol": "FilterSystem._calculateFilterBounds (line 990-999) and GlBackBufferSystem.defaultOptions (line 72)",
     "root_cause": "WebGL renderers default to useBackBuffer:false, causing filters with blendRequired:true to skip backbuffer allocation, leaving uBackTexture as a 1x1 placeholder (Texture.EMPTY) that stretches across the output.",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r28_crash_if_using_scene_background_hdr_volu",
@@ -588,7 +612,8 @@
     "offending_symbol": "",
     "root_cause": "",
     "timed_out": true,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "timeout"
   },
   {
     "scenario": "r28_crash_if_using_scene_background_hdr_volu",
@@ -612,7 +637,8 @@
     "offending_symbol": "WebGPUPipelineUtils.createRenderPipeline",
     "root_cause": "Pipeline created with depthStencil descriptor for background material (based on render context having depth) is incompatible when reused in volumetric pass without depth buffer",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r28_crash_if_using_scene_background_hdr_volu",
@@ -635,7 +661,8 @@
     "offending_symbol": "WebGPUPipelineUtils.createRenderPipeline (lines 230-237)",
     "root_cause": "The WebGPU pipeline creation includes a depthStencil format whenever renderContext.depth is true, without checking if the material actually uses depth testing. When rendering background with depthTest=false but renderContext.depth=true, the pipeline has a depth format but the render pass lacks a dep",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r28_crash_if_using_scene_background_hdr_volu",
@@ -659,7 +686,8 @@
     "offending_symbol": "WebGPUPipelineUtils.createRenderPipeline",
     "root_cause": "Pipeline depth/stencil format determined by render context instead of material settings, causing cached background pipeline with depth format to be incompatible when reused in volumetric pass without depth buffer.",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r30_incomplete_lines_problem_with_mixing_lay",
@@ -682,7 +710,8 @@
     "offending_symbol": "mergeLayers() function, specifically lines 1167-1172 in src/style/style.ts",
     "root_cause": "In mergeLayers(), layers with a slot property are only added to their slot array if the slot already exists; if a slotted layer is processed before its slot is defined, it falls through to mergedOrder and gets rendered in wrong order relative to 3D layers like buildings due to the occlusion-opacity ",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r30_incomplete_lines_problem_with_mixing_lay",
@@ -705,7 +734,8 @@
     "offending_symbol": "mergeLayers",
     "root_cause": "The mergeLayers() function reorders layers with occlusion-opacity to render after 3D buildings, but only checks SymbolStyleLayer.hasOcclusionOpacityProperties. Line layers support line-occlusion-opacity but lack this flag, so they aren't reordered correctly.",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r30_incomplete_lines_problem_with_mixing_lay",
@@ -729,7 +759,8 @@
     "offending_symbol": "mergeLayers",
     "root_cause": "The mergeLayers() function assumes slot definitions appear in style._order before layers that reference them. If a layer with slot='top' appears before its slot definition, it's added to mergedOrder instead of slots['top'], causing incorrect render depth relative to buildings.",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r30_incomplete_lines_problem_with_mixing_lay",
@@ -753,7 +784,8 @@
     "offending_symbol": "mergeLayers",
     "root_cause": "The mergeLayers() function's 3D layer reordering logic globally sorts layers with occlusion opacity properties without respecting slot boundaries, causing slot='top' line layers to be incorrectly reordered before buildings in slot='middle'.",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r33_latest_build_6_38_1_got_glitchy_opacity_",
@@ -776,7 +808,8 @@
     "offending_symbol": "EffectMaterial.blending and EffectPass.material.transparent",
     "root_cause": "EffectPass final render pass uses NormalBlending with transparent=true, causing fragment alpha < 1 to blend against black framebuffer clear instead of overwriting. The final composite should always be opaque, not alpha-blended.",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r33_latest_build_6_38_1_got_glitchy_opacity_",
@@ -799,7 +832,8 @@
     "offending_symbol": "EffectMaterial.blending",
     "root_cause": "NormalBlending mode expects premultiplied alpha but shader outputs non-premultiplied colors, causing RGB channels to be incorrectly darkened during opacity fade animations",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r33_latest_build_6_38_1_got_glitchy_opacity_",
@@ -822,7 +856,8 @@
     "offending_symbol": "copy.frag line 70: gl_FragColor = opacity * texel;",
     "root_cause": "The copy fragment shader multiplies all RGBA channels by the opacity uniform, causing texels to fade to black (0,0,0,0) instead of maintaining color with reduced opacity. Combined with NoBlending mode on the CopyMaterial, this writes pure black pixels directly to screen during fade-out animations.",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r33_latest_build_6_38_1_got_glitchy_opacity_",
@@ -846,7 +881,8 @@
     "offending_symbol": "EffectMaterial (blending property initialization)",
     "root_cause": "EffectMaterial changed from NoBlending to NormalBlending in v6.38.1 without explicit blend factors, causing WebGL to use GL_ZERO for both src and dst blend factors when transparent is set dynamically, resulting in black output during opacity animations.",
     "timed_out": false,
-    "category": "carryover"
+    "category": "carryover",
+    "verdict": "solved"
   },
   {
     "scenario": "r4_3d_map_black_screen",
@@ -872,7 +908,8 @@
     "offending_symbol": "main (render loop around glDrawArrays at line ~140)",
     "root_cause": "A texture is simultaneously bound as the framebuffer color attachment (render target) and as an active texture sampler in the fragment shader, creating a feedback loop that the driver rejects with GL_INVALID_OPERATION, leaving the target at clear color (black).",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r4_3d_map_black_screen",
@@ -895,7 +932,8 @@
     "offending_symbol": "glDrawArrays (line 140) with texture bound at lines 107, 134, 138",
     "root_cause": "Texture is simultaneously attached to framebuffer as render target (GL_COLOR_ATTACHMENT0) and bound as shader sampler input (GL_TEXTURE0), creating a forbidden read-write feedback loop during glDrawArrays at line 140.",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r4_3d_map_black_screen",
@@ -919,7 +957,8 @@
     "offending_symbol": "glDrawArrays (line 140 in main.c); binding state established by glBindTexture + glFramebufferTexture2D without unbinding",
     "root_cause": "A texture is bound as both a sampler (source for reading) and as a framebuffer color attachment (render target). The GPU detects this feedback loop and rejects the draw call, leaving the framebuffer at its last clear color (black), which then composites to a black screen.",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r4_3d_map_black_screen",
@@ -943,7 +982,8 @@
     "offending_symbol": "main.c:132-140 (repro) / WebGL render-to-texture pass in original Three.js pipeline",
     "root_cause": "Texture feedback loop: the same texture is simultaneously bound as a sampler input and framebuffer color attachment output during glDrawArrays, causing GL_INVALID_OPERATION and black-screen no-op draws.",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r4_msaa_does_not_always_work_when_doing_rtt",
@@ -966,7 +1006,8 @@
     "offending_symbol": "updateMultisampleRenderTarget (line 2228 in WebGLTextures.js)",
     "root_cause": "The blitFramebuffer call uses _gl.NEAREST filter unconditionally when resolving MSAA samples, which doesn't properly average color samples in unclamped floating-point render targets (FP16/FP32). Filter should be _gl.LINEAR for color-only blits to ensure proper MSAA sample averaging.",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r4_msaa_does_not_always_work_when_doing_rtt",
@@ -989,7 +1030,8 @@
     "offending_symbol": "updateMultisampleRenderTarget",
     "root_cause": "MSAA resolve averages unclamped HDR values (>1.0) in linear space; when these averaged values are later clamped for display, anti-aliasing gradients collapse to hard edges.",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r4_msaa_does_not_always_work_when_doing_rtt",
@@ -1014,7 +1056,8 @@
     "offending_symbol": "updateMultisampleRenderTarget (WebGLTextures.js:2164) and getInternalFormat (WebGLTextures.js:128)",
     "root_cause": "MSAA resolve via blitFramebuffer in updateMultisampleRenderTarget() uses an algorithm optimized for bounded [0,1] integer values; when floating-point render targets (RGBA32F/RGBA16F) store shader outputs exceeding 1.0, the MSAA samples at pixel edges remain unclamped, causing aliasing artifacts that",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r4_msaa_does_not_always_work_when_doing_rtt",
@@ -1037,7 +1080,8 @@
     "offending_symbol": "EffectComposer constructor line 69",
     "root_cause": "EffectComposer defaults to HalfFloatType render targets which do not clamp values to [0,1] during MSAA resolve, causing out-of-range fragment shader outputs (>1.0 from high ambient light) to create visible edge artifacts.",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r7_webglbackend_copytexturetotexture_doesn_",
@@ -1060,7 +1104,8 @@
     "offending_symbol": "copyTextureToTexture/isSrc3D (WebGLTextureUtils.js:853)",
     "root_cause": "Line 853 of WebGLTextureUtils.js incorrectly checks `dstTexture.isArrayTexture` instead of `srcTexture.isArrayTexture` when determining if source is 3D. This causes `isSrc3D` to be false when it should be true for certain texture types, preventing proper layer binding in the copy loop.",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r7_webglbackend_copytexturetotexture_doesn_",
@@ -1084,7 +1129,8 @@
     "offending_symbol": "copyTextureToTexture",
     "root_cause": "Line 853 incorrectly checks dstTexture.isArrayTexture instead of srcTexture.isArrayTexture when computing isSrc3D, causing wrong framebuffer layer binding that copies source layer 0 to all destination layers instead of copying each source layer.",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r7_webglbackend_copytexturetotexture_doesn_",
@@ -1110,7 +1156,8 @@
     "offending_symbol": "copyTextureToTexture in WebGLTextureUtils.js lines 853 and 873-877",
     "root_cause": "Line 853 checks dstTexture.isArrayTexture instead of srcTexture.isArrayTexture when determining if source is 3D; additionally, depth texture layer binding only checks isSrc3D but should check both isSrc3D and isDst3D independently like the else-if branch does.",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r7_webglbackend_copytexturetotexture_doesn_",
@@ -1133,7 +1180,8 @@
     "offending_symbol": "copyTextureToTexture",
     "root_cause": "WebGLBackend's copyTextureToTexture has erroneous conditionals that check isArrayTexture and dstTexture properties when determining source texture dimensionality, deviating from the working WebGLRenderer implementation.",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r9_transparent_objects_brighten_when_using_",
@@ -1156,7 +1204,8 @@
     "offending_symbol": "EffectComposer constructor, line 69",
     "root_cause": "EffectComposer creates a render target without specifying colorSpace, defaulting to NoColorSpace. This causes WebGLRenderer to render with LinearSRGBColorSpace as the working color space, making transparent objects blend in linear color space. When GammaCorrectionShader later applies gamma correctio",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r9_transparent_objects_brighten_when_using_",
@@ -1181,7 +1230,8 @@
     "offending_symbol": "WebGLPrograms.js:203 outputColorSpace assignment logic",
     "root_cause": "WebGLPrograms.js applies sRGB gamma correction before blending when rendering to screen, but EffectComposer uses linear render targets causing blending to occur in linear space before gamma correction, producing brighter results.",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r9_transparent_objects_brighten_when_using_",
@@ -1205,7 +1255,8 @@
     "offending_symbol": "GammaCorrectionShader (examples/jsm/shaders/GammaCorrectionShader.js)",
     "root_cause": "GammaCorrectionShader applies sRGB transfer encoding to linear color values that have already been blended with the EffectComposer render target's clear color. For transparent objects, this double-applies gamma correction: textures are converted linear\u2192blend\u2192sRGB, producing incorrect brightening pro",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   },
   {
     "scenario": "r9_transparent_objects_brighten_when_using_",
@@ -1230,6 +1281,7 @@
     "offending_symbol": "sRGBTransferOETF in GammaCorrectionShader.js",
     "root_cause": "GammaCorrectionShader applies sRGB gamma correction to RGB channels independently of alpha, causing transparent objects to brighten because (R*A)^0.42 > R^0.42*A when blending has already scaled colors by alpha in the linear render target.",
     "timed_out": false,
-    "category": "state_collision"
+    "category": "state_collision",
+    "verdict": "solved"
   }
 ]

@@ -64,6 +64,16 @@ See also `docs/superpowers/eval/coverage-gaps.md` (auto-generated, do not edit).
    halved (+$0.048 → +$0.019) but did not flip — the narrower context eats
    the CLI's ~500-token prompt overhead.
 
+8. **R7's Haiku 65 % accuracy unpacks as ~20 % WRONG + ~15 % TIMEOUT, not
+   35 % undifferentiated failure.** Retroactive verdict classification across
+   R5-R8 (see `docs/eval-results.md`, "Verdict breakdown" per round) shows
+   R7 Haiku with_gpa was 7/20 timeout + 0/20 wrong, while R7 Sonnet with_gpa
+   was the mirror image (0/20 timeout + 5/20 wrong). Timeout-class failures
+   respond to closure signals and narrower tools; wrong-class failures need
+   better data quality. R8 validated the split: closure signal drove R8
+   timeouts+wrong to 4/52 total, with zero wrong-class failures in either
+   mode. Tracking separately since `<commit-sha>`.
+
 ---
 
 ## Capability gaps, ranked by leverage

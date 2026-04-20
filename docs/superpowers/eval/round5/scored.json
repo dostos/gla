@@ -11,7 +11,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "EffectComposer constructor lines 74-75",
-    "root_cause": "EffectComposer stores physical pixel dimensions from custom render targets directly into _width/_height fields, but setSize() treats these as logical pixels and multiplies by pixel ratio, causing double-scaling on resize."
+    "root_cause": "EffectComposer stores physical pixel dimensions from custom render targets directly into _width/_height fields, but setSize() treats these as logical pixels and multiplies by pixel ratio, causing double-scaling on resize.",
+    "verdict": "solved"
   },
   {
     "scenario": "r11_three_js_effectcomposer_browser_window_r",
@@ -25,7 +26,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "EffectComposer.setSize",
-    "root_cause": "EffectComposer.setSize() uses a cached _pixelRatio from construction time instead of querying the current renderer pixel ratio, causing render targets to be sized incorrectly when device pixel ratio changes during window resize."
+    "root_cause": "EffectComposer.setSize() uses a cached _pixelRatio from construction time instead of querying the current renderer pixel ratio, causing render targets to be sized incorrectly when device pixel ratio changes during window resize.",
+    "verdict": "solved"
   },
   {
     "scenario": "r11_three_js_effectcomposer_browser_window_r",
@@ -39,7 +41,8 @@
     "gpa_queries_made": 5,
     "confidence": "high",
     "offending_symbol": "EffectComposer constructor (lines 74-75) and lack of automatic resize tracking; also missing automatic sync with renderer.size",
-    "root_cause": "EffectComposer render targets are not automatically resized when the browser window resizes. They retain their initial dimensions (200x150) unless the application explicitly calls composer.setSize(width, height), causing the effects scene to render at low resolution and be upscaled."
+    "root_cause": "EffectComposer render targets are not automatically resized when the browser window resizes. They retain their initial dimensions (200x150) unless the application explicitly calls composer.setSize(width, height), causing the effects scene to render at low resolution and be upscaled.",
+    "verdict": "solved"
   },
   {
     "scenario": "r11_three_js_effectcomposer_browser_window_r",
@@ -53,7 +56,8 @@
     "gpa_queries_made": 5,
     "confidence": "high",
     "offending_symbol": "EffectComposer.setSize",
-    "root_cause": "EffectComposer.setSize() does not re-fetch the current pixel ratio from the renderer before calculating render target dimensions, causing it to use a stale cached _pixelRatio value and size buffers incorrectly."
+    "root_cause": "EffectComposer.setSize() does not re-fetch the current pixel ratio from the renderer before calculating render target dimensions, causing it to use a stale cached _pixelRatio value and size buffers incorrectly.",
+    "verdict": "solved"
   },
   {
     "scenario": "r12_omniscale_cleanedge_scaling_issues",
@@ -67,7 +71,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "transformation_matrix uniform in CommonRotation.gdshaderinc / fragment shader",
-    "root_cause": "The fragment shader declares `uniform mat2 transformation_matrix;` without a default value. The CPU never sets this uniform (no glUniformMatrix2fv call), so it defaults to the zero matrix per GLSL spec, causing all UV transformations to collapse to (0.0, 0.0). Every fragment then samples the top-lef"
+    "root_cause": "The fragment shader declares `uniform mat2 transformation_matrix;` without a default value. The CPU never sets this uniform (no glUniformMatrix2fv call), so it defaults to the zero matrix per GLSL spec, causing all UV transformations to collapse to (0.0, 0.0). Every fragment then samples the top-lef",
+    "verdict": "solved"
   },
   {
     "scenario": "r12_omniscale_cleanedge_scaling_issues",
@@ -81,7 +86,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "transformation_matrix",
-    "root_cause": "The transformation_matrix uniform is declared in the fragment shader but never written by the CPU code, defaulting to a zero matrix per GLSL spec, which transforms all UV coordinates to (0,0) causing every fragment to sample only the top-left pixel."
+    "root_cause": "The transformation_matrix uniform is declared in the fragment shader but never written by the CPU code, defaulting to a zero matrix per GLSL spec, which transforms all UV coordinates to (0,0) causing every fragment to sample only the top-left pixel.",
+    "verdict": "solved"
   },
   {
     "scenario": "r12_omniscale_cleanedge_scaling_issues",
@@ -95,7 +101,8 @@
     "gpa_queries_made": 5,
     "confidence": "high",
     "offending_symbol": "transformation_matrix uniform in src/Shaders/Effects/Rotation/CommonRotation.gdshaderinc",
-    "root_cause": "Fragment shader uniform mat2 transformation_matrix is declared without a default value and never set by CPU code, causing it to default to the zero matrix in GLSL. Consequently, every fragment computes transformation_matrix * uv = vec2(0,0), sampling only the source texture's top-left pixel."
+    "root_cause": "Fragment shader uniform mat2 transformation_matrix is declared without a default value and never set by CPU code, causing it to default to the zero matrix in GLSL. Consequently, every fragment computes transformation_matrix * uv = vec2(0,0), sampling only the source texture's top-left pixel.",
+    "verdict": "solved"
   },
   {
     "scenario": "r12_omniscale_cleanedge_scaling_issues",
@@ -109,7 +116,8 @@
     "gpa_queries_made": 8,
     "confidence": "high",
     "offending_symbol": "transformation_matrix",
-    "root_cause": "The fragment shader declares 'uniform mat2 transformation_matrix;' without a default value, and the CPU code never initializes it via glUniformMatrix2fv. Per GLSL spec, the uninitialized uniform defaults to a zero matrix, causing all UV coordinates to collapse to (0,0), sampling only the top-left pi"
+    "root_cause": "The fragment shader declares 'uniform mat2 transformation_matrix;' without a default value, and the CPU code never initializes it via glUniformMatrix2fv. Per GLSL spec, the uninitialized uniform defaults to a zero matrix, causing all UV coordinates to collapse to (0,0), sampling only the top-left pi",
+    "verdict": "solved"
   },
   {
     "scenario": "r15_post_effects_and_transparent_background_",
@@ -123,7 +131,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "_getSeparableBlurMaterial (lines 428 & 441)",
-    "root_cause": "The UnrealBloomPass separable blur shader (line 428-441) only samples the RGB channel and hardcodes the fragment alpha to 1.0, destroying the original alpha transparency information. Additionally, the composite shader (line 512) derives alpha from bloom intensity instead of preserving original alpha"
+    "root_cause": "The UnrealBloomPass separable blur shader (line 428-441) only samples the RGB channel and hardcodes the fragment alpha to 1.0, destroying the original alpha transparency information. Additionally, the composite shader (line 512) derives alpha from bloom intensity instead of preserving original alpha",
+    "verdict": "solved"
   },
   {
     "scenario": "r15_post_effects_and_transparent_background_",
@@ -137,7 +146,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "_getSeparableBlurMaterial",
-    "root_cause": "The separable blur shader in UnrealBloomPass hardcodes fragment alpha to 1.0 instead of preserving or processing the alpha channel from the input texture, destroying transparency during Gaussian blur passes."
+    "root_cause": "The separable blur shader in UnrealBloomPass hardcodes fragment alpha to 1.0 instead of preserving or processing the alpha channel from the input texture, destroying transparency during Gaussian blur passes.",
+    "verdict": "solved"
   },
   {
     "scenario": "r15_post_effects_and_transparent_background_",
@@ -151,7 +161,8 @@
     "gpa_queries_made": 4,
     "confidence": "high",
     "offending_symbol": "_getSeparableBlurMaterial:fragmentShader:gl_FragColor",
-    "root_cause": "The separable blur material in UnrealBloomPass hardcodes the output alpha channel to 1.0 (line 441), discarding the alpha information from the input texture. When this opaque bloom is additively blended onto the transparent background, it replaces transparency with fully opaque black pixels."
+    "root_cause": "The separable blur material in UnrealBloomPass hardcodes the output alpha channel to 1.0 (line 441), discarding the alpha information from the input texture. When this opaque bloom is additively blended onto the transparent background, it replaces transparency with fully opaque black pixels.",
+    "verdict": "solved"
   },
   {
     "scenario": "r15_post_effects_and_transparent_background_",
@@ -165,7 +176,8 @@
     "gpa_queries_made": 3,
     "confidence": "high",
     "offending_symbol": "_getSeparableBlurMaterial",
-    "root_cause": "The Gaussian blur shader in _getSeparableBlurMaterial hardcodes alpha to 1.0, destroying transparency during blur passes."
+    "root_cause": "The Gaussian blur shader in _getSeparableBlurMaterial hardcodes alpha to 1.0, destroying transparency during blur passes.",
+    "verdict": "solved"
   },
   {
     "scenario": "r15_unrealbloompass_produces_no_visible_outp",
@@ -179,7 +191,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "LuminosityHighPassShader.fragmentShader / luminance() undefined, or WebGLProgram prefix construction",
-    "root_cause": "The LuminosityHighPassShader fails to compile because the luminance() function is not in scope\u2014it should be injected by WebGLProgram's shader prefix but appears not to be, likely due to shader processing context issues or module instance mismatches in the bundled environment. Compilation errors are "
+    "root_cause": "The LuminosityHighPassShader fails to compile because the luminance() function is not in scope\u2014it should be injected by WebGLProgram's shader prefix but appears not to be, likely due to shader processing context issues or module instance mismatches in the bundled environment. Compilation errors are ",
+    "verdict": "solved"
   },
   {
     "scenario": "r15_unrealbloompass_produces_no_visible_outp",
@@ -193,7 +206,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "Pass.js module-level constants _camera and _geometry + WebGLProgram.includeReplacer",
-    "root_cause": "Multiple THREE.js instances (UMD bundle in 3d-force-graph vs ES module import) cause cross-instance ShaderChunk resolution failure when UnrealBloomPass shaders are compiled by the bundled renderer."
+    "root_cause": "Multiple THREE.js instances (UMD bundle in 3d-force-graph vs ES module import) cause cross-instance ShaderChunk resolution failure when UnrealBloomPass shaders are compiled by the bundled renderer.",
+    "verdict": "solved"
   },
   {
     "scenario": "r15_unrealbloompass_produces_no_visible_outp",
@@ -207,7 +221,8 @@
     "gpa_queries_made": 5,
     "confidence": "high",
     "offending_symbol": "UnrealBloomPass.render() lines 295-304",
-    "root_cause": "UnrealBloomPass.render() has an early-return guard at line 295 that checks `if (this.renderToScreen)` and immediately renders the unprocessed input to screen, skipping all bloom processing. When UnrealBloomPass is the last enabled pass, EffectComposer sets renderToScreen=true (line 236), triggering "
+    "root_cause": "UnrealBloomPass.render() has an early-return guard at line 295 that checks `if (this.renderToScreen)` and immediately renders the unprocessed input to screen, skipping all bloom processing. When UnrealBloomPass is the last enabled pass, EffectComposer sets renderToScreen=true (line 236), triggering ",
+    "verdict": "solved"
   },
   {
     "scenario": "r15_unrealbloompass_produces_no_visible_outp",
@@ -221,7 +236,8 @@
     "gpa_queries_made": 6,
     "confidence": "high",
     "offending_symbol": "_camera and _geometry (Pass.js lines 106, 123)",
-    "root_cause": "THREE.js instance mismatch: FullScreenQuad's module-scoped _camera and _geometry from Pass.js are incompatible with renderer from different THREE instance, causing silent render failures"
+    "root_cause": "THREE.js instance mismatch: FullScreenQuad's module-scoped _camera and _geometry from Pass.js are incompatible with renderer from different THREE instance, causing silent render failures",
+    "verdict": "solved"
   },
   {
     "scenario": "r20_three_js_meshdepthmaterial_depth_map_not",
@@ -235,7 +251,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "depth.glsl.js fragment shader (lines 85-97)",
-    "root_cause": "MeshDepthMaterial uses standard perspective projection depth which has non-linear 1/z distribution, concentrating precision near the near plane. For cameras far from origin with tight near/far ratios, objects become indistinguishable in the depth map unless logarithmic depth encoding is explicitly e"
+    "root_cause": "MeshDepthMaterial uses standard perspective projection depth which has non-linear 1/z distribution, concentrating precision near the near plane. For cameras far from origin with tight near/far ratios, objects become indistinguishable in the depth map unless logarithmic depth encoding is explicitly e",
+    "verdict": "solved"
   },
   {
     "scenario": "r20_three_js_meshdepthmaterial_depth_map_not",
@@ -249,7 +266,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "depth.glsl.js fragment shader (lines 87-97) - calculates fragCoordZ from gl_Position.zw without applying viewZToOrthographicDepth linearization",
-    "root_cause": "MeshDepthMaterial uses non-linear perspective depth (NDC z/w) without linearization, causing hyperbolic distribution that concentrates precision near the near plane, especially when near/far ratio is close to 1.0."
+    "root_cause": "MeshDepthMaterial uses non-linear perspective depth (NDC z/w) without linearization, causing hyperbolic distribution that concentrates precision near the near plane, especially when near/far ratio is close to 1.0.",
+    "verdict": "solved"
   },
   {
     "scenario": "r20_three_js_meshdepthmaterial_depth_map_not",
@@ -263,7 +281,8 @@
     "gpa_queries_made": 4,
     "confidence": "high",
     "offending_symbol": "depth.glsl.js lines 87-93 (depth shader output computation)",
-    "root_cause": "Window-space depth in perspective projection is non-linear (1/z function). With tight near/far ratio (550-650) and distant camera position, objects compress into the last 30% of depth range then squeeze again due to hyperbolic 1/z term, making nearly all visible objects map to identical depth values"
+    "root_cause": "Window-space depth in perspective projection is non-linear (1/z function). With tight near/far ratio (550-650) and distant camera position, objects compress into the last 30% of depth range then squeeze again due to hyperbolic 1/z term, making nearly all visible objects map to identical depth values",
+    "verdict": "solved"
   },
   {
     "scenario": "r20_three_js_meshdepthmaterial_depth_map_not",
@@ -277,7 +296,8 @@
     "gpa_queries_made": 4,
     "confidence": "high",
     "offending_symbol": "depth.glsl.js fragment shader (lines 87-91)",
-    "root_cause": "MeshDepthMaterial uses perspective-projected depth (gl_Position.z/w) which provides non-linear distribution heavily biased toward near-plane precision, with no option for linear depth mapping that would uniformly distribute values across the depth range."
+    "root_cause": "MeshDepthMaterial uses perspective-projected depth (gl_Position.z/w) which provides non-linear distribution heavily biased toward near-plane precision, with no option for linear depth mapping that would uniformly distribute values across the depth range.",
+    "verdict": "solved"
   },
   {
     "scenario": "r22_point_sprite_rendering_issues_with_three",
@@ -291,7 +311,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "PointsMaterial / WebGLState.setMaterial (line 782)",
-    "root_cause": "PointsMaterial inherits depthWrite=true from Material, causing transparent point sprites to write to the depth buffer. This prevents proper alpha blending and creates depth-based rendering artifacts."
+    "root_cause": "PointsMaterial inherits depthWrite=true from Material, causing transparent point sprites to write to the depth buffer. This prevents proper alpha blending and creates depth-based rendering artifacts.",
+    "verdict": "solved"
   },
   {
     "scenario": "r22_point_sprite_rendering_issues_with_three",
@@ -305,7 +326,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "Material.depthWrite",
-    "root_cause": "PointsMaterial inherits depthWrite: true from Material, causing transparent point sprites to write depth values that block other transparent sprites behind them from rendering."
+    "root_cause": "PointsMaterial inherits depthWrite: true from Material, causing transparent point sprites to write depth values that block other transparent sprites behind them from rendering.",
+    "verdict": "solved"
   },
   {
     "scenario": "r22_point_sprite_rendering_issues_with_three",
@@ -319,7 +341,8 @@
     "gpa_queries_made": 2,
     "confidence": "high",
     "offending_symbol": "PointsMaterial constructor / Material.js:229 (depthWrite default)",
-    "root_cause": "PointsMaterial does not automatically disable depth writes when transparent is enabled. With transparent=true but depthWrite=true (default), overlapping point sprites at the same Z-depth cause depth buffer conflicts where later sprites overwrite earlier ones, making transparent regions show the back"
+    "root_cause": "PointsMaterial does not automatically disable depth writes when transparent is enabled. With transparent=true but depthWrite=true (default), overlapping point sprites at the same Z-depth cause depth buffer conflicts where later sprites overwrite earlier ones, making transparent regions show the back",
+    "verdict": "solved"
   },
   {
     "scenario": "r22_point_sprite_rendering_issues_with_three",
@@ -333,7 +356,8 @@
     "gpa_queries_made": 3,
     "confidence": "high",
     "offending_symbol": "Material.depthWrite",
-    "root_cause": "three.js does not automatically disable depth writing when transparent:true is set, causing overlapping transparent point sprites to fail depth test and show background instead of blending properly."
+    "root_cause": "three.js does not automatically disable depth writing when transparent:true is set, causing overlapping transparent point sprites to fail depth test and show background instead of blending properly.",
+    "verdict": "solved"
   },
   {
     "scenario": "r23_using_multiple_alphamask_s_with_renderma",
@@ -347,7 +371,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "MaskFilter.apply()",
-    "root_cause": "MaskFilter.apply() uses _textureMatrix.mapCoord before the TextureMatrix has properly synchronized its state (mapCoord and uClampFrame) with a reused pooled texture's new frame dimensions, causing incorrect UV clamping on the second mask."
+    "root_cause": "MaskFilter.apply() uses _textureMatrix.mapCoord before the TextureMatrix has properly synchronized its state (mapCoord and uClampFrame) with a reused pooled texture's new frame dimensions, causing incorrect UV clamping on the second mask.",
+    "verdict": "solved"
   },
   {
     "scenario": "r23_using_multiple_alphamask_s_with_renderma",
@@ -361,7 +386,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "MaskFilter.apply",
-    "root_cause": "TextureMatrix.mapCoord retains stale dimensions when MaskFilters are reused from pool; update() is triggered but calculateSpriteMatrix reads mapCoord before matrix state fully synchronizes"
+    "root_cause": "TextureMatrix.mapCoord retains stale dimensions when MaskFilters are reused from pool; update() is triggered but calculateSpriteMatrix reads mapCoord before matrix state fully synchronizes",
+    "verdict": "solved"
   },
   {
     "scenario": "r23_using_multiple_alphamask_s_with_renderma",
@@ -375,7 +401,8 @@
     "gpa_queries_made": 3,
     "confidence": "high",
     "offending_symbol": "MaskFilter.apply()",
-    "root_cause": "When AlphaMaskEffect is reused from the object pool without a reset() method, the MaskFilter's _textureMatrix is not properly updated with the new mask's texture dimensions. Although TextureMatrix.update() is called, the uClampFrame for the first mask (100x80) is not recalculated before mapCoord ope"
+    "root_cause": "When AlphaMaskEffect is reused from the object pool without a reset() method, the MaskFilter's _textureMatrix is not properly updated with the new mask's texture dimensions. Although TextureMatrix.update() is called, the uClampFrame for the first mask (100x80) is not recalculated before mapCoord ope",
+    "verdict": "solved"
   },
   {
     "scenario": "r23_using_multiple_alphamask_s_with_renderma",
@@ -389,7 +416,8 @@
     "gpa_queries_made": 5,
     "confidence": "high",
     "offending_symbol": "MaskFilter.apply",
-    "root_cause": "TextureMatrix.mapCoord is not properly refreshed when pooled texture objects are reused with different frames, causing stale UV transformations to be applied to subsequent masks"
+    "root_cause": "TextureMatrix.mapCoord is not properly refreshed when pooled texture objects are reused with different frames, causing stale UV transformations to be applied to subsequent masks",
+    "verdict": "solved"
   },
   {
     "scenario": "r24_artifacts_when_rendering_both_sides_of_a",
@@ -403,7 +431,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "_renderTransparents / needsDoublePass (RenderList.js:73)",
-    "root_cause": "DoubleSide transparent objects with NormalBlending render both front and back faces in a single pass, causing overlapping semi-transparent surfaces to accumulate color through additive blending, which produces visual artifacts. SubtractiveBlending avoids this because its non-additive blend function "
+    "root_cause": "DoubleSide transparent objects with NormalBlending render both front and back faces in a single pass, causing overlapping semi-transparent surfaces to accumulate color through additive blending, which produces visual artifacts. SubtractiveBlending avoids this because its non-additive blend function ",
+    "verdict": "solved"
   },
   {
     "scenario": "r24_artifacts_when_rendering_both_sides_of_a",
@@ -417,7 +446,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "reversePainterSortStable",
-    "root_cause": "Double-sided transparent objects use per-object depth sorting with a single z-value, but render in two passes (back faces, then front faces). Interior objects sort incorrectly because they're compared to the transparent object's center rather than its individual face layers."
+    "root_cause": "Double-sided transparent objects use per-object depth sorting with a single z-value, but render in two passes (back faces, then front faces). Interior objects sort incorrectly because they're compared to the transparent object's center rather than its individual face layers.",
+    "verdict": "solved"
   },
   {
     "scenario": "r24_artifacts_when_rendering_both_sides_of_a",
@@ -431,7 +461,8 @@
     "gpa_queries_made": 6,
     "confidence": "high",
     "offending_symbol": "Material.depthWrite (default true) combined with Renderer double-sided transparent two-pass logic",
-    "root_cause": "The default Material depth writing (depthWrite=true) conflicts with transparent double-sided rendering. When the renderer performs two-pass rendering (back faces then front faces), the back-face pass writes depth values that cause the front-face pass to produce visual artifacts due to depth test fai"
+    "root_cause": "The default Material depth writing (depthWrite=true) conflicts with transparent double-sided rendering. When the renderer performs two-pass rendering (back faces then front faces), the back-face pass writes depth values that cause the front-face pass to produce visual artifacts due to depth test fai",
+    "verdict": "solved"
   },
   {
     "scenario": "r24_artifacts_when_rendering_both_sides_of_a",
@@ -445,7 +476,8 @@
     "gpa_queries_made": 3,
     "confidence": "high",
     "offending_symbol": "Material.depthWrite",
-    "root_cause": "three.js does not automatically disable depth writing for transparent materials; when rendering both sides with depthWrite=true, the first side occludes the second side causing self-intersection artifacts"
+    "root_cause": "three.js does not automatically disable depth writing for transparent materials; when rendering both sides with depthWrite=true, the first side occludes the second side causing self-intersection artifacts",
+    "verdict": "solved"
   },
   {
     "scenario": "r24_enabling_autogeneratemipmaps_breaks_filt",
@@ -459,7 +491,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "FilterSystem.pop()",
-    "root_cause": "FilterSystem renders to filter textures with autoGenerateMipmaps enabled but never calls updateMipmaps() to regenerate mipmap content after rendering, causing filters that do scaled UV sampling to read uninitialized/corrupt mipmap data."
+    "root_cause": "FilterSystem renders to filter textures with autoGenerateMipmaps enabled but never calls updateMipmaps() to regenerate mipmap content after rendering, causing filters that do scaled UV sampling to read uninitialized/corrupt mipmap data.",
+    "verdict": "solved"
   },
   {
     "scenario": "r24_enabling_autogeneratemipmaps_breaks_filt",
@@ -473,7 +506,8 @@
     "gpa_queries_made": null,
     "confidence": "",
     "offending_symbol": "",
-    "root_cause": ""
+    "root_cause": "",
+    "verdict": "solved"
   },
   {
     "scenario": "r24_enabling_autogeneratemipmaps_breaks_filt",
@@ -487,7 +521,8 @@
     "gpa_queries_made": 3,
     "confidence": "high",
     "offending_symbol": "FilterSystem._applyFiltersToTexture() and TexturePool.getOptimalTexture()",
-    "root_cause": "FilterSystem renders to pooled TexturePool textures with autoGenerateMipmaps enabled but never calls updateMipmaps() after rendering, leaving mipmap levels uninitialized. Subsequent filters that do scaled UV sampling read garbage from these uninitialized mipmap levels."
+    "root_cause": "FilterSystem renders to pooled TexturePool textures with autoGenerateMipmaps enabled but never calls updateMipmaps() after rendering, leaving mipmap levels uninitialized. Subsequent filters that do scaled UV sampling read garbage from these uninitialized mipmap levels.",
+    "verdict": "solved"
   },
   {
     "scenario": "r24_enabling_autogeneratemipmaps_breaks_filt",
@@ -501,7 +536,8 @@
     "gpa_queries_made": null,
     "confidence": "",
     "offending_symbol": "",
-    "root_cause": ""
+    "root_cause": "",
+    "verdict": "solved"
   },
   {
     "scenario": "r25_filters_with_backbuffers_seem_not_to_wor",
@@ -515,7 +551,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "_setupBindGroupsAndRender",
-    "root_cause": "The _setupBindGroupsAndRender method in FilterSystem.ts fails to bind uBackTexture (binding 3) to the shader when a filter has blendRequired enabled. This leaves uBackTexture uninitialized or pointing to stale texture data, causing incorrect rendering when filters sample from the backbuffer."
+    "root_cause": "The _setupBindGroupsAndRender method in FilterSystem.ts fails to bind uBackTexture (binding 3) to the shader when a filter has blendRequired enabled. This leaves uBackTexture uninitialized or pointing to stale texture data, causing incorrect rendering when filters sample from the backbuffer.",
+    "verdict": "solved"
   },
   {
     "scenario": "r25_filters_with_backbuffers_seem_not_to_wor",
@@ -529,7 +566,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "_setupFilterTextures",
-    "root_cause": "The back texture captures from renderer.renderTarget.renderSurface which may contain the sprite's own pre-rendered texture rather than the actual scene background due to intermediate rendering state and texture reuse in the filter pipeline."
+    "root_cause": "The back texture captures from renderer.renderTarget.renderSurface which may contain the sprite's own pre-rendered texture rather than the actual scene background due to intermediate rendering state and texture reuse in the filter pipeline.",
+    "verdict": "solved"
   },
   {
     "scenario": "r25_filters_with_backbuffers_seem_not_to_wor",
@@ -543,7 +581,8 @@
     "gpa_queries_made": 4,
     "confidence": "high",
     "offending_symbol": "_applyFiltersToTexture",
-    "root_cause": "FilterSystem._applyFiltersToTexture() is missing the resource binding setup for uTexture at bind index 1. When blendRequired filters use backbuffer textures, the shader's uTexture uniform is uninitialized, causing it to sample from a default/1x1 texture instead of the actual input texture."
+    "root_cause": "FilterSystem._applyFiltersToTexture() is missing the resource binding setup for uTexture at bind index 1. When blendRequired filters use backbuffer textures, the shader's uTexture uniform is uninitialized, causing it to sample from a default/1x1 texture instead of the actual input texture.",
+    "verdict": "solved"
   },
   {
     "scenario": "r25_filters_with_backbuffers_seem_not_to_wor",
@@ -557,7 +596,8 @@
     "gpa_queries_made": 5,
     "confidence": "high",
     "offending_symbol": "FilterSystem._setupFilterTextures",
-    "root_cause": "Filters using uBackTexture must set blendRequired:true in filter options, otherwise backTexture remains a 1x1 placeholder (Texture.EMPTY) instead of actual background pixels"
+    "root_cause": "Filters using uBackTexture must set blendRequired:true in filter options, otherwise backTexture remains a 1x1 placeholder (Texture.EMPTY) instead of actual background pixels",
+    "verdict": "solved"
   },
   {
     "scenario": "r25_three_js_transparency_disparition",
@@ -571,7 +611,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "WebGLState.setMaterialFaces() / Material.side property default",
-    "root_cause": "Back-face culling is enabled by default (material.side defaults to FrontSide). When nested cylinders are rotated to angles where their back-faces face the camera, WebGL culls those faces away, making the cylinders disappear."
+    "root_cause": "Back-face culling is enabled by default (material.side defaults to FrontSide). When nested cylinders are rotated to angles where their back-faces face the camera, WebGL culls those faces away, making the cylinders disappear.",
+    "verdict": "solved"
   },
   {
     "scenario": "r25_three_js_transparency_disparition",
@@ -585,7 +626,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "WebGLRenderList.push",
-    "root_cause": "User set opacity: 0.5 without transparent: true, causing the material to be treated as opaque. This results in incorrect render sorting (by material ID instead of back-to-front depth), leading to view-angle dependent occlusion artifacts."
+    "root_cause": "User set opacity: 0.5 without transparent: true, causing the material to be treated as opaque. This results in incorrect render sorting (by material ID instead of back-to-front depth), leading to view-angle dependent occlusion artifacts.",
+    "verdict": "solved"
   },
   {
     "scenario": "r25_three_js_transparency_disparition",
@@ -599,7 +641,8 @@
     "gpa_queries_made": 3,
     "confidence": "high",
     "offending_symbol": "Material.transparent property (default: false)",
-    "root_cause": "MeshNormalMaterial with opacity set but transparent flag not enabled. THREE.js only enables alpha blending when transparent=true; otherwise opacity only affects color. Without blending, depth testing causes occlusion artifacts."
+    "root_cause": "MeshNormalMaterial with opacity set but transparent flag not enabled. THREE.js only enables alpha blending when transparent=true; otherwise opacity only affects color. Without blending, depth testing causes occlusion artifacts.",
+    "verdict": "solved"
   },
   {
     "scenario": "r25_three_js_transparency_disparition",
@@ -613,7 +656,8 @@
     "gpa_queries_made": 4,
     "confidence": "high",
     "offending_symbol": "setMaterial",
-    "root_cause": "User set opacity < 1 but did not set transparent: true on the material, causing three.js to disable GL blending (WebGLState.js:776-778 checks both conditions)."
+    "root_cause": "User set opacity < 1 but did not set transparent: true on the material, causing three.js to disable GL blending (WebGLState.js:776-778 checks both conditions).",
+    "verdict": "solved"
   },
   {
     "scenario": "r26_incorrect_behavior_in_colormatrixfilter_",
@@ -627,7 +671,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "_colorMatrix",
-    "root_cause": "The _colorMatrix() method incorrectly divided color matrix offsets by 255 only when multiply=true, destroying contrast values like -0.5 (turning them into -0.002). The offsets were already in 0-1 range and should never have been normalized."
+    "root_cause": "The _colorMatrix() method incorrectly divided color matrix offsets by 255 only when multiply=true, destroying contrast values like -0.5 (turning them into -0.002). The offsets were already in 0-1 range and should never have been normalized.",
+    "verdict": "solved"
   },
   {
     "scenario": "r26_incorrect_behavior_in_colormatrixfilter_",
@@ -641,7 +686,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "ColorMatrixFilter._colorMatrix",
-    "root_cause": "_colorMatrix method incorrectly normalized offset values by dividing by 255 only when multiply=true, treating already-normalized 0-1 values as if they were in 0-255 range, causing offset to become ~255x smaller than intended."
+    "root_cause": "_colorMatrix method incorrectly normalized offset values by dividing by 255 only when multiply=true, treating already-normalized 0-1 values as if they were in 0-255 range, causing offset to become ~255x smaller than intended.",
+    "verdict": "solved"
   },
   {
     "scenario": "r26_incorrect_behavior_in_colormatrixfilter_",
@@ -655,7 +701,8 @@
     "gpa_queries_made": 5,
     "confidence": "high",
     "offending_symbol": "_colorMatrix method in ColorMatrixFilter._loadMatrix (now removed in the fix)",
-    "root_cause": "The _colorMatrix method was dividing the offset column (indices 4, 9, 14, 19) of the color matrix by 255 only when multiply=true. For contrast() and similar methods that use normalized 0-1 range offsets (like -0.5), this division corrupts the values to -0.00196, causing incorrect brightness adjustme"
+    "root_cause": "The _colorMatrix method was dividing the offset column (indices 4, 9, 14, 19) of the color matrix by 255 only when multiply=true. For contrast() and similar methods that use normalized 0-1 range offsets (like -0.5), this division corrupts the values to -0.00196, causing incorrect brightness adjustme",
+    "verdict": "solved"
   },
   {
     "scenario": "r26_incorrect_behavior_in_colormatrixfilter_",
@@ -669,7 +716,8 @@
     "gpa_queries_made": 3,
     "confidence": "high",
     "offending_symbol": "ColorMatrixFilter._colorMatrix",
-    "root_cause": "The _colorMatrix method incorrectly divided color matrix offset values (indices 4,9,14,19) by 255 only when multiply=true, causing contrast adjustments to lose their offset term and behave as pure brightness scaling instead."
+    "root_cause": "The _colorMatrix method incorrectly divided color matrix offset values (indices 4,9,14,19) by 255 only when multiply=true, causing contrast adjustments to lose their offset term and behave as pure brightness scaling instead.",
+    "verdict": "solved"
   },
   {
     "scenario": "r27_bug_black_squares_appear_when_rendering_",
@@ -683,7 +731,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "V_GGX_SmithCorrelated_Anisotropic",
-    "root_cause": "The V_GGX_SmithCorrelated_Anisotropic function lacks epsilon protection in its denominator, allowing division by very small numbers that produce NaN/Inf artifacts. The isotropic version uses max(denominator, EPSILON) but the anisotropic version omits this guard."
+    "root_cause": "The V_GGX_SmithCorrelated_Anisotropic function lacks epsilon protection in its denominator, allowing division by very small numbers that produce NaN/Inf artifacts. The isotropic version uses max(denominator, EPSILON) but the anisotropic version omits this guard.",
+    "verdict": "solved"
   },
   {
     "scenario": "r27_bug_black_squares_appear_when_rendering_",
@@ -697,7 +746,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "lights_physical_fragment.glsl.js:155 (material.alphaT calculation)",
-    "root_cause": "The alphaT calculation for anisotropic materials incorrectly interpolates from roughness\u00b2 to 1.0 based solely on anisotropy, creating extreme mismatches (64x ratio) between tangent and bitangent roughness on low-roughness materials like glass, causing numerical instability in the anisotropic BRDF th"
+    "root_cause": "The alphaT calculation for anisotropic materials incorrectly interpolates from roughness\u00b2 to 1.0 based solely on anisotropy, creating extreme mismatches (64x ratio) between tangent and bitangent roughness on low-roughness materials like glass, causing numerical instability in the anisotropic BRDF th",
+    "verdict": "solved"
   },
   {
     "scenario": "r27_bug_black_squares_appear_when_rendering_",
@@ -711,7 +761,8 @@
     "gpa_queries_made": 3,
     "confidence": "high",
     "offending_symbol": "D_GGX_Anisotropic",
-    "root_cause": "The D_GGX_Anisotropic function (line 117 in lights_physical_pars_fragment.glsl.js) divides by v2 without epsilon protection. When dotTH and dotBH are near zero (anisotropy axes perpendicular to half-direction), v2 approaches zero, causing w2 to become NaN, which renders as black pixels."
+    "root_cause": "The D_GGX_Anisotropic function (line 117 in lights_physical_pars_fragment.glsl.js) divides by v2 without epsilon protection. When dotTH and dotBH are near zero (anisotropy axes perpendicular to half-direction), v2 approaches zero, causing w2 to become NaN, which renders as black pixels.",
+    "verdict": "wrong"
   },
   {
     "scenario": "r27_bug_black_squares_appear_when_rendering_",
@@ -725,7 +776,8 @@
     "gpa_queries_made": 8,
     "confidence": "high",
     "offending_symbol": "D_GGX_Anisotropic",
-    "root_cause": "Unguarded division by v2 in D_GGX_Anisotropic function causes NaN/infinity when v2 approaches zero at specific light/view angles with anisotropic materials."
+    "root_cause": "Unguarded division by v2 in D_GGX_Anisotropic function causes NaN/infinity when v2 approaches zero at specific light/view angles with anisotropic materials.",
+    "verdict": "wrong"
   },
   {
     "scenario": "r28_bug_in_rendering_glb_models",
@@ -739,7 +791,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "StructArrayLayout3ui6.emplace() in src/data/array_types.ts:790",
-    "root_cause": "The TriangleIndexArray uses uint16 (Uint16Array) to store mesh indices, which can only represent values 0-65535. When a GLB model with > 65,536 vertices is loaded, indices >= 65536 silently truncate to (value & 0xFFFF), causing upper vertices to address lower vertex data."
+    "root_cause": "The TriangleIndexArray uses uint16 (Uint16Array) to store mesh indices, which can only represent values 0-65535. When a GLB model with > 65,536 vertices is loaded, indices >= 65536 silently truncate to (value & 0xFFFF), causing upper vertices to address lower vertex data.",
+    "verdict": "solved"
   },
   {
     "scenario": "r28_bug_in_rendering_glb_models",
@@ -753,7 +806,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "convertTextures (model_loader.ts:34)",
-    "root_cause": "Default minFilter is gl.NEAREST instead of a mipmap filter, preventing mipmap generation for GLB textures without explicit samplers."
+    "root_cause": "Default minFilter is gl.NEAREST instead of a mipmap filter, preventing mipmap generation for GLB textures without explicit samplers.",
+    "verdict": "wrong"
   },
   {
     "scenario": "r28_bug_in_rendering_glb_models",
@@ -767,7 +821,8 @@
     "gpa_queries_made": 3,
     "confidence": "high",
     "offending_symbol": "Transform._calcMatrices / expandedFarZProjMatrix assignment (line 2455)",
-    "root_cause": "expandedFarZProjMatrix uses a limited far clipping plane for non-globe projections, whereas it should use an infinite (or very large) far plane like globe does. GLB model vertices are clipped by this limited far plane and don't render."
+    "root_cause": "expandedFarZProjMatrix uses a limited far clipping plane for non-globe projections, whereas it should use an infinite (or very large) far plane like globe does. GLB model vertices are clipped by this limited far plane and don't render.",
+    "verdict": "wrong"
   },
   {
     "scenario": "r28_bug_in_rendering_glb_models",
@@ -781,7 +836,8 @@
     "gpa_queries_made": 4,
     "confidence": "high",
     "offending_symbol": "setDepthMode (src/gl/context.ts:317)",
-    "root_cause": "The setDepthMode condition uses OR (||) instead of AND (&&), incorrectly disabling depth testing when depth mask is ReadOnly, even though depth function requires testing (LEQUAL)."
+    "root_cause": "The setDepthMode condition uses OR (||) instead of AND (&&), incorrectly disabling depth testing when depth mask is ReadOnly, even though depth function requires testing (LEQUAL).",
+    "verdict": "wrong"
   },
   {
     "scenario": "r29_add_an_animated_icon_to_the_map_not_work",
@@ -795,7 +851,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "placements dictionary key construction in placeSymbol function",
-    "root_cause": "The placements dictionary in Placement class uses only crossTileID as key, causing multiple symbol layers from the same source to overwrite each other's placement state when they have symbols at identical positions."
+    "root_cause": "The placements dictionary in Placement class uses only crossTileID as key, causing multiple symbol layers from the same source to overwrite each other's placement state when they have symbols at identical positions.",
+    "verdict": "solved"
   },
   {
     "scenario": "r29_add_an_animated_icon_to_the_map_not_work",
@@ -809,7 +866,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "ImageAtlas.patchUpdatedImages",
-    "root_cause": "Destructive filter in ImageAtlas.patchUpdatedImages() permanently removes animated images from render callback list if temporarily unavailable, preventing animation."
+    "root_cause": "Destructive filter in ImageAtlas.patchUpdatedImages() permanently removes animated images from render callback list if temporarily unavailable, preventing animation.",
+    "verdict": "wrong"
   },
   {
     "scenario": "r30_incomplete_lines_problem_with_mixing_lay",
@@ -823,7 +881,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "mergeLayers (line 1159-1173) - specifically the condition at line 1167",
-    "root_cause": "The mergeLayers() function fails to route layers to their slots if the slot definition hasn't been encountered yet in the layer order. Layers with undefined slots fall through to mergedOrder, causing rendering position errors that depend on insertion order."
+    "root_cause": "The mergeLayers() function fails to route layers to their slots if the slot definition hasn't been encountered yet in the layer order. Layers with undefined slots fall through to mergedOrder, causing rendering position errors that depend on insertion order.",
+    "verdict": "solved"
   },
   {
     "scenario": "r30_incomplete_lines_problem_with_mixing_lay",
@@ -837,7 +896,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "mergeLayers (style.ts:1219) and LineStyleLayer class",
-    "root_cause": "LineStyleLayer lacks a hasOcclusionOpacityProperties flag, so line layers with line-occlusion-opacity aren't reordered after 3D layers by the mergeLayers sorting logic, causing rendering artifacts with buildings."
+    "root_cause": "LineStyleLayer lacks a hasOcclusionOpacityProperties flag, so line layers with line-occlusion-opacity aren't reordered after 3D layers by the mergeLayers sorting logic, causing rendering artifacts with buildings.",
+    "verdict": "solved"
   },
   {
     "scenario": "r30_incomplete_lines_problem_with_mixing_lay",
@@ -851,7 +911,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "mergeLayers:1219 in src/style/style.ts",
-    "root_cause": "The mergeLayers() function in style.ts only checks SymbolStyleLayer for hasOcclusionOpacityProperties when assigning render priorities, causing line layers with line-occlusion-opacity to not be prioritized correctly relative to 3D layers. This makes their render order dependent on insertion order vi"
+    "root_cause": "The mergeLayers() function in style.ts only checks SymbolStyleLayer for hasOcclusionOpacityProperties when assigning render priorities, causing line layers with line-occlusion-opacity to not be prioritized correctly relative to 3D layers. This makes their render order dependent on insertion order vi",
+    "verdict": "solved"
   },
   {
     "scenario": "r30_incomplete_lines_problem_with_mixing_lay",
@@ -865,7 +926,8 @@
     "gpa_queries_made": 4,
     "confidence": "high",
     "offending_symbol": "depthModeForSublayer",
-    "root_cause": "depthModeForSublayer returns DepthMode.disabled (depth func ALWAYS) for layers after opaquePassCutoff, causing slot=top line layers positioned after 3D buildings to render without proper depth testing"
+    "root_cause": "depthModeForSublayer returns DepthMode.disabled (depth func ALWAYS) for layers after opaquePassCutoff, causing slot=top line layers positioned after 3D buildings to render without proper depth testing",
+    "verdict": "solved"
   },
   {
     "scenario": "r32_v7_issue_with_custom_points_shader_three",
@@ -879,7 +941,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "OverrideMaterialManager.replaceMaterial",
-    "root_cause": "OverrideMaterialManager.replaceMaterial() only processes Mesh objects (line 124: if(node.isMesh)) and skips Points and Sprites, preventing the override material from being applied. This leaves Points/Sprites with their original materials that lack the gBufferNormal output declaration needed for MRT "
+    "root_cause": "OverrideMaterialManager.replaceMaterial() only processes Mesh objects (line 124: if(node.isMesh)) and skips Points and Sprites, preventing the override material from being applied. This leaves Points/Sprites with their original materials that lack the gBufferNormal output declaration needed for MRT ",
+    "verdict": "solved"
   },
   {
     "scenario": "r32_v7_issue_with_custom_points_shader_three",
@@ -893,7 +956,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "OverrideMaterialManager.replaceMaterial",
-    "root_cause": "OverrideMaterialManager only handles Mesh objects in replaceMaterial (line 124), causing Points and Sprites to render with incompatible MeshNormalMaterial when workaroundEnabled=false (default), making them invisible."
+    "root_cause": "OverrideMaterialManager only handles Mesh objects in replaceMaterial (line 124), causing Points and Sprites to render with incompatible MeshNormalMaterial when workaroundEnabled=false (default), making them invisible.",
+    "verdict": "wrong"
   },
   {
     "scenario": "r32_v7_issue_with_custom_points_shader_three",
@@ -907,7 +971,8 @@
     "gpa_queries_made": 5,
     "confidence": "high",
     "offending_symbol": "OverrideMaterialManager.replaceMaterial",
-    "root_cause": "OverrideMaterialManager.replaceMaterial() only handles Mesh objects via 'if(node.isMesh)' check, skipping Points and Sprite objects. When NormalPass is enabled, these skipped objects render with their original materials which lack the required normal pass shader outputs, causing them to fail or beco"
+    "root_cause": "OverrideMaterialManager.replaceMaterial() only handles Mesh objects via 'if(node.isMesh)' check, skipping Points and Sprite objects. When NormalPass is enabled, these skipped objects render with their original materials which lack the required normal pass shader outputs, causing them to fail or beco",
+    "verdict": "solved"
   },
   {
     "scenario": "r32_v7_issue_with_custom_points_shader_three",
@@ -921,7 +986,8 @@
     "gpa_queries_made": 5,
     "confidence": "high",
     "offending_symbol": "OverrideMaterialManager.replaceMaterial",
-    "root_cause": "OverrideMaterialManager only applies material overrides to Mesh objects (line 124), excluding Points and Sprites, causing them to lack required MRT output declarations when GBuffer normals are enabled."
+    "root_cause": "OverrideMaterialManager only applies material overrides to Mesh objects (line 124), excluding Points and Sprites, causing them to lack required MRT output declarations when GBuffer normals are enabled.",
+    "verdict": "solved"
   },
   {
     "scenario": "r33_latest_build_6_38_1_got_glitchy_opacity_",
@@ -935,7 +1001,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "copy.frag line 70: gl_FragColor = opacity * texel",
-    "root_cause": "CopyMaterial's fragment shader multiplies all RGBA channels by opacity, incorrectly reducing the alpha channel during fade-out animations. When an alpha canvas with reduced alpha is composited on top of another canvas, the underlying layer shows through, appearing as black glitches."
+    "root_cause": "CopyMaterial's fragment shader multiplies all RGBA channels by opacity, incorrectly reducing the alpha channel during fade-out animations. When an alpha canvas with reduced alpha is composited on top of another canvas, the underlying layer shows through, appearing as black glitches.",
+    "verdict": "solved"
   },
   {
     "scenario": "r33_latest_build_6_38_1_got_glitchy_opacity_",
@@ -949,7 +1016,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "EffectMaterial.blending and EffectPass.render",
-    "root_cause": "Version 6.38.1 changed EffectMaterial from NoBlending to NormalBlending and set material.transparent=true for alpha canvases, causing incorrect blending with transparent black backgrounds during opacity animations, resulting in black artifacts."
+    "root_cause": "Version 6.38.1 changed EffectMaterial from NoBlending to NormalBlending and set material.transparent=true for alpha canvases, causing incorrect blending with transparent black backgrounds during opacity animations, resulting in black artifacts.",
+    "verdict": "solved"
   },
   {
     "scenario": "r33_latest_build_6_38_1_got_glitchy_opacity_",
@@ -963,7 +1031,8 @@
     "gpa_queries_made": 3,
     "confidence": "high",
     "offending_symbol": "CopyMaterial and CopyPass.initialize",
-    "root_cause": "CopyMaterial uses NoBlending with opacity multiplication (opacity * texel), causing black output when opacity=0 to overwrite transparent backgrounds on alpha canvases. This was introduced in v6.38.1 when similar handling was added to EffectMaterial but not applied to CopyMaterial."
+    "root_cause": "CopyMaterial uses NoBlending with opacity multiplication (opacity * texel), causing black output when opacity=0 to overwrite transparent backgrounds on alpha canvases. This was introduced in v6.38.1 when similar handling was added to EffectMaterial but not applied to CopyMaterial.",
+    "verdict": "solved"
   },
   {
     "scenario": "r33_latest_build_6_38_1_got_glitchy_opacity_",
@@ -977,7 +1046,8 @@
     "gpa_queries_made": 5,
     "confidence": "high",
     "offending_symbol": "CopyMaterial",
-    "root_cause": "CopyMaterial uses NoBlending mode which sets GL_ZERO blend factors, forcing all output to black instead of properly compositing with alpha during opacity animations."
+    "root_cause": "CopyMaterial uses NoBlending mode which sets GL_ZERO blend factors, forcing all output to black instead of properly compositing with alpha during opacity animations.",
+    "verdict": "solved"
   },
   {
     "scenario": "r34_depth_buffer_issue_when_using_depthoffie",
@@ -991,7 +1061,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "CircleOfConfusionMaterial.constructor defines.DEPTH_PACKING",
-    "root_cause": "CircleOfConfusionMaterial has incorrect default DEPTH_PACKING='0', causing shader to read incomplete depth values without RGBA unpacking, leading to nonlinear focus distance calculations."
+    "root_cause": "CircleOfConfusionMaterial has incorrect default DEPTH_PACKING='0', causing shader to read incomplete depth values without RGBA unpacking, leading to nonlinear focus distance calculations.",
+    "verdict": "solved"
   },
   {
     "scenario": "r34_depth_buffer_issue_when_using_depthoffie",
@@ -1005,7 +1076,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "getViewPosition (circle-of-confusion.frag:63-70)",
-    "root_cause": "The cameraNear and cameraFar uniforms in CircleOfConfusionMaterial are copied once during initialization but never updated. When camera clip planes change after DOF effect creation, perspectiveDepthToViewZ uses stale near/far values (defaults: 0.1, 2000) while depth buffer was rendered with actual v"
+    "root_cause": "The cameraNear and cameraFar uniforms in CircleOfConfusionMaterial are copied once during initialization but never updated. When camera clip planes change after DOF effect creation, perspectiveDepthToViewZ uses stale near/far values (defaults: 0.1, 2000) while depth buffer was rendered with actual v",
+    "verdict": "solved"
   },
   {
     "scenario": "r34_depth_buffer_issue_when_using_depthoffie",
@@ -1019,7 +1091,8 @@
     "gpa_queries_made": 2,
     "confidence": "high",
     "offending_symbol": "getViewPosition in src/materials/glsl/circle-of-confusion.frag line 67",
-    "root_cause": "The getViewPosition function in circle-of-confusion.frag uses incorrect matrix indices for calculating the clip-space W component (projectionMatrix[2][3] instead of projectionMatrix[3][2]), causing incorrect perspective division and non-linear depth reconstruction."
+    "root_cause": "The getViewPosition function in circle-of-confusion.frag uses incorrect matrix indices for calculating the clip-space W component (projectionMatrix[2][3] instead of projectionMatrix[3][2]), causing incorrect perspective division and non-linear depth reconstruction.",
+    "verdict": "solved"
   },
   {
     "scenario": "r34_depth_buffer_issue_when_using_depthoffie",
@@ -1033,7 +1106,8 @@
     "gpa_queries_made": 8,
     "confidence": "high",
     "offending_symbol": "getViewPosition (circle-of-confusion.frag:63-71)",
-    "root_cause": "Missing homogeneous divide by w component after unprojecting from clip space to view space, causing incorrect view position reconstruction and distance calculation in depth-of-field focusing."
+    "root_cause": "Missing homogeneous divide by w component after unprojecting from clip space to view space, causing incorrect view position reconstruction and distance calculation in depth-of-field focusing.",
+    "verdict": "wrong"
   },
   {
     "scenario": "r3_material_shines_through_when_zooming_out",
@@ -1047,7 +1121,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "Matrix4.makePerspective (lines 1137-1145)",
-    "root_cause": "The standard perspective projection formula (in Matrix4.makePerspective) creates non-linear depth buffer distribution with exponential precision loss toward the far plane. With large near/far ratios and intermediate-distance objects, floating-point precision becomes insufficient to distinguish objec"
+    "root_cause": "The standard perspective projection formula (in Matrix4.makePerspective) creates non-linear depth buffer distribution with exponential precision loss toward the far plane. With large near/far ratios and intermediate-distance objects, floating-point precision becomes insufficient to distinguish objec",
+    "verdict": "solved"
   },
   {
     "scenario": "r3_material_shines_through_when_zooming_out",
@@ -1061,7 +1136,8 @@
     "gpa_queries_made": 0,
     "confidence": "high",
     "offending_symbol": "PerspectiveCamera constructor defaults (near=0.1, far=2000)",
-    "root_cause": "Default PerspectiveCamera near/far plane ratio (0.1 to 2000) causes insufficient depth buffer precision at far distances to distinguish thin geometry separated by small gaps when zoomed out."
+    "root_cause": "Default PerspectiveCamera near/far plane ratio (0.1 to 2000) causes insufficient depth buffer precision at far distances to distinguish thin geometry separated by small gaps when zoomed out.",
+    "verdict": "solved"
   },
   {
     "scenario": "r3_material_shines_through_when_zooming_out",
@@ -1075,7 +1151,8 @@
     "gpa_queries_made": 4,
     "confidence": "high",
     "offending_symbol": "PerspectiveCamera.updateProjectionMatrix",
-    "root_cause": "Three.js uses fixed near/far clipping planes (0.1-2000) that don't adapt to camera zoom level, causing depth buffer precision loss at extreme zoom distances. The non-linear depth distribution of perspective projection means objects at extreme distances fall into single-precision depth buffer cells, "
+    "root_cause": "Three.js uses fixed near/far clipping planes (0.1-2000) that don't adapt to camera zoom level, causing depth buffer precision loss at extreme zoom distances. The non-linear depth distribution of perspective projection means objects at extreme distances fall into single-precision depth buffer cells, ",
+    "verdict": "solved"
   },
   {
     "scenario": "r3_material_shines_through_when_zooming_out",
@@ -1089,6 +1166,7 @@
     "gpa_queries_made": 2,
     "confidence": "high",
     "offending_symbol": "PerspectiveCamera constructor default near=0.1",
-    "root_cause": "Default PerspectiveCamera near plane (0.1) is too small relative to scene scale and far plane distance, causing depth buffer precision loss that manifests as z-fighting when objects are far from camera."
+    "root_cause": "Default PerspectiveCamera near plane (0.1) is too small relative to scene scale and far plane distance, causing depth buffer precision loss that manifests as z-fighting when objects are far from camera.",
+    "verdict": "solved"
   }
 ]
