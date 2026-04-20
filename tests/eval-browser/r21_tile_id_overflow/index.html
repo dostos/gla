@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>r21_tile_id_overflow — GPA browser-eval pilot</title>
+<style>
+  body { font-family: sans-serif; margin: 1rem; }
+  #status { padding: 0.5rem; background: #f3f3f3; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>r21_tile_id_overflow</h1>
+<p>Phase 1 MVP stub — see <code>scenario.md</code> and
+   <code>README.md</code>. Phase 2 loads the real mapbox-gl-js bundle.</p>
+<div id="status">booting…</div>
+
+<script>
+(function () {
+  const params = new URLSearchParams(window.location.search);
+  const token  = params.get("token") || "";
+  const port   = params.get("port")  || "18080";
+
+  // Stash for the extension so it knows which engine to post to.
+  try {
+    localStorage.setItem("GPA_TRACE_TOKEN", token);
+    localStorage.setItem("GPA_TRACE_ENDPOINT",
+                         "http://127.0.0.1:" + port + "/api/v1");
+    localStorage.setItem("GPA_TRACE_MODE", "gated");
+  } catch (e) { /* ignore */ }
+
+  const statusEl = document.getElementById("status");
+  function setStatus(s) { statusEl.textContent = s; }
+
+  // Phase 1 pipeline-MVP: POST a synthetic `sources` payload directly.
+  // Phase 2 replaces this with a real mapbox render whose frames are
+  // captured by the extension interceptor.
+  const fakeSources = {
+    sources: {
+      roots: ["map"],
+      mode: "gated",
+      value_index: {
+        "1234567890": [
+          { path: "map._transform._maxZoom",
+            type: "number",
+            confidence: "high" }
+        ]
+      }
+    }
+  };
+
+  const url = "http://127.0.0.1:" + port +
+              "/api/v1/frames/0/drawcalls/0/sources";
+  setStatus("POSTing synthetic sources to " + url);
+
+  fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + token
+    },
+    body: JSON.stringify(fakeSources)
+  }).then(function (resp) {
+    setStatus("sources POST status=" + resp.status);
+    window.__gpa_done = true;
+  }).catch(function (err) {
+    setStatus("sources POST failed: " + err);
+    // Still mark done so runner doesn't hang; phase 2 will
+    // handle retry + real failure modes.
+    window.__gpa_done = true;
+  });
+})();
+</script>
+</body>
+</html>
