@@ -13,7 +13,7 @@
     "service_worker": "background.js"
   },
   "web_accessible_resources": [{
-    "resources": ["interceptor.js"],
+    "resources": ["interceptor.js", "gpa-trace.js"],
     "matches": ["<all_urls>"]
   }]
 }

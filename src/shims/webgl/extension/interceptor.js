@@ -74,6 +74,12 @@
       textures: Object.assign({}, state.boundTextures),
       boundFramebuffer: state.boundFramebuffer,
     });
+    // Publish current (frame, drawcall) indices for orthogonal shims
+    // (e.g. gpa-trace.js) to correlate their sidecar POSTs.
+    window.__gpaState = {
+      frameId: state.frameNumber,
+      dcCount: state.drawCalls.length,
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -216,6 +222,10 @@
       // Reset per-frame state.
       state.drawCalls = [];
       state.frameNumber++;
+      window.__gpaState = {
+        frameId: state.frameNumber,
+        dcCount: 0,
+      };
       callback(timestamp);
     });
   };
