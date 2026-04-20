@@ -155,7 +155,16 @@ def _format_text(
         lines.append("app/framework source or reason through the shader.")
     else:
         plural = "" if warning_count == 1 else "s"
-        lines.append(f"{warning_count} warning{plural}.")
+        lines.append(
+            f"{warning_count} warning{plural} found. These describe observable GL state. If drilling into a"
+        )
+        lines.append(
+            "warning reveals a clear fix, act on it. Otherwise the root cause is"
+        )
+        lines.append(
+            "likely upstream — read the app/framework source for why the state ended"
+        )
+        lines.append("up this way.")
     return "\n".join(lines) + "\n"
 
 

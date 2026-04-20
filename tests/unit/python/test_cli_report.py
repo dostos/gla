@@ -343,3 +343,57 @@ def test_report_json_mode_has_no_closure_text(
     out = buf.getvalue()
     assert "no state-level issues" not in out
     assert "outside GPA's capture layer" not in out
+
+
+# --------------------------------------------------------------------------- #
+# Tier-2 closure signal when warnings are present (R8 symptom-vs-root-cause)
+# --------------------------------------------------------------------------- #
+
+
+def test_report_tier2_closure_when_warnings_present():
+    results = [
+        CheckResult(
+            name="feedback-loops",
+            status="warn",
+            findings=[
+                Finding(
+                    summary="draw call 3: texture 7 bound as sampler (slot 0) AND COLOR_ATTACHMENT0",
+                    detail={"dc_id": 3, "texture_id": 7},
+                ),
+            ],
+        ),
+    ]
+    out = _render(results, frame_id=2)
+    # Leading-line grep compatibility: "N warnings" phrasing preserved.
+    assert "1 warning found" in out
+    # Tier-2 hint phrase present.
+    assert "the root cause is" in out
+    # Hint must sit AFTER the drill line, not replace it.
+    drill_idx = out.index("→ drill: gpa check feedback-loops --frame 2 --dc 3")
+    hint_idx = out.index("the root cause is")
+    assert drill_idx < hint_idx
+
+
+def test_report_tier2_closure_absent_when_green():
+    out = _render(_clean_results(), frame_id=2)
+    # Zero-warning closure uses a different block; the tier-2 phrase must
+    # not appear.
+    assert "the root cause is" not in out
+
+
+def test_report_json_mode_has_no_tier2_closure(
+    session_dir, injected_rest, monkeypatch
+):
+    """JSON output with warnings must not contain the tier-2 hint string."""
+    monkeypatch.setenv("GPA_SESSION", str(session_dir))
+    buf = io.StringIO()
+    report_cmd.run(
+        frame=1, json_output=True, client=injected_rest, print_stream=buf
+    )
+    out = buf.getvalue()
+    # Sanity: this call did produce warnings.
+    import json as _json
+    data = _json.loads(out)
+    assert data["warning_count"] >= 1
+    # Tier-2 hint must not leak into JSON.
+    assert "the root cause is" not in out
