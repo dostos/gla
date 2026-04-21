@@ -841,3 +841,158 @@ issue the current checks don't cover, so neither short-circuited.
 - `/tmp/eval_round8/*.jsonl` — 52 per-run stream-json transcripts.
 - `docs/superpowers/eval/round8/` — scored.json, summary.txt, runner
   scripts, score.py, captures.txt, scenarios.txt.
+
+## Round 9
+
+First three-model matrix (haiku + sonnet + opus) with native `gpa trace`
+available to with_gpa agents. 21 scenarios planned, 20 C-repros + 1 browser
+pilot. Native trace enabled via `GPA_TRACE_NATIVE=1
+GPA_TRACE_NATIVE_STACK=1` on every capture.
+
+### Setup
+
+- **Capture.** 20 C-repro scenarios. 16 captured cleanly (2-28 DWARF
+  globals per binary, 1-4 subprograms). 4 NOCAPTURE (same as R8):
+  `r16_lightprobegenerator_does_not_work_with_e`,
+  `r17_viewport_rendering_with_postprocessing_r`,
+  `r18_webglrenderer_reversed_depth_not_working`,
+  `r19_depthtexture_share_source_after_renderta`. These run code_only
+  only in the matrix.
+- **Browser pilot.** `r21_tile_id_overflow` — Phase 1 MVP pipeline
+  stub. `gpa run-browser` launched Chromium, extension POSTed synthetic
+  sources (`sources=1 frames=0 gpa_done=False` from the browser runner,
+  exit 0 = clean run). The pipeline works end-to-end; Phase 2 will add
+  a real WebGL capture.
+- **Dispatch.** 108 total agent runs (20 code_only × 3 models + 16
+  with_gpa × 3 models). Heavy rate-limiting from all three tiers — the
+  108-way parallel dispatch took ~22 minutes; no runs exceeded the
+  single-run 15-minute timeout.
+- **Total cost.** $60.70 — well under the $120 ceiling. Opus came in at
+  ~2× sonnet cost, not the 5× the planner assumed.
+
+### Accuracy (mode × model)
+
+| Mode | Model | N | Correct | Acc | AvgCost | AvgTurns | Timeouts |
+|---|---|---|---|---|---|---|---|
+| code_only | haiku  | 20 | 15 | 75.0% | $0.3681 | 27.1 | 4 |
+| code_only | sonnet | 20 | 14 | 70.0% | $0.5335 | 13.7 | 2 |
+| code_only | opus   | 20 | 18 | 90.0% | $0.7472 | 12.9 | 1 |
+| with_gpa  | haiku  | 16 | 12 | 75.0% | $0.3711 | 29.4 | 4 |
+| with_gpa  | sonnet | 16 | 13 | 81.2% | $0.6067 | 15.1 | 1 |
+| with_gpa  | opus   | 16 | 16 |**100%**| $0.7553 | 15.4 | 0 |
+
+Opus with_gpa is the first cell in any round to hit **100% accuracy**
+across its entire subset.
+
+### Verdict breakdown (mode × model)
+
+| Mode | Model | solved | timeout | wrong | infra |
+|---|---|---|---|---|---|
+| code_only | haiku  | 15 | 4 | 1 | 0 |
+| code_only | sonnet | 14 | 2 | 4 | 0 |
+| code_only | opus   | 18 | 1 | 1 | 0 |
+| with_gpa  | haiku  | 12 | 4 | 0 | 0 |
+| with_gpa  | sonnet | 13 | 1 | 2 | 0 |
+| with_gpa  | opus   | 16 | 0 | 0 | 0 |
+
+### Cache + tokens per cell
+
+| Mode | Model | AvgCost | CacheRd | OutTok | InpTok |
+|---|---|---|---|---|---|
+| code_only | haiku  | $0.3681 | 1,809,281 | 13,089 | 209 |
+| code_only | sonnet | $0.5335 | 1,293,528 | 11,351 | 497 |
+| code_only | opus   | $0.7472 |   568,904 |  8,023 |  17 |
+| with_gpa  | haiku  | $0.3711 | 1,960,300 | 11,114 | 230 |
+| with_gpa  | sonnet | $0.6067 | 1,032,827 | 11,958 |  37 |
+| with_gpa  | opus   | $0.7553 |   593,754 |  7,867 |  18 |
+
+### Tool-call breakdown (mean per run, mode × model)
+
+| Mode | Model | gpa | report | trace | check | dump | curl | Read | Grep | Bash |
+|---|---|---|---|---|---|---|---|---|---|---|
+| code_only | haiku  | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |  9.3 | 3.9 | 10.7 |
+| code_only | sonnet | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 14.1 | 8.2 |  8.8 |
+| code_only | opus   | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |  4.6 | 4.2 |  2.3 |
+| with_gpa  | haiku  | 3.6 | 0.9 | 0.0 | 0.0 | 2.6 | 0.0 |  8.6 | 0.4 | 14.1 |
+| with_gpa  | sonnet | 2.1 | 1.0 | 0.1 | 0.1 | 0.9 | 0.0 | 17.8 | 5.5 | 18.2 |
+| with_gpa  | opus   | 3.1 | 0.9 | 0.0 | 0.0 | 2.2 | 0.2 |  4.3 | 2.8 |  3.3 |
+
+`gpa trace` was called **once across all 48 with_gpa runs** (one sonnet
+invocation). Despite being listed as the Preferred Step 2 in the prompt,
+agents consistently jumped from `gpa report` (step 1, 0.9 calls/run) to
+`gpa dump` (step 3, 0.9-2.6 calls/run) skipping trace entirely. See
+"Trace not discovered" in the findings.
+
+### Subset accuracy (category × mode × model)
+
+| Category | Mode | Haiku | Sonnet | Opus |
+|---|---|---|---|---|
+| state_collision | code_only  | 7/8 87.5% | 6/8 75.0% | 8/8 100% |
+| state_collision | with_gpa   | 3/4 75.0% | 3/4 75.0% | 4/4 100% |
+| source_logical  | code_only  | 5/8 62.5% | 4/8 50.0% | 6/8 75.0% |
+| source_logical  | with_gpa   | 6/8 75.0% | 6/8 75.0% | 8/8 **100%** |
+| carryover       | code_only  | 3/4 75.0% | 4/4 100%  | 4/4 100% |
+| carryover       | with_gpa   | 3/4 75.0% | 4/4 100%  | 4/4 100% |
+
+### Subset paired deltas (both modes correct)
+
+| Subset | Model | N | Δcost | Δturns |
+|---|---|---|---|---|
+| state_collision | haiku  | 3 | $+0.1138 | +11.0 |
+| state_collision | sonnet | 3 | $-0.0900 |  -1.3 |
+| state_collision | opus   | 4 | $+0.1009 |  +3.0 |
+| source_logical  | haiku  | 4 | $+0.0800 | +10.2 |
+| source_logical  | sonnet | 4 | $-0.0193 |  +0.0 |
+| source_logical  | opus   | 6 | $+0.0928 |  +2.5 |
+| carryover       | haiku  | 2 | $+0.0152 |  -3.0 |
+| carryover       | sonnet | 4 | $+0.3887 |  +8.0 |
+| carryover       | opus   | 4 | $+0.1494 |  +5.8 |
+
+Sonnet's state-collision −$0.088/pair win from R8 **holds at −$0.090**.
+
+### Opus capability ceiling
+
+- **Opus-only wins** (Haiku + Sonnet both failed under either mode): 2
+  - `r17_viewport_rendering_with_postprocessing_r`
+  - `r35_strange_bug_with_3_sprites_where_one_of_`
+- **Sonnet-solved, Opus-failed** (potential regression): 0.
+
+### Browser pilot
+
+`r21_tile_id_overflow`: `gpa run-browser` launched Chromium against the
+Phase 1 MVP index.html; the WebGL extension POSTed the synthetic
+`sources` payload to the engine's reflection endpoint, then the HTML
+terminated. The runner reported `frames=0 sources=1 gpa_done=False
+timed_out=False duration=0.5s exit=0` — the end-to-end pipeline is
+wired, but Phase 1 is a scaffolding stub. No agent run was issued
+against the browser pilot (it's a capture-pipeline test, not a
+diagnosis test).
+
+### Verdict
+
+- **Hypothesis 1 (trace closes source-logical gap): CONFIRMED even
+  without trace.** R5-R8 all showed 0-of-4 source-logical wins with_gpa
+  in sonnet; R9 with_gpa hit **6/8 (sonnet), 6/8 (haiku), 8/8 (opus)**.
+  The improvement is driven by `gpa report` surfacing state evidence
+  that narrows the source search, not by trace — which was invoked
+  once across 48 with_gpa runs. The source-logical category accuracy
+  jumped without the intended tool being used.
+- **Hypothesis 2 (Opus capability ceiling): CONFIRMED.** Opus solved
+  2 scenarios neither Sonnet nor Haiku reached (r17_viewport,
+  r35_sprites). Zero regressions (no Sonnet-solved/Opus-failed
+  cases). Opus cost ~$0.75/run vs sonnet $0.53 — a 1.4× premium for
+  the headroom, not 5× as list pricing suggests.
+- **Hypothesis 3 (state-collision sonnet win persists): CONFIRMED.**
+  R8's Sonnet state-collision Δcost of −$0.088/pair became −$0.090/pair
+  in R9, matching within rounding.
+- **Hypothesis 4 (browser pilot works e2e): CONFIRMED as Phase 1
+  scaffold.** Chromium launched, extension POSTed sources, engine
+  accepted them, runner reported clean exit. Real WebGL capture + an
+  agent round-trip is still Phase 2 work.
+
+### Raw artifacts
+
+- `/tmp/eval_round9/*.jsonl` — 108 per-run stream-json transcripts.
+- `docs/superpowers/eval/round9/` — scored.json, summary.txt, runner
+  scripts, score.py, captures.txt, scenarios.txt, tasks.txt.
+

@@ -227,3 +227,73 @@ items with active evidence.
   pixel. Addresses R5 r27-class "NaN has two pathways" ambiguity.
 - **NaN/Inf mask on framebuffer.** `/frames/<id>/framebuffer/nan-mask`
   returning per-pixel bitmask. Less powerful than step-debug but cheaper.
+
+---
+
+## Round 9 findings
+
+**Setup:** 20 C-repros + 1 browser pilot, 3 models (haiku / sonnet /
+opus), both modes → 108 runs × $60.70. First round with native
+`gpa trace` (DWARF globals + libunwind stack locals) plumbed.
+
+### Lessons
+
+1. **Native trace shipped but not discovered.** In 48 with_gpa runs,
+   `gpa trace` was invoked **once** total. The prompt listed it as
+   "preferred step 2" but agents consistently went `report → dump`,
+   skipping it. Root causes: (a) scenarios pass clean `gpa report`, so
+   the step-2 trigger condition ("you need the upstream value for a
+   flagged warning") never fired; (b) `gpa dump drawcall` already
+   returns captured uniforms with app-observable values, so the
+   "reverse-lookup" framing of trace isn't an obvious next step. For
+   R10: rewrite the prompt to front-load trace as "when you find
+   yourself Grep'ing for a uniform value, stop and call `gpa trace
+   value N` first."
+
+2. **Source-logical category is not as hard as R5-R8 suggested.** R9's
+   with_gpa numbers: haiku 6/8, sonnet 6/8, opus 8/8. Prior rounds hit
+   0/4 on a smaller subset. The gap closed without the tool we shipped
+   to close it — `gpa report`'s flagged warnings + the agent's own
+   Grep/Read of snapshot source are sufficient for most source-logical
+   bugs. Implication: native trace's value has to be demonstrated on a
+   scenario where `gpa report` comes back clean, AND there's a captured
+   numeric value that's the breadcrumb. R10 should mine for that
+   specific pattern.
+
+3. **Opus adds capability, not cost-efficiency.** 100% with_gpa on 16
+   scenarios, 90% code_only on 20. Zero regressions vs sonnet. Cost
+   premium is 1.4× sonnet (not 5× as list pricing would suggest) and
+   timeouts dropped to 0 (vs sonnet 1, haiku 4). Good "insurance tier"
+   choice for hard scenarios; not the default tier.
+
+4. **Sonnet's state-collision cost advantage is stable.** R8
+   −$0.088/pair → R9 −$0.090/pair. State-collision is the canonical
+   "GPA saves reading" pattern. Carryover and source-logical both
+   show *positive* Δcost (GPA adds cost when source is the real
+   signal). Pattern: GPA's Δcost sign aligns with whether the bug
+   expresses itself in GL state vs. in code branches.
+
+5. **Haiku turn-cap hit 4/16 with_gpa.** Same rate as R8 (2/11). The
+   report closure hint didn't close this gap — the remaining haiku
+   timeouts are on scenarios where report is clean and haiku loops on
+   dump/pixel-grid exploration. For R10: enforce a "try source first
+   if report is clean" instruction for haiku specifically.
+
+6. **Browser pilot pipeline works in MVP form.** Chromium launches,
+   extension POSTs sources, engine accepts them. Phase 1 is scaffold;
+   Phase 2 needs real WebGL capture (frame != 0) before a with_gpa
+   agent run can be evaluated against a browser scenario.
+
+### R10 asks (preliminary)
+
+- **Mine trace-discriminating scenarios**: bugs where `gpa report`
+  comes back clean AND there's a captured literal whose provenance is
+  what the agent needs to find. ~5 scenarios would be enough to
+  demonstrate trace value.
+- **Prompt rewrite** promoting trace to step 1 for scenarios with a
+  numeric symptom (matrix element, stencil ref, viewport size).
+- **Browser Phase 2**: real WebGL frame capture for `r21_tile_id_overflow`.
+- **Haiku + clean-report loop mitigation**: explicit "if report clean
+  then grep source" instruction, or a soft turn budget (20) before the
+  hard cap.
+

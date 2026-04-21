@@ -1,0 +1,120 @@
+Total runs: 108  Total cost: $60.70
+
+## Mode x Model Accuracy
+Mode         Model      N  Correct     Acc    AvgCost  AvgTurns  Timeout
+code_only    haiku     20       15   75.0% $   0.3681      27.1        4
+code_only    opus      20       18   90.0% $   0.7472      12.9        1
+code_only    sonnet    20       14   70.0% $   0.5335      13.7        2
+with_gpa     haiku     16       12   75.0% $   0.3711      29.4        4
+with_gpa     opus      16       16  100.0% $   0.7553      15.4        0
+with_gpa     sonnet    16       13   81.2% $   0.6067      15.1        1
+
+## Verdict Breakdown (mode x model)
+Mode         Model     solved  timeout  wrong  infra
+code_only    haiku         15        4      1      0
+code_only    opus          18        1      1      0
+code_only    sonnet        14        2      4      0
+with_gpa     haiku         12        4      0      0
+with_gpa     opus          16        0      0      0
+with_gpa     sonnet        13        1      2      0
+
+## Per-Scenario (Y/N/-)
+scenario                                           co_h co_s co_o wi_h wi_s wi_o
+r10_feedback_loop_error_with_transmission_an         Y     Y     Y     Y     Y     Y  
+r13_cubecamera_render_target_displaying_rand         Y     Y     Y     Y     Y     Y  
+r14_cannot_override_vertexnode_of_instanced_         Y     N     N     Y     Y     Y  
+r16_lightprobegenerator_does_not_work_with_e         Y     Y     Y     -     -     -  
+r17_replacing_an_attribute_of_a_geometry_ins         Y     N     Y     N     N     Y  
+r17_viewport_rendering_with_postprocessing_r         N     N     Y     -     -     -  
+r18_model_disappears_when_rotating_or_zoomin         N     Y     Y     Y     Y     Y  
+r18_webglrenderer_reversed_depth_not_working         Y     N     Y     -     -     -  
+r19_depthtexture_share_source_after_renderta         Y     Y     Y     -     -     -  
+r20_object_with_meshphysicalmaterial_contain         Y     Y     Y     Y     Y     Y  
+r21_fix_vertical_and_horizontal_artifacts_on         N     N     N     Y     Y     Y  
+r22_point_sprite_rendering_issues_with_three         Y     Y     Y     Y     Y     Y  
+r25_filters_with_backbuffers_seem_not_to_wor         Y     Y     Y     N     Y     Y  
+r27_bug_black_squares_appear_when_rendering_         N     Y     Y     Y     Y     Y  
+r28_objloader_loader_does_not_return_valid_g         Y     Y     Y     Y     Y     Y  
+r35_strange_bug_with_3_sprites_where_one_of_         N     N     Y     N     N     Y  
+r4_3d_map_black_screen                               Y     Y     Y     Y     Y     Y  
+r4_motion_blur_and_instancedmesh                     Y     Y     Y     Y     Y     Y  
+r7_webglbackend_copytexturetotexture_doesn_          Y     Y     Y     Y     N     Y  
+r9_transparent_objects_brighten_when_using_          Y     Y     Y     N     Y     Y  
+
+## Mean Tool Calls per Run (mode x model)
+Mode         Model      gpa  grpt  gtrc  gchk  gdmp  curl  Read  Grep  Bash
+code_only    haiku      0.0   0.0   0.0   0.0   0.0   0.0   9.3   3.9  10.7
+code_only    opus       0.0   0.0   0.0   0.0   0.0   0.0   4.6   4.2   2.3
+code_only    sonnet     0.0   0.0   0.0   0.0   0.0   0.0  14.1   8.2   8.8
+with_gpa     haiku      3.6   0.9   0.0   0.0   2.6   0.0   8.6   0.4  14.1
+with_gpa     opus       3.1   0.9   0.0   0.0   2.2   0.2   4.3   2.8   3.3
+with_gpa     sonnet     2.1   1.0   0.1   0.1   0.9   0.0  17.8   5.5  18.2
+
+## Accuracy by Category x Mode x Model
+Cat                Mode         Model      N  Correct     Acc
+carryover          code_only    haiku      4        3   75.0%
+carryover          code_only    opus       4        4  100.0%
+carryover          code_only    sonnet     4        4  100.0%
+carryover          with_gpa     haiku      4        3   75.0%
+carryover          with_gpa     opus       4        4  100.0%
+carryover          with_gpa     sonnet     4        4  100.0%
+source_logical     code_only    haiku      8        5   62.5%
+source_logical     code_only    opus       8        6   75.0%
+source_logical     code_only    sonnet     8        4   50.0%
+source_logical     with_gpa     haiku      8        6   75.0%
+source_logical     with_gpa     opus       8        8  100.0%
+source_logical     with_gpa     sonnet     8        6   75.0%
+state_collision    code_only    haiku      8        7   87.5%
+state_collision    code_only    opus       8        8  100.0%
+state_collision    code_only    sonnet     8        6   75.0%
+state_collision    with_gpa     haiku      4        3   75.0%
+state_collision    with_gpa     opus       4        4  100.0%
+state_collision    with_gpa     sonnet     4        3   75.0%
+
+## Source-Logical: Trace Usage + Solvability
+  haiku   code_only 5/8  with_gpa 6/8  trace_calls=0  runs_with_trace=0/8
+  sonnet  code_only 4/8  with_gpa 6/8  trace_calls=0  runs_with_trace=0/8
+  opus    code_only 6/8  with_gpa 8/8  trace_calls=0  runs_with_trace=0/8
+
+## Paired Deltas (both modes correct) per model
+
+  model=haiku  N=9 paired scenarios
+    mean dcost  (gp - co): $+0.0769
+    mean dcache (gp - co): +654937
+    mean dout   (gp - co): +2283
+    mean dturns (gp - co): +7.6
+
+  model=sonnet  N=11 paired scenarios
+    mean dcost  (gp - co): $+0.1098
+    mean dcache (gp - co): +68989
+    mean dout   (gp - co): +3296
+    mean dturns (gp - co): +2.5
+
+  model=opus  N=14 paired scenarios
+    mean dcost  (gp - co): $+0.1113
+    mean dcache (gp - co): +129818
+    mean dout   (gp - co): +907
+    mean dturns (gp - co): +3.6
+
+## Subset Paired Deltas
+
+### state_collision
+  model=haiku  N=3  mean dcost $+0.1138  mean dturns +11.0
+  model=sonnet  N=3  mean dcost $-0.0900  mean dturns -1.3
+  model=opus  N=4  mean dcost $+0.1009  mean dturns +3.0
+
+### source_logical
+  model=haiku  N=4  mean dcost $+0.0800  mean dturns +10.2
+  model=sonnet  N=4  mean dcost $-0.0193  mean dturns +0.0
+  model=opus  N=6  mean dcost $+0.0928  mean dturns +2.5
+
+### carryover
+  model=haiku  N=2  mean dcost $+0.0152  mean dturns -3.0
+  model=sonnet  N=4  mean dcost $+0.3887  mean dturns +8.0
+  model=opus  N=4  mean dcost $+0.1494  mean dturns +5.8
+
+## Opus Capability Ceiling
+  Opus-only wins (Haiku+Sonnet both failed): 2
+    - r17_viewport_rendering_with_postprocessing_r
+    - r35_strange_bug_with_3_sprites_where_one_of_
+  Sonnet-solved, Opus-failed (potential regression): 0
