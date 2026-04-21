@@ -8,6 +8,43 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 
+def resolve_frame_id(frame_id, provider) -> int:
+    """Resolve a path-parameter frame id that may be an int or the literal
+    ``"latest"`` alias.
+
+    REST clients (and MCP tools) frequently don't know the numeric id of
+    the most recent frame; ``"latest"`` lets them skip the extra overview
+    round-trip. Anything else that isn't a base-10 integer raises a 400
+    HTTPException, matching pydantic's old contract.
+    """
+    # Already an int (FastAPI int-typed route parameter)
+    if isinstance(frame_id, int):
+        return frame_id
+    if isinstance(frame_id, str):
+        if frame_id == "latest":
+            latest = provider.get_latest_overview()
+            if latest is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="No frame captured yet (alias 'latest' unresolved)",
+                )
+            return int(latest.frame_id)
+        try:
+            return int(frame_id, 10)
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Invalid frame_id {frame_id!r}: expected an integer "
+                    f"or the literal 'latest'"
+                ),
+            )
+    raise HTTPException(
+        status_code=400,
+        detail=f"Invalid frame_id {frame_id!r}",
+    )
+
+
 def safe_json_response(data, status_code=200):
     """JSONResponse with bytes → base64 encoding.
 

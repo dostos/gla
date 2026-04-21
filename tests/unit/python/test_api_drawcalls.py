@@ -253,3 +253,98 @@ class TestDrawCallAttachments:
             "/api/v1/frames/1/drawcalls/9999/attachments", headers=auth_headers
         )
         assert resp.status_code == 404
+
+
+class TestFrameIdLatestAlias:
+    """`frame_id` path parameter must accept the string "latest" as an
+    alias for the most-recent captured frame. Anything else that doesn't
+    parse as an int must return 400 (not a pydantic 422).
+    """
+
+    def _numeric_resp(self, client, auth_headers, path_template):
+        # The conftest mock exposes frame 1 as both "latest" and by id.
+        return client.get(
+            path_template.format(fid=1), headers=auth_headers
+        )
+
+    def _latest_resp(self, client, auth_headers, path_template):
+        return client.get(
+            path_template.format(fid="latest"), headers=auth_headers
+        )
+
+    def test_list_drawcalls_latest(self, client, auth_headers):
+        num = self._numeric_resp(
+            client, auth_headers, "/api/v1/frames/{fid}/drawcalls"
+        )
+        lat = self._latest_resp(
+            client, auth_headers, "/api/v1/frames/{fid}/drawcalls"
+        )
+        assert num.status_code == 200
+        assert lat.status_code == 200
+        assert lat.json()["items"] == num.json()["items"]
+
+    def test_get_drawcall_latest(self, client, auth_headers):
+        num = self._numeric_resp(
+            client, auth_headers, "/api/v1/frames/{fid}/drawcalls/0"
+        )
+        lat = self._latest_resp(
+            client, auth_headers, "/api/v1/frames/{fid}/drawcalls/0"
+        )
+        assert num.status_code == lat.status_code == 200
+        assert num.json()["id"] == lat.json()["id"] == 0
+
+    def test_get_drawcall_shader_latest(self, client, auth_headers):
+        r = self._latest_resp(
+            client, auth_headers, "/api/v1/frames/{fid}/drawcalls/0/shader"
+        )
+        assert r.status_code == 200
+        assert r.json()["dc_id"] == 0
+
+    def test_get_drawcall_textures_latest(self, client, auth_headers):
+        r = self._latest_resp(
+            client, auth_headers, "/api/v1/frames/{fid}/drawcalls/0/textures"
+        )
+        assert r.status_code == 200
+
+    def test_get_drawcall_feedback_loops_latest(self, client, auth_headers):
+        r = self._latest_resp(
+            client, auth_headers,
+            "/api/v1/frames/{fid}/drawcalls/0/feedback-loops",
+        )
+        assert r.status_code == 200
+
+    def test_get_drawcall_nan_uniforms_latest(self, client, auth_headers):
+        r = self._latest_resp(
+            client, auth_headers,
+            "/api/v1/frames/{fid}/drawcalls/0/nan-uniforms",
+        )
+        assert r.status_code == 200
+
+    def test_get_drawcall_vertices_latest(self, client, auth_headers):
+        r = self._latest_resp(
+            client, auth_headers, "/api/v1/frames/{fid}/drawcalls/0/vertices"
+        )
+        assert r.status_code == 200
+
+    def test_get_drawcall_attachments_latest(self, client, auth_headers):
+        r = self._latest_resp(
+            client, auth_headers,
+            "/api/v1/frames/{fid}/drawcalls/0/attachments",
+        )
+        assert r.status_code == 200
+
+    def test_bogus_frame_id_returns_400(self, client, auth_headers):
+        r = client.get(
+            "/api/v1/frames/foo/drawcalls", headers=auth_headers
+        )
+        assert r.status_code == 400, r.text
+        assert "foo" in r.json()["detail"]
+
+    def test_frame_overview_latest(self, client, auth_headers):
+        # /frames/{frame_id}/overview — alias route on routes_frames.py
+        r_num = client.get("/api/v1/frames/1/overview", headers=auth_headers)
+        r_lat = client.get("/api/v1/frames/latest/overview", headers=auth_headers)
+        assert r_num.status_code == 200
+        assert r_lat.status_code == 200
+        # frame_id should match the numeric frame's id after resolution.
+        assert r_lat.json()["frame_id"] == r_num.json()["frame_id"]

@@ -22,11 +22,11 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from gpa.api.app import safe_json_response
+from gpa.api.app import resolve_frame_id, safe_json_response
 from gpa.api.trace_ranking import (
     build_corpus_for_value,
     rank_candidates,
@@ -56,8 +56,9 @@ FLOAT_ABS_TOL = 1e-9
 
 
 @router.post("/frames/{frame_id}/drawcalls/{dc_id}/sources")
-async def post_sources(frame_id: int, dc_id: int, request: Request):
+async def post_sources(frame_id: Union[int, str], dc_id: int, request: Request):
     """Store the reflection-scan sources for *(frame_id, dc_id)*."""
+    frame_id = resolve_frame_id(frame_id, request.app.state.provider)
     raw = await request.body()
     if len(raw) > MAX_SOURCES_BYTES:
         raise HTTPException(
@@ -94,8 +95,9 @@ async def post_sources(frame_id: int, dc_id: int, request: Request):
 
 
 @router.get("/frames/{frame_id}/drawcalls/{dc_id}/sources")
-def get_sources(frame_id: int, dc_id: int, request: Request):
+def get_sources(frame_id: Union[int, str], dc_id: int, request: Request):
     """Return stored sources for *(frame_id, dc_id)*."""
+    frame_id = resolve_frame_id(frame_id, request.app.state.provider)
     store = request.app.state.trace_store
     sources = store.get(frame_id, dc_id)
     if sources is None:
@@ -353,10 +355,11 @@ def _build_response(
 
 @router.get("/frames/{frame_id}/drawcalls/{dc_id}/trace/uniform/{name}")
 def trace_uniform(
-    frame_id: int, dc_id: int, name: str, request: Request,
+    frame_id: Union[int, str], dc_id: int, name: str, request: Request,
 ):
     """Resolve uniform *name* at *(frame_id, dc_id)* and reverse-lookup."""
     provider = request.app.state.provider
+    frame_id = resolve_frame_id(frame_id, provider)
     dc = provider.get_draw_call(frame_id, dc_id)
     if dc is None:
         raise HTTPException(
@@ -390,10 +393,11 @@ def trace_uniform(
 
 @router.get("/frames/{frame_id}/drawcalls/{dc_id}/trace/texture/{tex_id}")
 def trace_texture(
-    frame_id: int, dc_id: int, tex_id: int, request: Request,
+    frame_id: Union[int, str], dc_id: int, tex_id: int, request: Request,
 ):
     """Reverse-lookup the app-level field(s) holding *tex_id*."""
     provider = request.app.state.provider
+    frame_id = resolve_frame_id(frame_id, provider)
     dc = provider.get_draw_call(frame_id, dc_id)
     if dc is None:
         raise HTTPException(
@@ -418,10 +422,11 @@ def trace_texture(
 
 @router.get("/frames/{frame_id}/drawcalls/{dc_id}/trace/value")
 def trace_value_dc(
-    frame_id: int, dc_id: int, request: Request,
+    frame_id: Union[int, str], dc_id: int, request: Request,
     query: str = Query(..., description="Literal value (JSON-encoded)"),
 ):
     """Reverse-lookup a literal within a single (frame, dc) pair."""
+    frame_id = resolve_frame_id(frame_id, request.app.state.provider)
     literal = _parse_literal(query)
     store = request.app.state.trace_store
     cands, mhash = _collect_candidates_for_value(
@@ -435,10 +440,11 @@ def trace_value_dc(
 
 @router.get("/frames/{frame_id}/trace/value")
 def trace_value_frame(
-    frame_id: int, request: Request,
+    frame_id: Union[int, str], request: Request,
     query: str = Query(..., description="Literal value (JSON-encoded)"),
 ):
     """Reverse-lookup a literal across every stored dc in *frame_id*."""
+    frame_id = resolve_frame_id(frame_id, request.app.state.provider)
     literal = _parse_literal(query)
     store = request.app.state.trace_store
     cands, mhash = _collect_candidates_for_value(

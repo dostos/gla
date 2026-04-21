@@ -148,3 +148,60 @@ def test_custom_trace_store_wired(mock_query_engine, mock_engine):
     )
     # The shared instance must see the write.
     assert store.get(1, 0) is not None
+
+
+# ---------------------------------------------------------------------------
+# `frame_id=latest` alias on trace routes
+# ---------------------------------------------------------------------------
+
+
+def test_post_sources_latest_alias(client):
+    r = client.post(
+        "/api/v1/frames/latest/drawcalls/0/sources",
+        json=_payload(),
+        headers=AUTH_HEADERS,
+    )
+    assert r.status_code == 200, r.text
+    # conftest mock: latest frame id is 1
+    assert r.json()["frame_id"] == 1
+    r2 = client.get(
+        "/api/v1/frames/1/drawcalls/0/sources", headers=AUTH_HEADERS
+    )
+    assert r2.status_code == 200
+
+
+def test_get_sources_latest_alias(client):
+    client.post(
+        "/api/v1/frames/1/drawcalls/0/sources",
+        json=_payload(),
+        headers=AUTH_HEADERS,
+    )
+    r = client.get(
+        "/api/v1/frames/latest/drawcalls/0/sources", headers=AUTH_HEADERS
+    )
+    assert r.status_code == 200
+    assert "value_index" in r.json()
+
+
+def test_trace_value_frame_latest_alias(client):
+    r = client.get(
+        "/api/v1/frames/latest/trace/value?query=42", headers=AUTH_HEADERS
+    )
+    assert r.status_code == 200
+    assert r.json()["frame_id"] == 1
+
+
+def test_trace_value_dc_latest_alias(client):
+    r = client.get(
+        "/api/v1/frames/latest/drawcalls/0/trace/value?query=42",
+        headers=AUTH_HEADERS,
+    )
+    assert r.status_code == 200
+    assert r.json()["frame_id"] == 1
+
+
+def test_trace_routes_reject_bogus_frame_id(client):
+    r = client.get(
+        "/api/v1/frames/foo/trace/value?query=42", headers=AUTH_HEADERS
+    )
+    assert r.status_code == 400

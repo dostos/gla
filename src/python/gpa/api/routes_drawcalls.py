@@ -1,10 +1,10 @@
 """Draw call list and detail endpoints."""
 import math
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from gpa.api.app import safe_json_response
+from gpa.api.app import resolve_frame_id, safe_json_response
 
 router = APIRouter(tags=["drawcalls"])
 
@@ -127,13 +127,14 @@ def _enrich_textures(dc) -> list:
 
 @router.get("/frames/{frame_id}/drawcalls")
 def list_drawcalls(
-    frame_id: int,
+    frame_id: Union[int, str],
     request: Request,
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
     """Return a paginated list of draw calls for a frame."""
     provider = request.app.state.provider
+    frame_id = resolve_frame_id(frame_id, provider)
     overview = provider.get_frame_overview(frame_id)
     if overview is None:
         raise HTTPException(status_code=404, detail=f"Frame {frame_id} not found")
@@ -149,9 +150,10 @@ def list_drawcalls(
 
 
 @router.get("/frames/{frame_id}/drawcalls/{dc_id}")
-def get_drawcall(frame_id: int, dc_id: int, request: Request):
+def get_drawcall(frame_id: Union[int, str], dc_id: int, request: Request):
     """Return full details for a single draw call."""
     provider = request.app.state.provider
+    frame_id = resolve_frame_id(frame_id, provider)
     dc = provider.get_draw_call(frame_id, dc_id)
     if dc is None:
         raise HTTPException(
@@ -162,10 +164,11 @@ def get_drawcall(frame_id: int, dc_id: int, request: Request):
 
 @router.get("/frames/{frame_id}/drawcalls/{dc_id}/shader")
 def get_drawcall_shader(
-    frame_id: int, dc_id: int, request: Request
+    frame_id: Union[int, str], dc_id: int, request: Request
 ):
     """Return shader program info and uniform parameters for a draw call."""
     provider = request.app.state.provider
+    frame_id = resolve_frame_id(frame_id, provider)
     dc = provider.get_draw_call(frame_id, dc_id)
     if dc is None:
         raise HTTPException(
@@ -181,7 +184,7 @@ def get_drawcall_shader(
 
 @router.get("/frames/{frame_id}/drawcalls/{dc_id}/nan-uniforms")
 def get_drawcall_nan_uniforms(
-    frame_id: int, dc_id: int, request: Request
+    frame_id: Union[int, str], dc_id: int, request: Request
 ):
     """Return the uniforms whose decoded value contains NaN or Inf.
 
@@ -189,6 +192,7 @@ def get_drawcall_nan_uniforms(
     should hit this before hypothesizing local shader math bugs.
     """
     provider = request.app.state.provider
+    frame_id = resolve_frame_id(frame_id, provider)
     dc = provider.get_draw_call(frame_id, dc_id)
     if dc is None:
         raise HTTPException(
@@ -205,10 +209,11 @@ def get_drawcall_nan_uniforms(
 
 @router.get("/frames/{frame_id}/drawcalls/{dc_id}/textures")
 def get_drawcall_textures(
-    frame_id: int, dc_id: int, request: Request
+    frame_id: Union[int, str], dc_id: int, request: Request
 ):
     """Return bound texture units for a draw call."""
     provider = request.app.state.provider
+    frame_id = resolve_frame_id(frame_id, provider)
     dc = provider.get_draw_call(frame_id, dc_id)
     if dc is None:
         raise HTTPException(
@@ -223,7 +228,7 @@ def get_drawcall_textures(
 
 @router.get("/frames/{frame_id}/drawcalls/{dc_id}/feedback-loops")
 def get_drawcall_feedback_loops(
-    frame_id: int, dc_id: int, request: Request
+    frame_id: Union[int, str], dc_id: int, request: Request
 ):
     """Return any bound textures that are also the current FBO's color attachment.
 
@@ -233,6 +238,7 @@ def get_drawcall_feedback_loops(
     two fields on the detail endpoint.
     """
     provider = request.app.state.provider
+    frame_id = resolve_frame_id(frame_id, provider)
     dc = provider.get_draw_call(frame_id, dc_id)
     if dc is None:
         raise HTTPException(
@@ -253,10 +259,11 @@ def get_drawcall_feedback_loops(
 
 @router.get("/frames/{frame_id}/drawcalls/{dc_id}/vertices")
 def get_drawcall_vertices(
-    frame_id: int, dc_id: int, request: Request
+    frame_id: Union[int, str], dc_id: int, request: Request
 ):
     """Return vertex buffer info and attribute layout for a draw call."""
     provider = request.app.state.provider
+    frame_id = resolve_frame_id(frame_id, provider)
     dc = provider.get_draw_call(frame_id, dc_id)
     if dc is None:
         raise HTTPException(
@@ -274,7 +281,7 @@ def get_drawcall_vertices(
 
 @router.get("/frames/{frame_id}/drawcalls/{dc_id}/attachments")
 def get_drawcall_attachments(
-    frame_id: int, dc_id: int, request: Request
+    frame_id: Union[int, str], dc_id: int, request: Request
 ):
     """Return the full MRT color-attachment table for a draw call.
 
@@ -284,6 +291,7 @@ def get_drawcall_attachments(
     custom-points r32).
     """
     provider = request.app.state.provider
+    frame_id = resolve_frame_id(frame_id, provider)
     dc = provider.get_draw_call(frame_id, dc_id)
     if dc is None:
         raise HTTPException(

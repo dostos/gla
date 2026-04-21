@@ -1,9 +1,10 @@
 """Frame overview and framebuffer endpoints."""
 from dataclasses import asdict
+from typing import Union
 
 from fastapi import APIRouter, HTTPException, Request
 
-from gpa.api.app import safe_json_response
+from gpa.api.app import resolve_frame_id, safe_json_response
 
 router = APIRouter(tags=["frames"])
 
@@ -23,9 +24,10 @@ def get_current_frame_overview(request: Request):
 
 
 @router.get("/frames/{frame_id}/overview")
-def get_frame_overview(frame_id: int, request: Request):
+def get_frame_overview(frame_id: Union[int, str], request: Request):
     """Return an overview for the specified frame."""
     provider = request.app.state.provider
+    frame_id = resolve_frame_id(frame_id, provider)
     overview = provider.get_frame_overview(frame_id)
     if overview is None:
         raise HTTPException(status_code=404, detail=f"Frame {frame_id} not found")
@@ -36,12 +38,12 @@ def get_frame_overview(frame_id: int, request: Request):
 
 
 @router.get("/frames/{frame_id}/framebuffer")
-def get_framebuffer(frame_id: int, request: Request):
+def get_framebuffer(frame_id: Union[int, str], request: Request):
     """Return the colour buffer for a frame as base64-encoded raw RGBA bytes."""
     raise HTTPException(status_code=501, detail="Framebuffer readback not yet implemented")
 
 
 @router.get("/frames/{frame_id}/framebuffer/depth")
-def get_framebuffer_depth(frame_id: int, request: Request):
+def get_framebuffer_depth(frame_id: Union[int, str], request: Request):
     """Return the depth buffer for a frame as base64-encoded raw float32 bytes."""
     raise HTTPException(status_code=501, detail="Framebuffer depth readback not yet implemented")

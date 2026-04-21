@@ -113,3 +113,38 @@ def test_auth_required_on_post(client, headers):
 def test_auth_required_on_get(client, headers):
     r = client.get("/api/v1/frames/1/annotations", headers=headers)
     assert r.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# `frame_id=latest` alias
+# ---------------------------------------------------------------------------
+
+
+def test_annotations_post_latest_alias(client):
+    r = client.post(
+        "/api/v1/frames/latest/annotations",
+        json={"tag": "value"},
+        headers=AUTH_HEADERS,
+    )
+    assert r.status_code == 200, r.text
+    # conftest mock: latest frame id is 1
+    assert r.json()["frame_id"] == 1
+
+    r2 = client.get("/api/v1/frames/1/annotations", headers=AUTH_HEADERS)
+    assert r2.json() == {"tag": "value"}
+
+
+def test_annotations_get_latest_alias(client):
+    client.post(
+        "/api/v1/frames/1/annotations",
+        json={"via": "numeric"},
+        headers=AUTH_HEADERS,
+    )
+    r = client.get("/api/v1/frames/latest/annotations", headers=AUTH_HEADERS)
+    assert r.status_code == 200
+    assert r.json() == {"via": "numeric"}
+
+
+def test_annotations_bogus_frame_id_returns_400(client):
+    r = client.get("/api/v1/frames/foo/annotations", headers=AUTH_HEADERS)
+    assert r.status_code == 400
