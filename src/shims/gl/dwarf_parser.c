@@ -37,12 +37,14 @@
 /* Tags */
 #define DW_TAG_array_type         0x01
 #define DW_TAG_class_type         0x02
+#define DW_TAG_formal_parameter   0x05
 #define DW_TAG_compile_unit       0x11
 #define DW_TAG_structure_type     0x13
 #define DW_TAG_typedef            0x16
 #define DW_TAG_union_type         0x17
 #define DW_TAG_base_type          0x24
 #define DW_TAG_const_type         0x26
+#define DW_TAG_subprogram         0x2e
 #define DW_TAG_volatile_type      0x35
 #define DW_TAG_variable           0x34
 #define DW_TAG_namespace          0x39
@@ -666,4 +668,246 @@ void gpa_dwarf_globals_free(GpaDwarfGlobals* g) {
     free(g->items);
     free(g->strpool);
     memset(g, 0, sizeof(*g));
+}
+
+/* ======================================================================
+ * Phase 2: subprogram + local-variable indexing
+ * ====================================================================== */
+
+static const char* sub_strpool_dup(GpaDwarfSubprograms* s, const char* src) {
+    if (!src) return NULL;
+    size_t n = strlen(src);
+    if (s->strpool_len + n + 1 > s->strpool_cap) {
+        size_t nc = s->strpool_cap ? s->strpool_cap * 2 : 4096;
+        while (nc < s->strpool_len + n + 1) nc *= 2;
+        char* nb = (char*)realloc(s->strpool, nc);
+        if (!nb) return NULL;
+        if (nb != s->strpool && s->strpool) {
+            ptrdiff_t delta = nb - s->strpool;
+            for (size_t i = 0; i < s->count; i++) {
+                if (s->items[i].name) s->items[i].name += delta;
+                for (size_t j = 0; j < s->items[i].local_count; j++) {
+                    if (s->items[i].locals[j].name)
+                        s->items[i].locals[j].name += delta;
+                }
+            }
+        }
+        s->strpool = nb; s->strpool_cap = nc;
+    }
+    char* dst = s->strpool + s->strpool_len;
+    memcpy(dst, src, n); dst[n] = '\0';
+    s->strpool_len += n + 1;
+    return dst;
+}
+
+static void sub_append_local(GpaDwarfSubprogram* sp, const GpaDwarfLocal* l) {
+    if (sp->local_count == sp->local_cap) {
+        size_t nc = sp->local_cap ? sp->local_cap * 2 : 8;
+        GpaDwarfLocal* nb = (GpaDwarfLocal*)realloc(sp->locals,
+                                                    nc * sizeof(GpaDwarfLocal));
+        if (!nb) return;
+        sp->locals = nb; sp->local_cap = nc;
+    }
+    sp->locals[sp->local_count++] = *l;
+}
+
+/* Walk all DIEs in a CU, tracking nesting; emit subprograms with their
+ * formal_parameter + variable children. */
+static int parse_cu_subprograms(const DwFile* file,
+                                const uint8_t* cu_start, const uint8_t* cu_end,
+                                uintptr_t load_bias,
+                                GpaDwarfSubprograms* out) {
+    if (cu_start + 11 > cu_end) return GPA_DWARF_ERR_MALFORMED;
+    uint32_t len = rd_u32(cu_start);
+    if (len == 0xffffffff) return GPA_DWARF_ERR_MALFORMED;
+    uint16_t version = rd_u16(cu_start + 4);
+    if (version == 5) return GPA_DWARF_UNSUPPORTED_VERSION;
+    if (version < 2 || version > 4) return GPA_DWARF_UNSUPPORTED_VERSION;
+    uint32_t abbrev_off = rd_u32(cu_start + 6);
+    uint8_t  addr_size  = cu_start[10];
+
+    const uint8_t* die_start = cu_start + 11;
+    const uint8_t* die_end   = cu_start + 4 + len;
+    if (die_end > cu_end) die_end = cu_end;
+
+    if (abbrev_off >= file->abbrev.size) return GPA_DWARF_ERR_MALFORMED;
+    DwAbbrevTable tab;
+    int rc = abbrev_parse(&tab,
+                          file->abbrev.data + abbrev_off,
+                          file->abbrev.data + file->abbrev.size);
+    if (rc != GPA_DWARF_OK) return rc;
+
+    CuView cu = {cu_start, die_start, die_end, &tab, addr_size};
+
+    /* Depth-tracked walk. When we enter a subprogram DIE, remember its
+     * depth+1 is where its direct children live; capture variables at
+     * that depth only. Nested subprograms (lambdas) become their own
+     * subprograms, but we skip their variables from the outer one. */
+    const uint8_t* p = die_start;
+    int depth = 0;
+    int in_sub_depth = -1;    /* depth at which current subprogram's children sit */
+    /* Index (not pointer) into out->items to survive realloc. */
+    size_t cur_sub_idx = (size_t)-1;
+
+    while (p < die_end) {
+        uint64_t code;
+        if (!rd_uleb(&p, die_end, &code)) break;
+        if (code == 0) {
+            if (depth > 0) depth--;
+            if (cur_sub_idx != (size_t)-1 && depth < in_sub_depth) {
+                cur_sub_idx = (size_t)-1;
+                in_sub_depth = -1;
+            }
+            continue;
+        }
+        DwAbbrev* ab = abbrev_find(&tab, code);
+        if (!ab) { rc = GPA_DWARF_ERR_MALFORMED; break; }
+
+        const char* name = NULL;
+        const char* linkage = NULL;
+        uintptr_t low_pc = 0; int have_low = 0;
+        uint64_t high_pc_raw = 0; int have_high = 0; int high_is_offset = 0;
+        const uint8_t* loc_expr = NULL; size_t loc_len = 0;
+        uint64_t type_ref = 0; int have_type = 0;
+        int declaration = 0;
+
+        for (size_t i = 0; i < ab->attr_count; i++) {
+            DwFormVal v;
+            if (!read_form(ab->attrs[i].form, &p, die_end,
+                           die_start, (size_t)(die_end - die_start),
+                           addr_size, file, &v)) {
+                rc = GPA_DWARF_ERR_MALFORMED; goto done;
+            }
+            switch (ab->attrs[i].name) {
+            case DW_AT_name: if (v.has_string) name = v.str; break;
+            case DW_AT_linkage_name:
+            case DW_AT_MIPS_linkage_name:
+                if (v.has_string) linkage = v.str;
+                break;
+            case DW_AT_low_pc:
+                if (v.has_addr) { low_pc = (uintptr_t)v.addr; have_low = 1; }
+                break;
+            case DW_AT_high_pc:
+                if (v.has_addr) {
+                    high_pc_raw = v.addr; have_high = 1; high_is_offset = 0;
+                } else if (v.has_uconst) {
+                    /* DWARF 4: high_pc as constant = offset from low_pc. */
+                    high_pc_raw = v.uconst; have_high = 1; high_is_offset = 1;
+                }
+                break;
+            case DW_AT_location:
+                if (v.has_block) { loc_expr = v.block; loc_len = v.block_len; }
+                break;
+            case DW_AT_type:
+                if (v.has_ref) { type_ref = v.ref; have_type = 1; }
+                break;
+            case DW_AT_declaration:
+                if (v.has_flag && v.flag) declaration = 1;
+                break;
+            default: break;
+            }
+        }
+
+        if (ab->tag == DW_TAG_subprogram && have_low && !declaration) {
+            /* Append a new subprogram entry. */
+            if (out->count == out->cap) {
+                size_t nc = out->cap ? out->cap * 2 : 64;
+                GpaDwarfSubprogram* nb = (GpaDwarfSubprogram*)realloc(out->items,
+                    nc * sizeof(GpaDwarfSubprogram));
+                if (!nb) { rc = GPA_DWARF_ERR_MALFORMED; goto done; }
+                out->items = nb; out->cap = nc;
+            }
+            size_t idx = out->count++;
+            GpaDwarfSubprogram* sp = &out->items[idx];
+            memset(sp, 0, sizeof(*sp));
+            const char* use_name = name ? name : linkage;
+            sp->name = sub_strpool_dup(out, use_name ? use_name : "");
+            sp->low_pc = low_pc + load_bias;
+            if (have_high) {
+                sp->high_pc = high_is_offset
+                    ? sp->low_pc + (uintptr_t)high_pc_raw
+                    : (uintptr_t)high_pc_raw + load_bias;
+            } else {
+                sp->high_pc = sp->low_pc; /* empty range */
+            }
+            if (ab->has_children) {
+                cur_sub_idx = idx;
+                in_sub_depth = depth + 1;
+            }
+        }
+        else if ((ab->tag == DW_TAG_variable ||
+                  ab->tag == DW_TAG_formal_parameter) &&
+                 cur_sub_idx != (size_t)-1 && depth == in_sub_depth &&
+                 loc_expr && loc_len > 0) {
+            /* A direct child local/parameter of the current subprogram.
+             * Resolve its type right now (follow typedef/const chain). */
+            uint64_t sz = 0; uint32_t enc = 0;
+            if (have_type) resolve_type(&cu, file, type_ref, &sz, &enc);
+            const char* use_name = name ? name : linkage;
+            if (use_name) {
+                /* Dup name first (may realloc strpool + rebase pointers). */
+                const char* nm = sub_strpool_dup(out, use_name);
+                GpaDwarfLocal l = {
+                    .name = nm,
+                    .location_expr = loc_expr,
+                    .location_len = loc_len,
+                    .byte_size = sz,
+                    .type_encoding = enc,
+                };
+                sub_append_local(&out->items[cur_sub_idx], &l);
+            }
+        }
+
+        if (ab->has_children) depth++;
+    }
+
+done:
+    abbrev_free(&tab);
+    return rc;
+}
+
+int gpa_dwarf_parse_subprograms(const char* path,
+                                uintptr_t load_bias,
+                                GpaDwarfSubprograms* out) {
+    memset(out, 0, sizeof(*out));
+    DwFile f;
+    int rc = dwfile_open(&f, path);
+    if (rc != GPA_DWARF_OK) { dwfile_close(&f); return rc; }
+
+    /* Hand ownership of the mmap to `out` so location-expression pointers
+     * into it stay valid after we return. */
+    out->map = f.map;
+    out->map_size = f.map_size;
+    out->fd = f.fd;
+    /* Detach from `f` so dwfile_close won't unmap/close. */
+    f.map = NULL;
+    f.fd = -1;
+
+    const uint8_t* p = f.info.data;
+    const uint8_t* end = f.info.data + f.info.size;
+    while (p + 11 <= end) {
+        uint32_t len = rd_u32(p);
+        if (len == 0xffffffff) { rc = GPA_DWARF_UNSUPPORTED_VERSION; break; }
+        const uint8_t* cu_end = p + 4 + len;
+        if (cu_end > end) { rc = GPA_DWARF_ERR_MALFORMED; break; }
+        rc = parse_cu_subprograms(&f, p, cu_end, load_bias, out);
+        if (rc == GPA_DWARF_UNSUPPORTED_VERSION) break;
+        if (rc != GPA_DWARF_OK) break;
+        p = cu_end;
+    }
+
+    /* We zeroed f.map/f.fd above; dwfile_close is now a no-op for them. */
+    dwfile_close(&f);
+    return rc;
+}
+
+void gpa_dwarf_subprograms_free(GpaDwarfSubprograms* s) {
+    if (!s) return;
+    for (size_t i = 0; i < s->count; i++) free(s->items[i].locals);
+    free(s->items);
+    free(s->strpool);
+    if (s->map) munmap(s->map, s->map_size);
+    if (s->fd >= 0) close(s->fd);
+    memset(s, 0, sizeof(*s));
+    s->fd = -1;
 }

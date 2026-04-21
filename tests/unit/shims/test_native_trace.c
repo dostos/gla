@@ -5,6 +5,7 @@
 #define _GNU_SOURCE
 #include "src/shims/gl/dwarf_parser.h"
 #include "src/shims/gl/native_trace.h"
+#include "src/shims/gl/pc_to_die.h"
 
 #include <assert.h>
 #include <dlfcn.h>
@@ -289,6 +290,59 @@ static void test_scan_respects_budget(void) {
     printf("PASS test_scan_respects_budget\n");
 }
 
+static void test_dwarf_parse_subprograms_lists_main(void) {
+    GpaDwarfSubprograms s = {0};
+    int rc = gpa_dwarf_parse_subprograms(fixture_path, 0, &s);
+    assert(rc == GPA_DWARF_OK);
+    assert(s.count >= 1);
+
+    /* main() should appear with at least an inclusive range. */
+    int found_main = 0;
+    for (size_t i = 0; i < s.count; i++) {
+        if (s.items[i].name && strcmp(s.items[i].name, "main") == 0) {
+            found_main = 1;
+            assert(s.items[i].high_pc > s.items[i].low_pc);
+            break;
+        }
+    }
+    assert(found_main);
+
+    gpa_dwarf_subprograms_free(&s);
+    printf("PASS test_dwarf_parse_subprograms_lists_main\n");
+}
+
+static void test_pc_index_lookup_roundtrip(void) {
+    GpaDwarfSubprograms s = {0};
+    int rc = gpa_dwarf_parse_subprograms(fixture_path, 0, &s);
+    assert(rc == GPA_DWARF_OK);
+
+    GpaPcIndex idx;
+    gpa_pc_index_init(&idx);
+    gpa_pc_index_add_module(&idx, &s);
+    gpa_pc_index_sort(&idx);
+
+    /* Every subprogram's low_pc (within its own range) should resolve
+     * back to itself. */
+    int checks = 0;
+    for (size_t i = 0; i < s.count; i++) {
+        if (s.items[i].high_pc <= s.items[i].low_pc) continue;
+        const GpaDwarfSubprogram* hit =
+            gpa_pc_index_lookup(&idx, s.items[i].low_pc);
+        assert(hit != NULL);
+        assert(hit->low_pc == s.items[i].low_pc);
+        checks++;
+        if (checks >= 4) break;
+    }
+    assert(checks >= 1);
+
+    /* A PC below every range should miss. */
+    assert(gpa_pc_index_lookup(&idx, 0x1) == NULL);
+
+    gpa_pc_index_free(&idx);
+    gpa_dwarf_subprograms_free(&s);
+    printf("PASS test_pc_index_lookup_roundtrip\n");
+}
+
 int main(void) {
     locate_fixture();
     fprintf(stderr, "fixture at: %s\n", fixture_path);
@@ -298,6 +352,8 @@ int main(void) {
     test_scan_hashes_values_match_js_scanner();
     test_scan_excludes_system_libs();
     test_scan_respects_budget();
+    test_dwarf_parse_subprograms_lists_main();
+    test_pc_index_lookup_roundtrip();
     printf("All native-trace tests passed.\n");
     return 0;
 }

@@ -20,6 +20,7 @@ cc_test(
     deps = [
         "//src/shims/gl:dwarf_parser",
         "//src/shims/gl:native_trace",
+        "//src/shims/gl:pc_to_die",
     ],
 )
 

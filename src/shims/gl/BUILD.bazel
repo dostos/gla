@@ -42,13 +42,24 @@ cc_library(
 )
 
 cc_library(
+    name = "pc_to_die",
+    srcs = ["pc_to_die.c"],
+    hdrs = ["pc_to_die.h"],
+    visibility = ["//visibility:public"],
+    deps = [":dwarf_parser"],
+)
+
+cc_library(
     name = "native_trace",
     srcs = ["native_trace.c"],
     hdrs = ["native_trace.h"],
     linkopts = ["-ldl"],
     deps = [
+        ":dwarf_locations",
         ":dwarf_parser",
         ":http_post",
+        ":pc_to_die",
+        ":stack_walker",
     ],
     visibility = ["//visibility:public"],
 )

@@ -77,6 +77,57 @@ void gpa_dwarf_globals_free(GpaDwarfGlobals* g);
 /* Human-readable error string for a GpaDwarfError (or "unknown" for other). */
 const char* gpa_dwarf_strerror(int err);
 
+/* ----------------------------------------------------------------------
+ * Phase 2: subprogram + local-variable index.
+ *
+ * Separate from the globals scan. A local variable carries a raw DWARF
+ * location expression (bytes) that Phase 2's interpreter evaluates against
+ * register state at scan time. We do NOT resolve addresses here.
+ * ---------------------------------------------------------------------- */
+
+typedef struct {
+    const char*    name;           /* points into GpaDwarfSubprograms strpool */
+    const uint8_t* location_expr;  /* points into mmap'd DWARF */
+    size_t         location_len;
+    uint64_t       byte_size;      /* 0 if unknown */
+    uint32_t       type_encoding;  /* DW_ATE_*; 0 if non-primitive */
+} GpaDwarfLocal;
+
+typedef struct {
+    const char*       name;         /* demangled? no — linkage_name or name */
+    uintptr_t         low_pc;       /* already load-bias adjusted */
+    uintptr_t         high_pc;      /* absolute; exclusive */
+    GpaDwarfLocal*    locals;
+    size_t            local_count;
+    size_t            local_cap;
+} GpaDwarfSubprogram;
+
+typedef struct {
+    GpaDwarfSubprogram* items;
+    size_t               count;
+    size_t               cap;
+    /* Backing mmap for location_expr pointers. Stays mapped for the
+     * lifetime of the table. */
+    void*                map;
+    size_t               map_size;
+    int                  fd;
+    /* String pool for subprogram / local names. */
+    char*                strpool;
+    size_t               strpool_len;
+    size_t               strpool_cap;
+} GpaDwarfSubprograms;
+
+/* Parse subprograms + their local-variable DIEs from the module at `path`.
+ * The mmap used for parsing is retained inside `*out` so the location-
+ * expression pointers remain valid until gpa_dwarf_subprograms_free().
+ *
+ * `load_bias` is added to every recorded low_pc/high_pc. */
+int gpa_dwarf_parse_subprograms(const char* path,
+                                uintptr_t load_bias,
+                                GpaDwarfSubprograms* out);
+
+void gpa_dwarf_subprograms_free(GpaDwarfSubprograms* s);
+
 #ifdef __cplusplus
 }
 #endif

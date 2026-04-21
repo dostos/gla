@@ -37,6 +37,17 @@ int  gpa_native_trace_is_enabled(void);
  * No-op if !gpa_native_trace_is_enabled(). */
 void gpa_native_trace_scan(uint64_t frame_id, uint32_t dc_id);
 
+/* Phase 2: walk the current thread's stack and, for each frame whose PC
+ * resolves to an indexed subprogram, read live primitive locals via the
+ * DWARF location interpreter and POST them as `origin: "dwarf-locals"`.
+ *
+ * Gated by the separate env var GPA_TRACE_NATIVE_STACK=1. Independent of
+ * the globals scanner — either can be enabled without the other. */
+void gpa_native_trace_scan_stack(uint64_t frame_id, uint32_t dc_id);
+
+/* Whether the stack-local scanner is active. */
+int gpa_native_trace_stack_is_enabled(void);
+
 /* Release all memory. */
 void gpa_native_trace_shutdown(void);
 
@@ -59,6 +70,18 @@ void  gpa_native_trace_test_set_budget_overrun(int fake_ms);
 
 /* Returns the value of the `truncated` flag from the last scan (for tests). */
 int   gpa_native_trace_test_was_truncated(void);
+
+/* Returns the running count of global derefs that were skipped because
+ * their address triggered SIGSEGV (unmapped memory). Test hook. */
+size_t gpa_native_trace_test_segv_skip_count(void);
+
+/* Test hook: append a synthetic global pointing at `addr` with `byte_size`
+ * + `encoding`. Used to verify the SIGSEGV guard against crafted unmapped
+ * addresses without depending on a real DWARF module. Flips `G.enabled` to
+ * 1 so gpa_native_trace_scan() will iterate. Caller must still provide an
+ * endpoint; scan will POST to the configured host (or fail open). */
+void gpa_native_trace_test_inject_global(const char* name, uintptr_t addr,
+                                         uint64_t byte_size, uint32_t encoding);
 
 #ifdef __cplusplus
 }
