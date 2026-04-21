@@ -6,6 +6,7 @@ import base64
 import json
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 
 def resolve_frame_id(frame_id, provider) -> int:
@@ -128,8 +129,25 @@ def create_app(provider=None, auth_token: str = "",
     app.state.query_engine = getattr(provider, "_qe", None)
     app.state.engine = getattr(provider, "_engine", None)
 
+    # Permit cross-origin POST/GET from scenario HTML pages served by the
+    # browser-eval runner's static server (different port from the engine).
+    # The engine binds only to 127.0.0.1 so widening origin control here is
+    # safe — attackers can't reach this process from off-host anyway.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
+        allow_credentials=False,
+    )
+
     @app.middleware("http")
     async def check_auth(request: Request, call_next):
+        # Let CORS preflight (OPTIONS) through without auth — browsers do
+        # not send Authorization on preflight, and CORSMiddleware answers
+        # the OPTIONS itself below. Non-OPTIONS requires a valid token.
+        if request.method == "OPTIONS":
+            return await call_next(request)
         raw_header = request.headers.get("Authorization", "")
         token = raw_header.removeprefix("Bearer ").strip()
         if token != request.app.state.auth_token:

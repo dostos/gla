@@ -236,6 +236,10 @@ class BrowserRunner:
                     break
                 if frames_captured > 0 and sources_captured > 0:
                     break
+                # Phase 1 MVP scenarios POST only trace-sources (no real
+                # GL frames). Accept sources-only as a successful boot.
+                if sources_captured > 0:
+                    break
 
                 time.sleep(opts.poll_interval_sec)
             else:
@@ -368,25 +372,31 @@ class BrowserRunner:
         except (urllib.error.URLError, OSError, ValueError):
             pass
 
-        # --- Sources count (scan known frame ids via get_frame) ---------- #
-        # The trace-store has no public "count" endpoint. We GET the per-dc
-        # sources path for the latest frame id only — sufficient to decide
-        # "did any sources arrive?" which is all Phase 1 needs.
-        if latest_id is not None:
-            # Probe the /frames/{id}/drawcalls/0/sources endpoint; 200 → 1+.
+        # --- Sources count --------------------------------------------------
+        # The trace-store has no public "count" endpoint and scenarios may
+        # POST to frame_id=0 before any capture-driven frame exists. Probe a
+        # short range of frame ids (0..8) on dc 0; any 200 → we have data.
+        # Also probe the latest captured frame id if the /frames listing
+        # reported one.
+        probe_ids = list(range(9))
+        if latest_id is not None and latest_id not in probe_ids:
+            probe_ids.append(latest_id)
+        for fid in probe_ids:
             try:
                 import json
 
                 req = urllib.request.Request(
-                    f"{base}/frames/{latest_id}/drawcalls/0/sources",
+                    f"{base}/frames/{fid}/drawcalls/0/sources",
                     headers=headers,
                 )
-                with urllib.request.urlopen(req, timeout=0.5) as resp:
-                    data = json.loads(resp.read())
-                if isinstance(data, dict):
-                    sources_count = 1
+                with urllib.request.urlopen(req, timeout=0.3) as resp:
+                    if resp.status == 200:
+                        data = json.loads(resp.read())
+                        if isinstance(data, dict) and data:
+                            sources_count = max(sources_count, 1)
+                            break
             except (urllib.error.URLError, OSError, ValueError):
-                pass
+                continue
 
         # --- gpa_done annotation probe ------------------------------------ #
         if latest_id is not None:
