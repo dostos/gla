@@ -67,6 +67,12 @@ At shim init you'll see a stderr line such as:
 - Only DWARF base-types (int, float, double, char, bool). Aggregates
   and pointers are recorded with byte_size but not hashed in this
   phase.
+- **Architecture:** the Phase 2 stack-local scanner
+  (`GPA_TRACE_NATIVE_STACK=1`) is x86_64 System V only. On other
+  architectures the walker is compiled as a no-op and logs
+  `[OpenGPA] native-trace: stack trace unavailable on this architecture
+  (x86_64 only)` once at the first scan. Globals-only (Phase 1) tracing
+  is arch-neutral and still works.
 
 ## Smoke check
 

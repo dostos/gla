@@ -16,9 +16,11 @@
 #define _GNU_SOURCE
 #include "stack_walker.h"
 
-#include <libunwind.h>
 #include <stdlib.h>
 #include <string.h>
+
+#if defined(__x86_64__)
+#include <libunwind.h>
 
 /* Map DWARF register numbers (0..16) to libunwind's UNW_X86_64_*. */
 static int dwarf_to_unw_reg(int dw) {
@@ -131,3 +133,35 @@ void gpa_stack_snapshot_free(GpaStackSnapshot* s) {
     free(s->strpool);
     memset(s, 0, sizeof(*s));
 }
+
+#else  /* !__x86_64__ */
+
+/* Non-x86_64 builds: the walker compiles as a no-op. The DWARF register-
+ * number mapping we use, the CFA + GP-register snapshot, and all the
+ * libunwind register enums are x86_64-specific. Rather than ifdef-ing
+ * dozens of sites, we just fail the walk cleanly on other arches — the
+ * driver already treats an empty snapshot as "stack trace unavailable".
+ *
+ * Documented in docs/gpa-trace-native-usage.md (stack-scan section). */
+
+#include <stdio.h>
+
+int gpa_stack_walk_current(GpaStackSnapshot* out) {
+    memset(out, 0, sizeof(*out));
+    static int warned = 0;
+    if (!warned) {
+        warned = 1;
+        fprintf(stderr,
+                "[OpenGPA] native-trace: stack trace unavailable on this "
+                "architecture (x86_64 only)\n");
+    }
+    return 0;
+}
+
+void gpa_stack_snapshot_free(GpaStackSnapshot* s) {
+    if (!s) return;
+    free(s->strpool);
+    memset(s, 0, sizeof(*s));
+}
+
+#endif  /* __x86_64__ */
