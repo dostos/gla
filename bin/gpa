@@ -6,7 +6,15 @@
 # extension `_gpa_core.so` so users don't have to plumb PYTHONPATH /
 # GPA_PYTHON manually. Honours an explicit $GPA_PYTHON if set.
 #
-# Fallback: if bazel artifacts aren't present, uses `python3` and warns.
+# Interpreter search order:
+#   1. $GPA_PYTHON, if set.
+#   2. Default bazel cache: ~/.cache/bazel/_bazel_$USER/.../external/
+#      rules_python~~python~python_3_11_<triple>/bin/python3.11.
+#   3. $BAZEL_OUTPUT_BASE, if set (short-circuits the `bazel info` call;
+#      primarily for tests).
+#   4. `bazel info output_base` — honors --output_user_root / --output_base
+#      / .bazelrc overrides.
+#   5. `python3` fallback + warning.
 
 set -e
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -23,15 +31,23 @@ fi
 
 # ---------------------------------------------------------------------------
 # 2. Locate the bazel-managed Python 3.11 interpreter.
-#    Search the user's bazel output_base for the rules_python runtime.
+#    Default layout:
+#        ~/.cache/bazel/_bazel_$USER/.../external/
+#            rules_python~~python~python_3_11_<triple>/bin/python3.11
+#
+#    Custom layouts (e.g. `bazel --output_user_root=/tmp/foo` or
+#    `--output_base=/srv/bazel-cache`) break the default path. When the
+#    default search misses, we ask bazel itself where output_base lives
+#    via `bazel info output_base` and search there. An explicit
+#    $BAZEL_OUTPUT_BASE short-circuits the shell-out (used by unit tests).
 # ---------------------------------------------------------------------------
-detect_bazel_python() {
-    # Typical layout: <output_base>/external/rules_python~~python~python_3_11_<triple>/bin/python3.11
-    local bazel_root="${HOME}/.cache/bazel/_bazel_${USER:-$(id -un)}"
-    [ -d "$bazel_root" ] || return 1
+_search_rules_python() {
+    # $1 = directory to search under. Prints candidate path on success.
+    local base="$1"
+    [ -d "$base" ] || return 1
     local candidate
     # -maxdepth keeps this fast even with many output bases.
-    candidate="$(find "$bazel_root" -maxdepth 6 -type d \
+    candidate="$(find "$base" -maxdepth 6 -type d \
                     -name 'rules_python*python_3_11*' 2>/dev/null | head -n1)"
     [ -n "$candidate" ] || return 1
     if [ -x "$candidate/bin/python3.11" ]; then
@@ -41,6 +57,32 @@ detect_bazel_python() {
     if [ -x "$candidate/bin/python3" ]; then
         printf '%s\n' "$candidate/bin/python3"
         return 0
+    fi
+    return 1
+}
+
+detect_bazel_python() {
+    local found=""
+    # 2a. Default location.
+    local bazel_root="${HOME}/.cache/bazel/_bazel_${USER:-$(id -un)}"
+    found="$(_search_rules_python "$bazel_root" || true)"
+    if [ -n "$found" ]; then printf '%s\n' "$found"; return 0; fi
+
+    # 2b. Explicit override (primarily for unit tests).
+    if [ -n "$BAZEL_OUTPUT_BASE" ]; then
+        found="$(_search_rules_python "$BAZEL_OUTPUT_BASE" || true)"
+        if [ -n "$found" ]; then printf '%s\n' "$found"; return 0; fi
+    fi
+
+    # 2c. Ask bazel for its configured output_base. This handles
+    #     --output_user_root / --output_base / .bazelrc overrides.
+    if command -v bazel >/dev/null 2>&1; then
+        local ob
+        ob="$(cd "$root" 2>/dev/null && bazel info output_base 2>/dev/null || true)"
+        if [ -n "$ob" ] && [ "$ob" != "$bazel_root" ]; then
+            found="$(_search_rules_python "$ob" || true)"
+            if [ -n "$found" ]; then printf '%s\n' "$found"; return 0; fi
+        fi
     fi
     return 1
 }

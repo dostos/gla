@@ -102,3 +102,52 @@ def test_diag_honors_explicit_gpa_python_override():
     code, out, _err = _run_diag(extra_env={"GPA_PYTHON": "/opt/custom/python"})
     assert code == 0
     assert "GPA_PYTHON=/opt/custom/python" in out
+
+
+def test_diag_honors_bazel_output_base_override(tmp_path):
+    """A non-default bazel output_base (e.g. --output_user_root override)
+    should still resolve python 3.11 via the $BAZEL_OUTPUT_BASE hint."""
+    # Build a minimal fake output_base layout: a stub python3.11 shell
+    # script that exits 0 (the autodetect uses `test -x`, not actual
+    # execution, so the content is irrelevant — but it must be executable).
+    fake = (
+        tmp_path
+        / "external"
+        / "rules_python~~python~python_3_11_x86_64-unknown-linux-gnu"
+        / "bin"
+    )
+    fake.mkdir(parents=True)
+    py_stub = fake / "python3.11"
+    py_stub.write_text("#!/bin/sh\nexit 0\n")
+    py_stub.chmod(0o755)
+
+    # Invoke bin/gpa diag with an empty HOME so the default ~/.cache/bazel
+    # path doesn't win first. Redirect home to an empty tmpdir.
+    empty_home = tmp_path / "empty_home"
+    empty_home.mkdir()
+
+    env = os.environ.copy()
+    env["GPA_DIAG"] = "1"
+    env.pop("GPA_PYTHON", None)
+    env["HOME"] = str(empty_home)
+    env["BAZEL_OUTPUT_BASE"] = str(tmp_path)
+    # Remove bazel from PATH so the `bazel info output_base` fallback
+    # doesn't accidentally succeed and mask a BAZEL_OUTPUT_BASE regression.
+    env["PATH"] = "/usr/bin:/bin"
+
+    proc = subprocess.run(
+        [str(BIN_GPA), "--help"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    py_line = next(
+        (ln for ln in proc.stdout.splitlines() if ln.startswith("GPA_PYTHON=")),
+        None,
+    )
+    assert py_line is not None, proc.stdout
+    assert py_line == f"GPA_PYTHON={py_stub}", (
+        f"expected override path, got {py_line!r}"
+    )
