@@ -284,6 +284,47 @@ opus), both modes → 108 runs × $60.70. First round with native
    Phase 2 needs real WebGL capture (frame != 0) before a with_gpa
    agent run can be evaluated against a browser scenario.
 
+### R9 token / cost deep-dive (post-run analysis)
+
+**Per-run means (108 runs, $60.70 total, 22 min wall-clock):**
+
+| Mode | Haiku | Sonnet | Opus |
+|---|---|---|---|
+| code_only | $0.37 | $0.53 | $0.75 |
+| with_gpa | $0.37 | $0.61 | $0.75 |
+
+**Opus multiplier recalibrated 5.0 → 1.4** in `src/python/gpa/eval/models.py`
+(list pricing says ~5× raw input tokens, but Opus terminates faster on
+hard problems; effective per-run cost is 1.33×). Budget planner now much
+less restrictive.
+
+**Paired Δcost (both correct, Sonnet by subset):**
+
+| Subset | n | Δcost |
+|---|---|---|
+| State-collision | 3 | **−$0.090/pair** (R8 was −$0.088 — reproducible) |
+| Source-logical | 4 | −$0.019/pair |
+| R5-R8 carryover (framework-consumer) | 4 | **+$0.389/pair** |
+
+The aggregate "+$0.11/pair" with_gpa regression is **entirely driven by
+the R5-R8 carryover bucket**. Drop those → with_gpa wins. Insight:
+framework-consumer bugs are net-negative with GPA; state-collision +
+source-logical are net-positive. Forward mining should avoid
+framework-consumer issues unless they exhibit a state collision.
+
+**Cache-read inflation reversed on Sonnet** (first time in 5 rounds):
+
+| | R5 Δ | R7 Δ | R9 Δ |
+|---|---|---|---|
+| Haiku with_gpa − code_only | +384K | +251K | +151K |
+| Sonnet with_gpa − code_only | +57K | +121K | **−261K** |
+
+Narrow-endpoints + CLI + closure-signal stack finally paid off on token
+efficiency for Sonnet. Haiku still over-reads but improving.
+
+**Opus with_gpa: cleanest cell ever recorded** — 16/16 solved, 0 timeouts,
+0 wrong-class. Opus is a reliability tier, not a cost premium.
+
 ### R10 asks (preliminary)
 
 - **Mine trace-discriminating scenarios**: bugs where `gpa report`
@@ -296,4 +337,8 @@ opus), both modes → 108 runs × $60.70. First round with native
 - **Haiku + clean-report loop mitigation**: explicit "if report clean
   then grep source" instruction, or a soft turn budget (20) before the
   hard cap.
+- **Consider dropping carryover bucket** from future eval sets, or at
+  least caveat it: Sonnet regresses +$0.39/pair there, dragging the
+  aggregate GPA signal negative while subset data shows GPA is net
+  positive on state-collision + source-logical.
 

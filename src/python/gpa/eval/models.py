@@ -14,12 +14,15 @@ from typing import Any
 
 # Tier key -> {claude_id, tier, est_cost_multiplier}
 # Multipliers are relative to sonnet = 1.0 (our prior-round baseline).
-# The haiku/opus numbers are approximate list-price ratios; tune after
-# each round from observed per-run cost.
+# Calibrated from observed per-run costs in Round 9 (haiku $0.37,
+# sonnet $0.57, opus $0.75). Earlier estimates used list-price ratios
+# which over-estimated Opus by ~3.5× because Opus terminates faster
+# on hard problems (fewer turns, cleaner reasoning). Re-tune after
+# each round.
 MODELS: dict[str, dict[str, Any]] = {
-    "haiku":  {"claude_id": "claude-haiku-4-5",  "tier": "fast",     "est_cost_multiplier": 0.3},
+    "haiku":  {"claude_id": "claude-haiku-4-5",  "tier": "fast",     "est_cost_multiplier": 0.65},
     "sonnet": {"claude_id": "claude-sonnet-4-6", "tier": "standard", "est_cost_multiplier": 1.0},
-    "opus":   {"claude_id": "claude-opus-4-7",   "tier": "strong",   "est_cost_multiplier": 5.0},
+    "opus":   {"claude_id": "claude-opus-4-7",   "tier": "strong",   "est_cost_multiplier": 1.4},
 }
 
 

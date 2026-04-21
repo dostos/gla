@@ -54,13 +54,13 @@ def test_estimate_budget_sonnet_only():
 
 
 def test_estimate_budget_three_tiers_scales_correctly():
-    # 10 runs across all 3 tiers at $1/run baseline:
-    # haiku 0.3 + sonnet 1.0 + opus 5.0 = 6.3x.
+    # 10 runs across all 3 tiers at $1/run baseline. Multipliers
+    # calibrated from R9: haiku 0.65 + sonnet 1.0 + opus 1.4 = 3.05x.
     got = estimate_budget(10, ["haiku", "sonnet", "opus"], 1.0)
-    assert got == pytest.approx(10.0 * (0.3 + 1.0 + 5.0))
-    # Compared to sonnet-only, the 3-tier round is ~6.3x more expensive.
+    assert got == pytest.approx(10.0 * (0.65 + 1.0 + 1.4))
+    # Compared to sonnet-only, the 3-tier round is ~3.05x.
     sonnet_only = estimate_budget(10, ["sonnet"], 1.0)
-    assert got / sonnet_only == pytest.approx(6.3)
+    assert got / sonnet_only == pytest.approx(3.05)
 
 
 def test_estimate_budget_unknown_tier_raises():
@@ -81,7 +81,7 @@ def test_estimate_budget_negative_inputs_rejected():
 
 def test_plan_round_under_budget_no_pruning():
     # 2 scenarios * 2 modes * 3 tiers = 12 runs.
-    # Cost @ $0.50 baseline: 4 * 0.5 * (0.3 + 1.0 + 5.0) = $12.60.
+    # R9-calibrated: 4 * 0.5 * (0.65 + 1.0 + 1.4) = $6.10.
     plan = plan_round(
         scenarios=["a", "b"],
         tiers=["haiku", "sonnet", "opus"],
@@ -93,33 +93,33 @@ def test_plan_round_under_budget_no_pruning():
     assert plan["tiers_dropped"] == []
     assert plan["scenarios_dropped"] == []
     assert plan["reason"] == "within budget"
-    assert plan["estimated_cost"] == pytest.approx(12.60)
+    assert plan["estimated_cost"] == pytest.approx(4 * 0.5 * (0.65 + 1.0 + 1.4))
 
 
 def test_plan_round_drops_opus_when_over_budget():
-    # 10 scenarios * 2 modes = 20 per-tier runs.
-    # Three tiers: 20 * 0.5 * 6.3 = $63.
-    # Without opus: 20 * 0.5 * (0.3 + 1.0) = $13.
+    # 30 scenarios * 2 modes = 60 per-tier runs.
+    # Three tiers: 60 * 0.5 * (0.65+1.0+1.4) = $91.50.
+    # Without opus: 60 * 0.5 * (0.65 + 1.0) = $49.50.
     plan = plan_round(
-        scenarios=[f"s{i}" for i in range(10)],
+        scenarios=[f"s{i}" for i in range(30)],
         tiers=["haiku", "sonnet", "opus"],
         modes=["code_only", "with_gpa"],
-        max_budget_usd=20.0,
+        max_budget_usd=60.0,
         baseline_per_run=0.50,
     )
     assert "opus" in plan["tiers_dropped"]
     assert plan["scenarios_dropped"] == []
     assert plan["tiers"] == ["haiku", "sonnet"]
-    assert plan["estimated_cost"] == pytest.approx(13.0)
-    assert plan["runs"] == 10 * 2 * 2
+    assert plan["estimated_cost"] == pytest.approx(30 * 2 * 0.5 * (0.65 + 1.0))
+    assert plan["runs"] == 30 * 2 * 2
     assert "opus" in plan["reason"]
 
 
 def test_plan_round_drops_scenarios_when_still_over_after_opus():
-    # 40 scenarios * 2 modes * (haiku+sonnet) = 80 * 0.5 * 1.3 = $52.
-    # With a $10 cap, opus goes, then scenarios drop until under $10.
-    # Per-scenario sonnet+haiku cost (2 modes): 2 * 0.5 * 1.3 = $1.30.
-    # $10 / $1.30 ~= 7.69 -> 7 scenarios survive.
+    # 40 scenarios * 2 modes * (haiku+sonnet) = 80 runs.
+    # Per-scenario sonnet+haiku cost (2 modes): 2 * 0.5 * (0.65+1.0) = $1.65.
+    # With a $10 cap: opus drops, then scenarios drop until under $10.
+    # $10 / $1.65 ~= 6.06 -> 6 scenarios survive.
     plan = plan_round(
         scenarios=[f"s{i}" for i in range(40)],
         tiers=["haiku", "sonnet", "opus"],
@@ -130,7 +130,7 @@ def test_plan_round_drops_scenarios_when_still_over_after_opus():
     assert plan["tiers_dropped"] == ["opus"]
     assert len(plan["scenarios_dropped"]) > 0
     assert plan["estimated_cost"] <= 10.0
-    assert len(plan["scenarios"]) == 7
+    assert len(plan["scenarios"]) == 6
     assert plan["runs"] == len(plan["scenarios"]) * 2 * 2
 
 
