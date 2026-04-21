@@ -114,62 +114,23 @@ def _have_node() -> bool:
     return shutil.which("node") is not None
 
 
+JS_TEST = REPO_ROOT / "tests" / "unit" / "shims" / "test_gpa_trace_js_hash.js"
+
+
 @pytest.mark.skipif(not _have_node(), reason="node not installed")
 def test_js_canonical_matches_python_mirror():
-    """Inject a tiny driver into the JS extension's exported
-    `_hashValue` and compare its output to the Python mirror for every
-    value in VALUES."""
-    # Build a test harness script.
-    harness = r"""
-    const fs = require('fs');
-    const src = fs.readFileSync(%s, 'utf-8');
-    const module = { exports: {} };
-    const globalFn = new Function('module', 'exports', src + '\n;return typeof GPATrace !== "undefined" ? GPATrace : (typeof this !== "undefined" && this.GPATrace) || null;');
-    const globalObj = {};
-    // The extension exposes GPATrace on window; emulate that.
-    globalFn.call(globalObj, module, module.exports);
-    const GPA = globalObj.GPATrace || globalThis.GPATrace || module.exports.GPATrace;
-    if (!GPA || !GPA._hashValue) {
-        console.error('could not load GPATrace from extension');
-        process.exit(2);
-    }
-    const vals = JSON.parse(process.argv[2]);
-    const out = vals.map(s => {
-        let v;
-        if (s === 'NaN') v = Number.NaN;
-        else if (s === 'Inf') v = Number.POSITIVE_INFINITY;
-        else if (s === '-Inf') v = Number.NEGATIVE_INFINITY;
-        else v = Number(s);
-        return GPA._hashValue(v);
-    });
-    console.log(JSON.stringify(out));
-    """ % repr(str(JS_EXT))
-
-    # Encode values as string tokens.
-    tokens = []
-    for v in VALUES:
-        if math.isnan(v):
-            tokens.append("NaN")
-        elif v == math.inf:
-            tokens.append("Inf")
-        elif v == -math.inf:
-            tokens.append("-Inf")
-        else:
-            # Use repr so we don't lose precision on parse-back.
-            tokens.append(repr(v))
-    import json
+    """Run tests/unit/shims/test_gpa_trace_js_hash.js under node and
+    assert it exits 0. That test loads gpa-trace.js into a VM sandbox
+    and verifies `window.gpa.trace._hashValue()` emits the same
+    canonical strings the C shim + Python parser use, for 12
+    hand-computed boundary values (NaN, Inf, zero, signed ints,
+    fractional doubles)."""
+    assert JS_TEST.exists(), f"missing JS parity harness: {JS_TEST}"
     proc = subprocess.run(
-        ["node", "-e", harness, "--", json.dumps(tokens)],
+        ["node", str(JS_TEST)],
         capture_output=True, text=True, timeout=10,
     )
-    if proc.returncode != 0:
-        pytest.skip(
-            f"JS harness could not load extension "
-            f"(rc={proc.returncode}): {proc.stderr[:300]}"
-        )
-    js_out = json.loads(proc.stdout.strip())
-    for v, js_hash in zip(VALUES, js_out):
-        py_hash = "n:" + canonical_py(v)
-        assert js_hash == py_hash, (
-            f"mismatch for v={v!r}: js={js_hash!r} py={py_hash!r}"
-        )
+    assert proc.returncode == 0, (
+        f"JS parity test failed (rc={proc.returncode})\n"
+        f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+    )
