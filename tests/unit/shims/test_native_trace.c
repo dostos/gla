@@ -196,27 +196,64 @@ static void test_dwarf_parser_rejects_dwarf5(void) {
 }
 
 static void test_scan_hashes_values_match_js_scanner(void) {
-    /* Expected: djb2 of (typeof number's toString(36) output). For 16.58
-     * the JS scanner emits "n:" + (16.58).toString(36). Our parallel native
-     * path uses %.17g formatting for fractionals, diverging from JS
-     * toString(36) byte-for-byte. We instead validate the hash is stable
-     * and non-null for a known float, matching the shim's own hash. */
-    char* h1 = gpa_trace_hash_double(16.58);
-    char* h2 = gpa_trace_hash_double(16.58);
-    assert(h1 && h2);
-    assert(strcmp(h1, h2) == 0);
-    assert(strncmp(h1, "n:", 2) == 0);
-    free(h1); free(h2);
-
-    /* Integer values must use base-36 encoding (matches JS exactly). */
+    /* Canonical hash body (cross-origin parity with
+     * src/shims/webgl/extension/gpa-trace.js::canonicalNumber and
+     * src/python/gpa/api/routes_trace.py::_parse_canonical_number):
+     *   NaN/Inf/-Inf/0           -> sentinel tokens
+     *   integer, |v| < 2^53      -> signed decimal
+     *   other finite double      -> "f:" + IEEE-754 big-endian hex (16 chars)
+     */
+    /* Integer fast path. 100 -> "100". */
     char* h_int = gpa_trace_hash_double(100.0);
-    /* 100 in base36 = "2s" */
-    assert(strcmp(h_int, "n:2s") == 0);
+    assert(strcmp(h_int, "n:100") == 0);
     free(h_int);
+
+    char* h_neg_int = gpa_trace_hash_double(-42.0);
+    assert(strcmp(h_neg_int, "n:-42") == 0);
+    free(h_neg_int);
 
     char* h_zero = gpa_trace_hash_double(0.0);
     assert(strcmp(h_zero, "n:0") == 0);
     free(h_zero);
+
+    /* -0 normalizes to "n:0". */
+    char* h_negz = gpa_trace_hash_double(-0.0);
+    assert(strcmp(h_negz, "n:0") == 0);
+    free(h_negz);
+
+    /* Fractional → IEEE-754 hex. 16.58 has well-known bits
+     * 0x4030940A3D70A3D7. */
+    char* h_frac = gpa_trace_hash_double(16.58);
+    assert(strncmp(h_frac, "n:f:", 4) == 0);
+    assert(strlen(h_frac) == 4 + 16);
+    uint64_t frac_bits;
+    double v_frac = 16.58;
+    memcpy(&frac_bits, &v_frac, 8);
+    char want_frac[32];
+    snprintf(want_frac, sizeof(want_frac), "n:f:%016llx",
+             (unsigned long long)frac_bits);
+    assert(strcmp(h_frac, want_frac) == 0);
+    free(h_frac);
+
+    /* Stability: same input, same hash. */
+    char* h1 = gpa_trace_hash_double(3.14159);
+    char* h2 = gpa_trace_hash_double(3.14159);
+    assert(strcmp(h1, h2) == 0);
+    free(h1); free(h2);
+
+    /* NaN / Inf sentinels. */
+    char* h_nan = gpa_trace_hash_double(0.0 / 0.0);
+    assert(strcmp(h_nan, "n:NaN") == 0);
+    free(h_nan);
+
+    double inf_val = 1.0; for (int i = 0; i < 4; i++) inf_val *= 1e200;
+    char* h_inf = gpa_trace_hash_double(inf_val);
+    assert(strcmp(h_inf, "n:Inf") == 0);
+    free(h_inf);
+
+    char* h_ninf = gpa_trace_hash_double(-inf_val);
+    assert(strcmp(h_ninf, "n:-Inf") == 0);
+    free(h_ninf);
 
     /* String hash — djb2 lowercased. "Hello" → djb2("hello") = 261238937 →
      * base36 = "4bbdlt". */

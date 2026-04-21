@@ -13,10 +13,21 @@ Phase 2 (this module): query-side endpoints for reverse-lookup:
 - ``GET /frames/{id}/drawcalls/{dc}/trace/value?query=<literal>`` —
   direct reverse-lookup on a numeric / string literal.
 
-The reverse-lookup works by parsing the stored hash keys (format
-``"n:<base36>"`` / ``"s:<djb2>"`` / ``"b:<0|1>"``) back into values and
-comparing with the requested literal. This keeps Phase 1's wire
-format untouched while giving Python full bidirectional access.
+The reverse-lookup works by parsing the stored hash keys back into
+values and comparing with the requested literal. Hash key format:
+
+- Numbers: ``"n:<canonical>"`` where ``<canonical>`` is ``NaN`` / ``Inf`` /
+  ``-Inf`` / ``0`` / signed decimal (for integers |v| < 2^53) / ``f:<16
+  hex chars>`` (IEEE-754 bit pattern for fractional doubles). This
+  canonical format is matched byte-for-byte by the C shim
+  (``src/shims/gl/native_trace.c``) and the JS extension
+  (``src/shims/webgl/extension/gpa-trace.js``).
+- Strings: ``"s:<djb2-of-lowered>"``
+- Booleans: ``"b:<0|1>"``
+- Arrays: ``"a:<djb2-of-json>"``
+
+Legacy base-36 number hashes are still recognised — pre-canonical-format
+payloads stay queryable even when the engine is upgraded in place.
 """
 from __future__ import annotations
 
@@ -119,15 +130,55 @@ _BOOL_HASH_RE = re.compile(r"^b:([01])$")
 _ARR_HASH_RE = re.compile(r"^a:(.*)$")
 
 
-def _parse_b36(token: str) -> Optional[float]:
-    """Parse a base-36 number (possibly fractional, optionally signed).
+def _parse_canonical_number(token: str) -> Optional[float]:
+    """Parse a canonical number hash body.
 
-    Returns *None* if *token* is not a well-formed base-36 number.
+    Canonical format (matches src/shims/gl/native_trace.c and
+    src/shims/webgl/extension/gpa-trace.js)::
+
+        NaN | Inf | -Inf        → float sentinels
+        0                       → 0.0
+        <signed decimal>        → integer via int(...)
+        f:<16 hex chars>        → IEEE-754 bit pattern (big-endian)
+
+    For backward compatibility with pre-canonical-format sources (base-36
+    encoded), we fall back to the old parser if the token doesn't match
+    any canonical shape. Pre-fix payloads may still be in the trace store
+    when the engine is upgraded without clearing state.
     """
+    import struct
+
     if not token:
         return None
     if token in ("NaN", "Inf", "-Inf"):
         return {"NaN": math.nan, "Inf": math.inf, "-Inf": -math.inf}[token]
+    if token.startswith("f:") and len(token) == 2 + 16:
+        try:
+            bits = int(token[2:], 16)
+        except ValueError:
+            return None
+        try:
+            return struct.unpack(">d", bits.to_bytes(8, "big"))[0]
+        except (OverflowError, struct.error):
+            return None
+    # Decimal integer.
+    try:
+        return float(int(token, 10))
+    except ValueError:
+        pass
+    # Legacy base-36 (pre-canonical-format sources).
+    return _parse_b36_legacy(token)
+
+
+def _parse_b36_legacy(token: str) -> Optional[float]:
+    """Legacy parser for the pre-canonical base-36 format.
+
+    Kept so old TraceStore entries (or trace payloads from not-yet-rebundled
+    browser extensions) still resolve. New C / JS scanners emit the
+    canonical format handled above.
+    """
+    if not token:
+        return None
     neg = False
     if token.startswith("-"):
         neg = True
@@ -143,6 +194,10 @@ def _parse_b36(token: str) -> Optional[float]:
     except ValueError:
         return None
     return -val if neg else val
+
+
+# Backwards-compat alias.
+_parse_b36 = _parse_canonical_number
 
 
 def _djb2(s: str) -> str:

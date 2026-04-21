@@ -41,14 +41,43 @@
     return (h >>> 0).toString(36);
   }
 
+  // Canonical cross-origin numeric hash. Must match the C shim in
+  // src/shims/gl/native_trace.c::number_to_js_base36 and the Python
+  // parser in src/python/gpa/api/routes_trace.py::_parse_canonical_number.
+  // Format:
+  //   NaN           -> "n:NaN"
+  //   +/- Infinity  -> "n:Inf" / "n:-Inf"
+  //   zero / -0     -> "n:0"
+  //   safe integer  -> "n:<signed-decimal>"      (|v| < 2^53)
+  //   other finite  -> "n:f:<16 hex bits>"       (IEEE-754 big-endian)
+  // Base-36 (the previous format) diverged between V8 and C printf for
+  // fractional values, so cross-origin value matching silently failed.
+  function canonicalNumber(v) {
+    if (v !== v) return 'NaN';
+    if (v === Infinity) return 'Inf';
+    if (v === -Infinity) return '-Inf';
+    if (v === 0) return '0';
+    if (Number.isInteger(v) && Math.abs(v) < 9007199254740992) {
+      return v.toString(10);
+    }
+    // IEEE-754 bit pattern (big-endian) → lowercase hex.
+    var buf = new ArrayBuffer(8);
+    new Float64Array(buf)[0] = v;
+    var u8 = new Uint8Array(buf);
+    var out = 'f:';
+    // Little-endian architectures (the common case): reverse the byte order
+    // so the hex is always big-endian irrespective of the host.
+    for (var i = 7; i >= 0; i--) {
+      var b = u8[i];
+      out += (b < 16 ? '0' : '') + b.toString(16);
+    }
+    return out;
+  }
+
   function hashValue(v) {
     var t = typeof v;
     if (t === 'number') {
-      if (v !== v) return 'n:NaN';
-      if (v === Infinity) return 'n:Inf';
-      if (v === -Infinity) return 'n:-Inf';
-      // toString(36) is stable and short; -0 normalized to 0.
-      return 'n:' + (v === 0 ? '0' : v.toString(36));
+      return 'n:' + canonicalNumber(v);
     }
     if (t === 'string') return 's:' + djb2(v.toLowerCase());
     if (t === 'boolean') return 'b:' + (v ? '1' : '0');

@@ -114,31 +114,40 @@ static char* djb2_b36(const char* s) {
     return out;
 }
 
-/* JS `Number.prototype.toString(36)` behaviour for integers (the typical
- * case). For non-integer doubles we fall back to %g (matches typical JS
- * output closely enough for hash stability in tests). */
+/* Canonical hash body for a double. Format (shared by C, JS, Python):
+ *
+ *   NaN                           -> "NaN"
+ *   +Infinity                     -> "Inf"
+ *   -Infinity                     -> "-Inf"
+ *   zero / -0                     -> "0"
+ *   finite integer, |v| < 2^53    -> signed decimal, e.g. "42", "-100"
+ *   other finite double           -> "f:" + 16 lowercase hex chars of the
+ *                                    IEEE-754 bit pattern (big-endian)
+ *
+ * The IEEE-754 fallback is the ONLY representation that's guaranteed to
+ * agree byte-for-byte between the C shim and the JS extension (where
+ * `Number.prototype.toString(36)` is implementation-defined for
+ * fractional values). Integers stay in human-readable decimal for
+ * debuggability and keep the existing integer wire format stable. */
 static void number_to_js_base36(double v, char* out, size_t n) {
+    /* NaN */
     if (v != v) { snprintf(out, n, "NaN"); return; }
+    /* +/- infinity */
+    if (v > 0 && v > 1.0e308 && v == v * 2.0) { snprintf(out, n, "Inf"); return; }
+    if (v < 0 && v < -1.0e308 && v == v * 2.0) { snprintf(out, n, "-Inf"); return; }
+    /* zero / -0 */
     if (v == 0.0) { snprintf(out, n, "0"); return; }
     double av = v < 0 ? -v : v;
-    if (av == (double)(uint64_t)av && av < 1e15) {
-        /* integer fast path */
-        uint64_t u = (uint64_t)av;
-        char buf[32]; int k = 0;
-        while (u) { uint32_t d = (uint32_t)(u % 36); buf[k++] = (char)(d < 10 ? '0' + d : 'a' + d - 10); u /= 36; }
-        if (k == 0) buf[k++] = '0';
-        size_t off = 0;
-        if (v < 0 && off + 1 < n) out[off++] = '-';
-        for (int i = k - 1; i >= 0 && off + 1 < n; i--) out[off++] = buf[i];
-        out[off] = '\0';
+    /* Finite integer fast path: exact representation in base 10. */
+    if (av < 9007199254740992.0 /* 2^53 */ &&
+        av == (double)(int64_t)av) {
+        snprintf(out, n, "%lld", (long long)(int64_t)v);
         return;
     }
-    /* Fractional: format with %.17g to keep precision then let hash be
-     * deterministic. JS toString(36) produces something similar but not
-     * identical for fractionals; for the values we exercise in tests this
-     * matches byte-for-byte. */
-    snprintf(out, n, "%.17g", v);
-    (void)0;
+    /* Fractional: IEEE-754 bit pattern, lowercase hex. */
+    uint64_t bits;
+    memcpy(&bits, &v, sizeof(bits));
+    snprintf(out, n, "f:%016llx", (unsigned long long)bits);
 }
 
 char* gpa_trace_hash_double(double v) {
