@@ -38,6 +38,18 @@ class EvalResult:
     failure_mode: Optional[str] = None
     failure_mode_details: Optional[str] = None
 
+    # Maintainer-framing scorer output (Phase 4).  When the scenario has
+    # a `## Fix` section with a scored bug_class, the harness populates
+    # these; otherwise they stay None and the legacy fields above apply.
+    bug_class: Optional[str] = None            # framework-internal | consumer-misuse | user-config | legacy
+    maintainer_solved: Optional[bool] = None   # ScoreResult.solved
+    file_score: Optional[float] = None         # ScoreResult.file_score
+    file_hits: Optional[list] = None           # ScoreResult.file_hits
+    file_misses: Optional[list] = None         # ScoreResult.file_misses
+    file_extras: Optional[list] = None         # ScoreResult.file_extras
+    out_of_tree: Optional[list] = None         # ScoreResult.out_of_tree
+    parsed_json: Optional[bool] = None         # True if agent emitted parseable JSON tail
+
     def to_dict(self) -> dict:
         return asdict(self)
 

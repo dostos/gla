@@ -242,14 +242,18 @@ GPA_TOOLS = [
 # For code-only mode, only the source reader is available
 CODE_ONLY_TOOLS = [GPA_TOOLS[-1]]  # just read_source_file
 
-# Snapshot tool specs — added dynamically when scenario has snapshot refs
+# Snapshot tool specs — added dynamically when scenario has snapshot refs.
+# These tools operate over the FULL snapshot tree.  The scenario's
+# ``relevant_files`` hint list is just a starting point; the agent is
+# free to walk, read, and grep anywhere inside the snapshot.
 SNAPSHOT_TOOLS = [
     {
         "name": "read_upstream",
         "description": (
             "Read a file from the upstream repository snapshot. "
             "Use this to inspect the original upstream source code that the "
-            "scenario is based on. The path is relative to the repository root."
+            "scenario is based on. The path is relative to the repository root. "
+            "You can read ANY file in the snapshot, not just the hint list."
         ),
         "input_schema": {
             "type": "object",
@@ -267,7 +271,7 @@ SNAPSHOT_TOOLS = [
         "description": (
             "List files and directories under a subdirectory of the upstream "
             "repository snapshot. Directories are shown with a trailing '/'. "
-            "Use an empty string for the repo root."
+            "Use an empty string for the repo root. Walk anywhere in the tree."
         ),
         "input_schema": {
             "type": "object",
@@ -278,6 +282,36 @@ SNAPSHOT_TOOLS = [
                 },
             },
             "required": [],
+        },
+    },
+    {
+        "name": "grep_upstream",
+        "description": (
+            "Regex-search the entire upstream snapshot. Returns matches as "
+            "path:line:text. Use this to locate symbols or API usage across "
+            "the full tree."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "pattern": {
+                    "type": "string",
+                    "description": "Regex pattern to search for",
+                },
+                "subdir": {
+                    "type": "string",
+                    "description": "Optional subdirectory to restrict the search (defaults to repo root)",
+                },
+                "glob": {
+                    "type": "string",
+                    "description": "Optional filename glob, e.g. '*.ts'",
+                },
+                "max_matches": {
+                    "type": "integer",
+                    "description": "Maximum number of matches to return (default 200)",
+                },
+            },
+            "required": ["pattern"],
         },
     },
 ]
@@ -307,6 +341,7 @@ class EvalAgent:
         source_path: str,
         tool_executor: GpaToolExecutor,
         extra_tools: dict | None = None,
+        system_prompt: str | None = None,
     ) -> AgentResult:
         """Run the agent WITH OpenGPA tools available.
 
@@ -314,6 +349,11 @@ class EvalAgent:
             extra_tools: optional dict of name -> callable for supplementary
                 tools (e.g. snapshot tools). Each callable receives the
                 tool_input dict and returns a string result.
+            system_prompt: optional override — when provided, the agent
+                uses this verbatim as the system prompt instead of the
+                built-in diagnosis prompt.  Used by the Phase 4
+                maintainer-framing harness to drive bug_class-specific
+                prompts.
         """
         # Build the tool spec list: always include GPA_TOOLS, then append
         # specs for any extra_tools that are present.
@@ -328,6 +368,7 @@ class EvalAgent:
             tool_executor=tool_executor,
             extra_tools=extra_tools or {},
             mode="with_gla",
+            system_prompt_override=system_prompt,
         )
 
     def run_code_only(
@@ -336,6 +377,7 @@ class EvalAgent:
         source_code: str,
         source_path: str,
         extra_tools: dict | None = None,
+        system_prompt: str | None = None,
     ) -> AgentResult:
         """Run the agent with ONLY source code access.
 
@@ -343,6 +385,11 @@ class EvalAgent:
             extra_tools: optional dict of name -> callable for supplementary
                 tools (e.g. snapshot tools). Each callable receives the
                 tool_input dict and returns a string result.
+            system_prompt: optional override — when provided, the agent
+                uses this verbatim as the system prompt instead of the
+                built-in diagnosis prompt.  Used by the Phase 4
+                maintainer-framing harness to drive bug_class-specific
+                prompts.
         """
         tool_specs = list(CODE_ONLY_TOOLS)
         if extra_tools:
@@ -355,6 +402,7 @@ class EvalAgent:
             tool_executor=None,
             extra_tools=extra_tools or {},
             mode="code_only",
+            system_prompt_override=system_prompt,
         )
 
     def _run(
@@ -366,6 +414,7 @@ class EvalAgent:
         tool_executor,
         extra_tools: dict,
         mode: str,
+        system_prompt_override: str | None = None,
     ) -> AgentResult:
         """Core agent loop with tool use.
 
@@ -375,9 +424,15 @@ class EvalAgent:
             extra_tools: dict of tool_name -> callable(tool_input: dict) -> str,
                 for tools dispatched locally (e.g. snapshot tools). The callable
                 receives the raw tool_input dict.
+            system_prompt_override: if set, the agent uses this exact
+                string as its system prompt (Phase 4 maintainer prompt).
+                Otherwise ``_build_system_prompt`` generates the default.
         """
 
-        system_prompt = self._build_system_prompt(mode, extra_tools=extra_tools)
+        if system_prompt_override:
+            system_prompt = system_prompt_override
+        else:
+            system_prompt = self._build_system_prompt(mode, extra_tools=extra_tools)
         user_message = self._build_user_message(scenario_description, source_path)
 
         messages = [{"role": "user", "content": user_message}]
@@ -555,11 +610,19 @@ def build_agent_fn(
         (scenario, mode, tools) ->
             (diagnosis_text, input_tokens, output_tokens,
              tool_calls, num_turns, time_seconds)
-    matching `gpa.eval.harness.AgentFn`.
+    matching :class:`gpa.eval.harness.AgentFn`.
 
     In "with_gla" mode the agent is given the full OpenGPA tool set plus the
     source reader and is driven by a `GpaToolExecutor` pointed at the
     captured frame. In "code_only" mode the agent only has `read_source_file`.
+
+    When the scenario carries Phase-4 maintainer-framing metadata
+    (``tools["bug_class"]`` set to ``"framework-internal"``,
+    ``"consumer-misuse"``, or ``"user-config"``), the agent uses the
+    class-specific prompt in ``tools["system_prompt"]`` and the harness
+    can post-score via :func:`gpa.eval.scorer.score_maintainer_patch`
+    (the scorer call itself is the harness's responsibility; this
+    function just ensures the agent produces the JSON-tail output).
     """
     import os
 
@@ -576,7 +639,6 @@ def build_agent_fn(
         # The harness passes callables keyed by tool name; the agent dispatches
         # them by calling callable(tool_input_dict). We adapt the harness
         # callables (which take keyword args) to accept a dict.
-        _snapshot_tool_names = {"read_upstream", "list_upstream_files"}
         extra_tools: dict = {}
         if "read_upstream" in tools:
             _ru = tools["read_upstream"]
@@ -584,6 +646,20 @@ def build_agent_fn(
         if "list_upstream_files" in tools:
             _luf = tools["list_upstream_files"]
             extra_tools["list_upstream_files"] = lambda inp, _f=_luf: _f(inp.get("subdir", ""))
+        if "grep_upstream" in tools:
+            _gu = tools["grep_upstream"]
+            def _grep_adapter(inp, _f=_gu):
+                return _f(
+                    inp.get("pattern", ""),
+                    subdir=inp.get("subdir", ""),
+                    glob=inp.get("glob", ""),
+                    max_matches=int(inp.get("max_matches", 200) or 200),
+                )
+            extra_tools["grep_upstream"] = _grep_adapter
+
+        # Phase 4: pick up the harness-rendered system prompt if present.
+        # None → agent falls back to its built-in diagnosis prompt.
+        system_prompt = tools.get("system_prompt")
 
         if mode == "with_gla":
             frame_id = tools["run_with_capture"]()
@@ -598,6 +674,7 @@ def build_agent_fn(
                 source_path=source_path,
                 tool_executor=executor,
                 extra_tools=extra_tools or None,
+                system_prompt=system_prompt,
             )
         else:
             result = agent.run_code_only(
@@ -605,6 +682,7 @@ def build_agent_fn(
                 source_code=source_code,
                 source_path=source_path,
                 extra_tools=extra_tools or None,
+                system_prompt=system_prompt,
             )
 
         return (

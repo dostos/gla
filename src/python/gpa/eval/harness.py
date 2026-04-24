@@ -89,8 +89,53 @@ class EvalHarness:
             elapsed,
         ) = agent_fn(scenario, mode, tools)
 
-        # Score
+        # Legacy keyword scorer — still runs so we can compare.
         correct_diag, correct_fix = self._scorer.score(diagnosis_text, scenario)
+
+        # Maintainer-framing scorer (Phase 4): run when the scenario has
+        # a parseable `## Fix` section with a non-legacy bug_class that
+        # targets file-level scoring.  The scorer is best-effort: any
+        # error degrades gracefully (fields stay None).
+        bug_class = tools.get("bug_class")
+        maintainer_solved: Optional[bool] = None
+        file_score: Optional[float] = None
+        file_hits: Optional[list] = None
+        file_misses: Optional[list] = None
+        file_extras: Optional[list] = None
+        out_of_tree: Optional[list] = None
+        parsed_json: Optional[bool] = None
+
+        if bug_class == "framework-internal" and scenario.fix is not None:
+            try:
+                from gpa.eval.scorer import (
+                    _extract_json_tail, score_maintainer_patch,
+                )
+                # Parse JSON tail separately from scoring so we can track
+                # parsed_json independently (missing JSON → timeout per
+                # telemetry.classify_verdict).
+                parsed = _extract_json_tail(diagnosis_text)
+                parsed_json = parsed is not None
+                snapshot_root = None
+                try:
+                    if (scenario.upstream_snapshot_repo
+                            and scenario.upstream_snapshot_sha):
+                        snapshot_root = self._ensure_snapshot(scenario)
+                except Exception:
+                    snapshot_root = None
+                sr = score_maintainer_patch(
+                    parsed if parsed is not None else diagnosis_text,
+                    scenario.fix,
+                    snapshot_root=snapshot_root,
+                )
+                maintainer_solved = sr.solved
+                file_score = sr.file_score
+                file_hits = list(sr.file_hits)
+                file_misses = list(sr.file_misses)
+                file_extras = list(sr.file_extras)
+                out_of_tree = list(sr.out_of_tree)
+            except Exception:
+                # Scoring is best-effort; don't fail the run on scorer bugs.
+                pass
 
         result = EvalResult(
             scenario_id=scenario_id,
@@ -106,6 +151,14 @@ class EvalHarness:
             time_seconds=elapsed,
             model=self._model,
             timestamp=datetime.now(timezone.utc).isoformat(),
+            bug_class=bug_class,
+            maintainer_solved=maintainer_solved,
+            file_score=file_score,
+            file_hits=file_hits,
+            file_misses=file_misses,
+            file_extras=file_extras,
+            out_of_tree=out_of_tree,
+            parsed_json=parsed_json,
         )
         self.results.append(result)
         return result
@@ -161,8 +214,24 @@ class EvalHarness:
 
         In 'with_gla' mode the runner tools are included.
         In 'code_only' mode only the source reader is provided.
-        When the scenario has upstream snapshot refs, read_upstream and
-        list_upstream_files are added for both modes.
+        When the scenario has upstream snapshot refs, read_upstream,
+        list_upstream_files and grep_upstream are added for both modes.
+        These are full-repo tools — they walk / read / grep the ENTIRE
+        snapshot, not just ``upstream_snapshot_relevant_files`` (which is
+        now a hint list per the maintainer-framing spec, not a
+        restriction).
+
+        The returned dict also carries two meta entries the agent layer
+        uses to drive maintainer-framing prompts and scoring:
+
+        - ``bug_class``: the resolved bug class for this scenario
+          (``framework-internal`` | ``consumer-misuse`` | ``user-config``
+          | ``legacy``).  Inferred from ``scenario.fix.bug_class`` when
+          present; otherwise ``"legacy"``.
+        - ``system_prompt``: the rendered system prompt for this
+          scenario, chosen by :meth:`_select_prompt_for_scenario` per
+          ``bug_class``.  May be ``None`` for legacy scenarios, in which
+          case the agent falls back to its existing diagnosis prompt.
         """
         tools: dict = {
             "read_source": lambda: self.runner.read_source(scenario),
@@ -188,7 +257,103 @@ class EvalHarness:
                                     glob=glob, max_matches=max_matches)
             )
 
+        # Maintainer-framing metadata (Phase 4).  Agents that want to
+        # honour bug-class-aware prompting read these two keys; the
+        # default ``build_agent_fn`` does exactly that.  Legacy agents
+        # can ignore them.
+        bug_class = self._resolve_bug_class(scenario)
+        tools["bug_class"] = bug_class
+        tools["system_prompt"] = self._select_prompt_for_scenario(
+            scenario, bug_class=bug_class, mode=mode,
+        )
+
         return tools
+
+    @staticmethod
+    def _resolve_bug_class(scenario: ScenarioMetadata) -> str:
+        """Return the bug_class for a scenario.
+
+        Falls back to ``"legacy"`` when ``scenario.fix`` is absent or
+        carries no bug_class.  This keeps the pre-R10 scenarios on the
+        legacy diagnosis prompt even after Phase 4 lands.
+        """
+        fix = getattr(scenario, "fix", None)
+        if fix is not None and getattr(fix, "bug_class", None):
+            return str(fix.bug_class)
+        return "legacy"
+
+    def _select_prompt_for_scenario(
+        self,
+        scenario: ScenarioMetadata,
+        bug_class: str,
+        mode: str,
+    ) -> Optional[str]:
+        """Render the right prompt for a scenario by bug_class.
+
+        Returns None for ``bug_class == "legacy"`` so the agent falls
+        back to its existing diagnosis prompt.
+        """
+        # Import lazily so harness has no startup dependency on the
+        # prompts package (keeps import times cheap for callers that
+        # don't need prompts, e.g. analytics scripts).
+        from gpa.eval.prompts import load_prompt, render_maintainer_prompt
+
+        if bug_class == "framework-internal":
+            return render_maintainer_prompt(
+                framework=scenario.framework or "the framework",
+                user_report=scenario.bug_description or "",
+                upstream_snapshot_repo=scenario.upstream_snapshot_repo,
+                upstream_snapshot_sha=scenario.upstream_snapshot_sha,
+                mode=mode,
+            )
+        if bug_class == "consumer-misuse":
+            return self._render_class_prompt(
+                "advisor", scenario, mode=mode,
+            )
+        if bug_class == "user-config":
+            return self._render_class_prompt(
+                "config_advice", scenario, mode=mode,
+            )
+        # "legacy" or unknown — fall back to the agent's default prompt.
+        return None
+
+    @staticmethod
+    def _render_class_prompt(
+        template_name: str,
+        scenario: ScenarioMetadata,
+        mode: str,
+    ) -> str:
+        """Render an advisor / config_advice prompt with the same
+        substitution rules as the maintainer prompt."""
+        import re as _re
+        from gpa.eval.prompts import load_prompt
+
+        template = load_prompt(template_name)
+        if mode == "with_gla":
+            template = template.replace("<!-- WITH_GPA_ONLY -->", "").replace(
+                "<!-- END_WITH_GPA_ONLY -->", ""
+            )
+        else:
+            template = _re.sub(
+                r"<!-- WITH_GPA_ONLY -->.*?<!-- END_WITH_GPA_ONLY -->\n?",
+                "",
+                template,
+                flags=_re.DOTALL,
+            )
+        fw = scenario.framework or "the framework"
+        return (
+            template
+            .replace("{framework}", fw)
+            .replace("{user_report}", (scenario.bug_description or "").strip())
+            .replace(
+                "{upstream_snapshot.repo}",
+                scenario.upstream_snapshot_repo or "(no snapshot)",
+            )
+            .replace(
+                "{upstream_snapshot.sha}",
+                scenario.upstream_snapshot_sha or "HEAD",
+            )
+        )
 
     # ------------------------------------------------------------------
     # Scenario-directory helpers (must exclude scenario.md to avoid
