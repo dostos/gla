@@ -214,12 +214,22 @@ def classify_verdict(run: dict, max_turns_budget: int = 40) -> str:
 
     Args:
       run: dict with keys ``correct`` (bool | None), ``turns`` (int),
-        ``result`` (str), optionally ``error`` / ``stop_reason``.
+        ``result`` (str), optionally ``error`` / ``stop_reason``.  When the
+        maintainer-framing scorer is in use, the run may also carry:
+
+        - ``score_result`` — a :class:`gpa.eval.scorer.ScoreResult` (or
+          a mapping with the same fields); its ``solved`` flag and
+          ``file_score`` drive the verdict.
+        - ``parsed_json`` — truthy when the agent emitted a parseable
+          JSON tail.  Missing ``parsed_json`` with a non-trivial number
+          of turns signals a timeout (the agent ran but never produced
+          the required schema).
+
       max_turns_budget: the turn cap used for the round (default 40).
 
     Returns: one of ``"solved"``, ``"timeout"``, ``"wrong"``, ``"infra"``.
 
-    Rules:
+    Rules (legacy-scorer path):
       1. Explicit infra signal: ``error`` field set, ``stop_reason == "infra"``,
          or empty result with ``turns == 0`` → ``infra``.
       2. ``correct is True`` → ``solved``.
@@ -232,6 +242,17 @@ def classify_verdict(run: dict, max_turns_budget: int = 40) -> str:
       5. ``correct is None`` with a non-zero turn count falls through to
          ``wrong`` — without a score signal we cannot separate timeout from
          wrong beyond what rule 3 already catches.
+
+    Maintainer-framing rules (when ``score_result`` or ``parsed_json`` key
+    is present — overrides rules 2–5):
+
+      M1. ``score_result.solved is True`` → ``solved``.
+      M2. ``parsed_json`` is falsy/missing → ``timeout`` (the agent did
+          not produce the required JSON tail, same bucket as hitting
+          max-turns on the legacy scorer).
+      M3. ``score_result.file_score == 0`` → ``wrong`` (the agent
+          produced a JSON answer but named zero ground-truth files).
+      M4. Otherwise (0 < file_score < threshold) → ``wrong``.
     """
     # Rule 1: explicit infrastructure failures.
     if run.get("error"):
@@ -244,8 +265,29 @@ def classify_verdict(run: dict, max_turns_budget: int = 40) -> str:
         # No result, no turns — the run never got off the ground.
         # Only classify as infra when we *also* lack a correctness signal;
         # a scored row with correct=False but turns=0 is still a wrong answer.
-        if run.get("correct") is None:
+        if run.get("correct") is None and not run.get("score_result") \
+                and "parsed_json" not in run:
             return "infra"
+
+    # Maintainer-framing scorer takes precedence when its signals are present.
+    has_maintainer_signal = (
+        "score_result" in run or "parsed_json" in run
+    )
+    if has_maintainer_signal:
+        # M2: missing/malformed JSON tail → timeout, regardless of turns.
+        if not run.get("parsed_json"):
+            return "timeout"
+        score_result = run.get("score_result")
+        solved_flag = _score_result_field(score_result, "solved")
+        file_score_val = _score_result_field(score_result, "file_score")
+        # M1: solved if scorer said so.
+        if solved_flag is True:
+            return "solved"
+        # M3 + M4: any non-solved JSON answer is a wrong answer.  The
+        # spec explicitly maps ``file_score == 0`` to wrong; same bucket
+        # for partial-but-below-threshold.
+        _ = file_score_val  # kept for doc clarity; bucket is the same.
+        return "wrong"
 
     correct = run.get("correct")
 
@@ -259,6 +301,19 @@ def classify_verdict(run: dict, max_turns_budget: int = 40) -> str:
 
     # Rules 4 + 5: wrong.
     return "wrong"
+
+
+def _score_result_field(score_result: Any, field: str) -> Any:
+    """Extract ``field`` from a ScoreResult, a dict, or None.
+
+    Supports both the dataclass and dict representations so callers can
+    pass either without converting.
+    """
+    if score_result is None:
+        return None
+    if isinstance(score_result, dict):
+        return score_result.get(field)
+    return getattr(score_result, field, None)
 
 
 def _empty(num_turns, total_cost_usd, tool_calls, tool_counts,
