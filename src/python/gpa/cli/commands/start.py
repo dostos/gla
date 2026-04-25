@@ -8,7 +8,12 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from gpa.cli.session import Session, SessionExistsError, wait_for_port
+from gpa.cli.session import (
+    Session,
+    SessionExistsError,
+    find_free_port,
+    wait_for_port,
+)
 
 
 def _spawn_engine(sess: Session, *, daemon: bool) -> subprocess.Popen:
@@ -55,6 +60,12 @@ def run(
     """Implement ``gpa start``.  Returns the process exit code."""
     if print_stream is None:
         print_stream = sys.stdout
+
+    # ``--port 0`` -> auto-pick a free ephemeral port.  Best-effort: the OS may
+    # reuse the port between us closing and the engine binding, but in practice
+    # this is reliable for short-lived sessions.
+    if port == 0:
+        port = find_free_port()
 
     try:
         sess = Session.create(dir=session_dir, port=port)

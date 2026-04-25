@@ -164,6 +164,17 @@ def test_start_rejects_dir_with_existing_session(tmp_path, fake_spawn, isolated_
     assert "gpa stop" in err
 
 
+def test_start_with_port_zero_auto_picks(tmp_path, fake_spawn, isolated_current_link):
+    sess_dir = tmp_path / "auto-port"
+    buf = io.StringIO()
+    rc = start_cmd.run(session_dir=sess_dir, daemon=False, port=0, print_stream=buf)
+    assert rc == 0, buf.getvalue()
+    chosen = int((sess_dir / "port").read_text().strip())
+    assert chosen != 0
+    assert 1024 < chosen < 65536
+    stop_cmd.run()
+
+
 def test_stop_with_no_session_returns_2(isolated_current_link, monkeypatch):
     monkeypatch.delenv("GPA_SESSION", raising=False)
     assert stop_cmd.run() == 2

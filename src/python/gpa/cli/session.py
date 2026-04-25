@@ -328,6 +328,21 @@ def _existing_session_artifacts(dir: Path) -> list:
     return found
 
 
+def find_free_port() -> int:
+    """Bind an ephemeral port, then close — caller races to claim it.
+
+    Best-effort helper for ``gpa start --port 0``.  There is an unavoidable
+    race between this returning and the engine binding the port; callers must
+    surface the underlying bind error if it loses.
+    """
+    s = socket.socket()
+    try:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+    finally:
+        s.close()
+
+
 # --------------------------------------------------------------------------- #
 # Readiness helpers
 # --------------------------------------------------------------------------- #

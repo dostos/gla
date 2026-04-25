@@ -56,7 +56,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_start = sub.add_parser("start", help="Start a persistent engine session")
     _add_session_arg(p_start)
-    p_start.add_argument("--port", type=int, default=18080, help="REST API port")
+    p_start.add_argument(
+        "--port",
+        type=int,
+        default=18080,
+        help="REST API port (0 = auto-pick a free ephemeral port)",
+    )
     p_start.add_argument(
         "--daemon",
         dest="daemon",

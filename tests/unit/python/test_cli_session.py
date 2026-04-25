@@ -102,6 +102,19 @@ def test_create_rejects_when_target_is_a_file(tmp_path: Path) -> None:
         Session.create(dir=target, port=1)
 
 
+def test_find_free_port_returns_bindable_port() -> None:
+    import socket as _socket
+
+    port = session_mod.find_free_port()
+    assert 1024 < port < 65536
+    # We should be able to bind it (ephemeral port we just released).
+    s = _socket.socket()
+    try:
+        s.bind(("127.0.0.1", port))
+    finally:
+        s.close()
+
+
 def test_env_exports_block(tmp_path: Path) -> None:
     sess = Session.create(dir=tmp_path / "s", port=9000)
     block = sess.env_exports()
