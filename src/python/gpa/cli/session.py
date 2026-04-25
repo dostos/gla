@@ -29,6 +29,21 @@ from typing import Optional
 
 CURRENT_SESSION_LINK = "/tmp/gpa-session-current"
 
+# Filenames that, if present in a directory, indicate an active or recent
+# session lives there.  ``Session.create`` refuses to clobber any of these.
+_SESSION_ARTIFACT_NAMES = (
+    "engine.pid",
+    "token",
+    "shm-name",
+    "socket",
+    "engine.log",
+    "port",
+)
+
+
+class SessionExistsError(FileExistsError):
+    """Raised when ``Session.create`` is asked to use a dir already holding a session."""
+
 
 @dataclass
 class Session:
@@ -134,6 +149,13 @@ class Session:
     ) -> "Session":
         """Allocate a new session directory and seed token/shm-name/port.
 
+        Idempotent for **empty** or **safe** existing directories:
+
+        * ``dir`` does not exist  -> created.
+        * ``dir`` exists & empty  -> reused.
+        * ``dir`` exists & has unrelated files (no session artifacts) -> reused.
+        * ``dir`` exists & holds session artifacts -> raises ``SessionExistsError``.
+
         Does *not* start the engine — callers must do so and write
         ``engine.pid`` themselves.
         """
@@ -143,7 +165,22 @@ class Session:
             dir = Path(f"/tmp/gpa-session-{uid}-{ts}")
 
         dir = Path(dir)
-        dir.mkdir(parents=True, exist_ok=False)
+
+        if dir.exists():
+            if not dir.is_dir():
+                raise SessionExistsError(
+                    f"{dir} exists and is not a directory."
+                )
+            existing = _existing_session_artifacts(dir)
+            if existing:
+                names = ", ".join(sorted(existing))
+                raise SessionExistsError(
+                    f"Session already exists at {dir} (found: {names}). "
+                    f"Use `gpa stop --session {dir}` first, or pick a different path."
+                )
+            # Safe to reuse: empty or only contains unrelated files.
+        else:
+            dir.mkdir(parents=True, exist_ok=False)
 
         sess = cls(dir=dir)
 
@@ -271,6 +308,24 @@ class Session:
                 self.dir.rmdir()
             except OSError:
                 pass
+
+
+# --------------------------------------------------------------------------- #
+# Helpers
+# --------------------------------------------------------------------------- #
+
+
+def _existing_session_artifacts(dir: Path) -> list:
+    """Return the subset of session-artifact filenames already present in ``dir``.
+
+    A non-empty result means the directory already hosts a session and must
+    not be clobbered by ``Session.create``.
+    """
+    found: list = []
+    for name in _SESSION_ARTIFACT_NAMES:
+        if (dir / name).exists() or (dir / name).is_symlink():
+            found.append(name)
+    return found
 
 
 # --------------------------------------------------------------------------- #

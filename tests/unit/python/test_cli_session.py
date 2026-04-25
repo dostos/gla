@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from gpa.cli import session as session_mod
-from gpa.cli.session import Session
+from gpa.cli.session import Session, SessionExistsError
 
 
 def test_create_populates_directory(tmp_path: Path) -> None:
@@ -40,6 +40,66 @@ def test_create_auto_allocates_dir(tmp_path: Path, monkeypatch) -> None:
         assert str(sess.dir).startswith("/tmp/")
     finally:
         sess.cleanup()
+
+
+def test_create_accepts_empty_existing_dir(tmp_path: Path) -> None:
+    """An empty pre-created directory must be reused, not rejected."""
+    target = tmp_path / "pre-made"
+    target.mkdir()
+    sess = Session.create(dir=target, port=12345)
+    assert sess.dir == target
+    assert sess.token_path.exists()
+    assert sess.read_port() == 12345
+
+
+def test_create_accepts_dir_with_unrelated_files(tmp_path: Path) -> None:
+    """Dir with non-session files (leftover scratch / .gitkeep / etc.) is reusable."""
+    target = tmp_path / "pre-made-with-stuff"
+    target.mkdir()
+    (target / "scratch.txt").write_text("hello")
+    (target / ".keep").write_text("")
+    sess = Session.create(dir=target, port=23456)
+    assert sess.dir == target
+    assert sess.token_path.exists()
+    assert (target / "scratch.txt").read_text() == "hello"
+
+
+def test_create_rejects_existing_engine_pid(tmp_path: Path) -> None:
+    """An engine.pid file means a session lives there — must refuse."""
+    target = tmp_path / "live-session"
+    target.mkdir()
+    (target / "engine.pid").write_text("123")
+
+    with pytest.raises(SessionExistsError) as ei:
+        Session.create(dir=target, port=1)
+
+    msg = str(ei.value)
+    assert "Session already exists" in msg
+    assert str(target) in msg
+    assert "gpa stop" in msg
+
+
+def test_create_rejects_existing_token(tmp_path: Path) -> None:
+    target = tmp_path / "tokened"
+    target.mkdir()
+    (target / "token").write_text("deadbeef" * 4)
+    with pytest.raises(SessionExistsError):
+        Session.create(dir=target, port=1)
+
+
+def test_create_rejects_existing_socket_file(tmp_path: Path) -> None:
+    target = tmp_path / "with-socket"
+    target.mkdir()
+    (target / "socket").touch()
+    with pytest.raises(SessionExistsError):
+        Session.create(dir=target, port=1)
+
+
+def test_create_rejects_when_target_is_a_file(tmp_path: Path) -> None:
+    target = tmp_path / "i-am-a-file"
+    target.write_text("not a dir")
+    with pytest.raises(SessionExistsError):
+        Session.create(dir=target, port=1)
 
 
 def test_env_exports_block(tmp_path: Path) -> None:

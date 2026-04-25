@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from gpa.cli.session import Session, wait_for_port
+from gpa.cli.session import Session, SessionExistsError, wait_for_port
 
 
 def _spawn_engine(sess: Session, *, daemon: bool) -> subprocess.Popen:
@@ -56,7 +56,12 @@ def run(
     if print_stream is None:
         print_stream = sys.stdout
 
-    sess = Session.create(dir=session_dir, port=port)
+    try:
+        sess = Session.create(dir=session_dir, port=port)
+    except SessionExistsError as exc:
+        print(f"[gpa] {exc}", file=sys.stderr)
+        return 1
+
     try:
         _spawn_engine(sess, daemon=daemon)
     except Exception as exc:  # pragma: no cover - defensive

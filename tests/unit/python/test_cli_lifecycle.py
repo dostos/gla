@@ -135,6 +135,35 @@ def test_start_stop_roundtrip(tmp_path, fake_spawn, isolated_current_link):
     assert not isolated_current_link.exists()
 
 
+def test_start_accepts_pre_created_empty_dir(tmp_path, fake_spawn, isolated_current_link):
+    """Regression: Round 10 eval runner pre-created the session dir; start must
+    not reject it with FileExistsError."""
+    sess_dir = tmp_path / "pre-made"
+    sess_dir.mkdir(parents=True)  # what the runner did
+
+    port = _free_port()
+    buf = io.StringIO()
+    rc = start_cmd.run(session_dir=sess_dir, daemon=False, port=port, print_stream=buf)
+    assert rc == 0, buf.getvalue()
+    assert (sess_dir / "engine.pid").exists()
+
+    # Cleanup so the test leaves nothing behind.
+    stop_cmd.run()
+
+
+def test_start_rejects_dir_with_existing_session(tmp_path, fake_spawn, isolated_current_link, capsys):
+    sess_dir = tmp_path / "live"
+    sess_dir.mkdir(parents=True)
+    (sess_dir / "engine.pid").write_text("99999")
+
+    port = _free_port()
+    rc = start_cmd.run(session_dir=sess_dir, daemon=False, port=port)
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "Session already exists" in err
+    assert "gpa stop" in err
+
+
 def test_stop_with_no_session_returns_2(isolated_current_link, monkeypatch):
     monkeypatch.delenv("GPA_SESSION", raising=False)
     assert stop_cmd.run() == 2
