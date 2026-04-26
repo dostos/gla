@@ -192,6 +192,98 @@ static int recv_msg(void* buf, size_t buf_size, int flags) {
 }
 
 /* --------------------------------------------------------------------------
+ * Connect-with-backoff
+ * --------------------------------------------------------------------------
+ * Background: under high parallel load (many LD_PRELOAD'd binaries racing
+ * to connect to the same engine Unix socket) connect()/send()/recv() can
+ * fail immediately under kernel socket-backlog pressure. R10v2+R11 saw
+ * 24/33 with_gpa runs lose capture this way. The shim previously did a
+ * single-shot connect+handshake with no retry. We now retry up to
+ * GPA_IPC_CONNECT_ATTEMPTS times with a fixed backoff schedule whose
+ * total worst-case wait stays under 2 seconds — just enough to ride out
+ * a backlog burst without blocking the host program for an unreasonable
+ * amount of time. The schedule is intentionally not exponential past the
+ * first three steps: 50/100/200/400/800 ms = ~1.55 s total. */
+
+#define GPA_IPC_CONNECT_ATTEMPTS 5
+
+/* Sleep delays between attempts. delays_ms[i] is the wait that fires
+ * AFTER attempt i fails and BEFORE attempt i+1 starts. We never sleep
+ * after the final attempt — exhaustion returns failure immediately —
+ * so the entry at index ATTEMPTS-1 is reserved/unused (kept here so
+ * the schedule reads as the documented 50/100/200/400/800 ms ladder).
+ * Effective sleep budget = sum of indices [0..ATTEMPTS-2] = 750 ms,
+ * comfortably under the 2 s host-startup-blocking ceiling even after
+ * connect()'s own per-call timeout slop. */
+static const int gpa_ipc_backoff_delays_ms[GPA_IPC_CONNECT_ATTEMPTS] = {
+    50, 100, 200, 400, 800,
+};
+
+/* One attempt at: open socket(), connect(), send handshake, recv ACK.
+ * On success: g_sock_fd is left owning the connection, returns 0.
+ * On failure: closes any fd it opened, leaves g_sock_fd == -1, returns -1.
+ * Does NOT log per-attempt — caller decides whether to log on exhaustion. */
+static int try_connect_handshake_once(const char* socket_path) {
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd < 0) {
+        return -1;
+    }
+
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
+
+    if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        close(fd);
+        return -1;
+    }
+
+    /* Stash fd in module state so send_msg/recv_msg can use it. */
+    g_sock_fd = fd;
+
+    HandshakePayload hs;
+    hs.protocol_version = htonl(PROTOCOL_VERSION);
+    hs.api_type         = htonl(API_TYPE_GL);
+    hs.pid              = htonl((uint32_t)getpid());
+
+    if (send_msg(MSG_HANDSHAKE, &hs, sizeof(hs)) != 0) {
+        close(fd);
+        g_sock_fd = -1;
+        return -1;
+    }
+
+    uint8_t response_buf[16];
+    int rtype = recv_msg(response_buf, sizeof(response_buf), 0);
+    if (rtype != MSG_HANDSHAKE_OK) {
+        close(fd);
+        g_sock_fd = -1;
+        return -1;
+    }
+
+    return 0;
+}
+
+int gpa_ipc_connect_socket_with_retry(const char* socket_path) {
+    if (!socket_path) return -1;
+
+    for (int attempt = 0; attempt < GPA_IPC_CONNECT_ATTEMPTS; attempt++) {
+        if (try_connect_handshake_once(socket_path) == 0) {
+            return 0;
+        }
+        if (attempt < GPA_IPC_CONNECT_ATTEMPTS - 1) {
+            usleep((useconds_t)gpa_ipc_backoff_delays_ms[attempt] * 1000);
+        }
+    }
+
+    /* Exhausted — log once, fall through to fail-open. */
+    fprintf(stderr,
+            "[OpenGPA] handshake failed after %d retries; capture disabled\n",
+            GPA_IPC_CONNECT_ATTEMPTS);
+    return -1;
+}
+
+/* --------------------------------------------------------------------------
  * Public API
  * -------------------------------------------------------------------------- */
 
@@ -204,7 +296,7 @@ int gpa_ipc_connect(void) {
         return -1;
     }
 
-    /* Open shared memory */
+    /* Open shared memory (one-shot — backlog pressure is socket-only). */
     int shm_fd = shm_open(shm_name, O_RDWR, 0);
     if (shm_fd < 0) {
         fprintf(stderr, "[OpenGPA] shm_open(%s) failed: %s\n", shm_name, strerror(errno));
@@ -243,51 +335,12 @@ int gpa_ipc_connect(void) {
         return -1;
     }
 
-    /* Connect Unix socket */
-    g_sock_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (g_sock_fd < 0) {
-        fprintf(stderr, "[OpenGPA] socket() failed: %s\n", strerror(errno));
-        munmap(g_shm_base, g_shm_size);
-        g_shm_base = NULL;
-        return -1;
-    }
-
-    struct sockaddr_un addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
-
-    if (connect(g_sock_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        fprintf(stderr, "[OpenGPA] connect(%s) failed: %s\n", socket_path, strerror(errno));
-        close(g_sock_fd);
-        g_sock_fd = -1;
-        munmap(g_shm_base, g_shm_size);
-        g_shm_base = NULL;
-        return -1;
-    }
-
-    /* Send handshake */
-    HandshakePayload hs;
-    hs.protocol_version = htonl(PROTOCOL_VERSION);
-    hs.api_type         = htonl(API_TYPE_GL);
-    hs.pid              = htonl((uint32_t)getpid());
-
-    if (send_msg(MSG_HANDSHAKE, &hs, sizeof(hs)) != 0) {
-        fprintf(stderr, "[OpenGPA] handshake send failed\n");
-        close(g_sock_fd);
-        g_sock_fd = -1;
-        munmap(g_shm_base, g_shm_size);
-        g_shm_base = NULL;
-        return -1;
-    }
-
-    /* Wait for handshake OK/FAIL */
-    uint8_t response_buf[16];
-    int rtype = recv_msg(response_buf, sizeof(response_buf), 0);
-    if (rtype != MSG_HANDSHAKE_OK) {
-        fprintf(stderr, "[OpenGPA] handshake rejected (type=%d)\n", rtype);
-        close(g_sock_fd);
-        g_sock_fd = -1;
+    /* Connect + handshake with retry/backoff. The retry helper itself
+     * logs once on exhaustion ("[OpenGPA] handshake failed after N
+     * retries; capture disabled"); on intermediate failures it stays
+     * silent so a 33-parallel run doesn't spam stderr with hundreds of
+     * lines. */
+    if (gpa_ipc_connect_socket_with_retry(socket_path) != 0) {
         munmap(g_shm_base, g_shm_size);
         g_shm_base = NULL;
         return -1;

@@ -68,20 +68,26 @@ cc_library(
 )
 
 cc_library(
+    name = "ipc_client",
+    srcs = ["ipc_client.c"],
+    hdrs = ["ipc_client.h"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
     name = "gpa_gl_impl",
     srcs = [
         "frame_capture.c",
         "gl_shim.c",
         "gl_wrappers.c",
-        "ipc_client.c",
     ],
     hdrs = [
         "frame_capture.h",
         "gl_wrappers.h",
-        "ipc_client.h",
     ],
     linkopts = ["-ldl"],
     deps = [
+        ":ipc_client",
         ":native_trace",
         ":shadow_state",
     ],

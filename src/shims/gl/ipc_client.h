@@ -5,8 +5,21 @@
 
 /* Connect to engine. Uses GPA_SOCKET_PATH and GPA_SHM_NAME env vars.
  * Returns 0 on success, -1 on failure (engine not running — shim works as
- * passthrough). */
+ * passthrough).
+ *
+ * Internally retries the Unix-socket connect()+handshake portion up to 5
+ * times with backoff (50/100/200/400/800 ms; ~1.55 s worst-case wait) to
+ * survive kernel socket-backlog pressure when many shim'd binaries race to
+ * connect to the engine in parallel. The shm_open portion is one-shot —
+ * if the engine isn't up at all we fail fast. On exhaustion of retries the
+ * function logs a single message to stderr and returns -1; the shim falls
+ * through to its existing passthrough/fail-open path. */
 int gpa_ipc_connect(void);
+
+/* Connect only the Unix-socket side and run the handshake, with the same
+ * retry-with-backoff schedule as gpa_ipc_connect. Returns 0 on success, -1
+ * on exhaustion. Exposed for unit tests; not for production callers. */
+int gpa_ipc_connect_socket_with_retry(const char* socket_path);
 
 /* Check if connected */
 int gpa_ipc_is_connected(void);

@@ -14,6 +14,13 @@ cc_test(
 )
 
 cc_test(
+    name = "test_ipc_retry",
+    srcs = ["test_ipc_retry.c"],
+    linkopts = ["-lpthread"],
+    deps = ["//src/shims/gl:ipc_client"],
+)
+
+cc_test(
     name = "test_native_trace",
     srcs = ["test_native_trace.c"],
     data = ["//tests/unit/shims/fixtures:trace_fixture"],
