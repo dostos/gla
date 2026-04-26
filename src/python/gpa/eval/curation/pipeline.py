@@ -611,6 +611,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Run discovery + triage only; do not draft/validate/commit",
     )
+    parser.add_argument(
+        "--dry-run-stats",
+        action="store_true",
+        help="Yield-measurement mode: run discover -> URL dedup -> triage -> "
+             "draft, do NOT commit/validate/mutate coverage log, write a "
+             "per-stage JSONL + markdown summary. Delegates to "
+             "gpa.eval.curation.measure_yield. Defaults: jsonl path "
+             "/tmp/yield-records.jsonl, report path "
+             "docs/mining-yield-baseline.md.",
+    )
+    parser.add_argument(
+        "--with-difficulty-check",
+        action="store_true",
+        help="With --dry-run-stats only: also run sonnet code_only on each "
+             "drafted scenario and exclude solved ones.",
+    )
     parser.add_argument("--backend", default="auto",
                         choices=["auto", "anthropic", "claude-code"],
                         help="LLM backend: 'anthropic' uses the SDK (requires ANTHROPIC_API_KEY); "
@@ -626,6 +642,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point. Constructs real stage instances and runs a batch."""
     args = parse_args(argv)
+
+    # --dry-run-stats short-circuits into the yield-measurement instrument.
+    # The dedicated CLI lives in gpa.eval.curation.measure_yield; we forward
+    # the relevant flags so callers get the full feature set even when they
+    # invoke the pipeline module out of habit.
+    if args.dry_run_stats:
+        from gpa.eval.curation.measure_yield import main as measure_main
+        forwarded: list[str] = [
+            "--batch-quota", str(args.batch_quota),
+            "--log", args.log,
+            "--backend", args.backend,
+        ]
+        if args.config:
+            forwarded += ["--config", args.config]
+        if args.with_difficulty_check:
+            forwarded += ["--with-difficulty-check"]
+        return measure_main(forwarded)
+
     cfg = load_config(args.config) if args.config else {}
     batch_quota = cfg.get("batch_quota", args.batch_quota)
 

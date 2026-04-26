@@ -30,6 +30,39 @@ def test_parse_args_defaults():
     args = parse_args(["--batch-quota", "10"])
     assert args.batch_quota == 10
     assert args.eval_dir == "tests/eval"
+    assert args.dry_run_stats is False
+    assert args.with_difficulty_check is False
+
+
+def test_parse_args_accepts_dry_run_stats():
+    args = parse_args(["--dry-run-stats", "--with-difficulty-check"])
+    assert args.dry_run_stats is True
+    assert args.with_difficulty_check is True
+
+
+def test_main_dry_run_stats_delegates_to_measure_yield(tmp_path):
+    """When --dry-run-stats is set, pipeline.main forwards to measure_yield.main
+    with the relevant flags (no scenarios get committed)."""
+    from unittest.mock import patch
+    from gpa.eval.curation.pipeline import main
+
+    with patch("gpa.eval.curation.measure_yield.main") as fake:
+        fake.return_value = 0
+        rc = main([
+            "--dry-run-stats",
+            "--batch-quota", "3",
+            "--log", str(tmp_path / "log.jsonl"),
+            "--config", str(tmp_path / "cfg.yaml"),  # need not exist; not read here
+            "--backend", "claude-code",
+            "--with-difficulty-check",
+        ])
+    assert rc == 0
+    fake.assert_called_once()
+    forwarded = fake.call_args.args[0]
+    assert "--batch-quota" in forwarded and "3" in forwarded
+    assert "--with-difficulty-check" in forwarded
+    assert "--backend" in forwarded and "claude-code" in forwarded
+    assert "--config" in forwarded
 
 
 def test_parse_args_backend_default_is_auto():
