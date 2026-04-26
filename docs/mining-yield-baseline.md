@@ -98,3 +98,82 @@ The instrument is read-only against the production coverage log
 (`docs/superpowers/eval/coverage-log.jsonl`) — it never appends entries or
 commits scenarios, so it is safe to run repeatedly while iterating on the
 triager / drafter prompts.
+
+## Iteration 2 — triage tuning (2026-04-26)
+
+### Prompt diff (3 bullets)
+
+- Added explicit mental model: "Could the rendered image have been correct
+  if a different value had been computed/uploaded/bound?" If yes →
+  `in_scope`, regardless of which host module produced the bad value.
+- Loader/asset/importer bugs (FBX, GLTF, SVG, OBJ, …) now explicitly listed
+  as in-scope when the user-visible symptom is a wrong rendered image.
+  Removed the implicit "loader bug == out of scope" framing the previous
+  prompt invited.
+- Shader-compile / link errors now explicitly in-scope (matches the
+  `shader_compile` fingerprint category and the fact that `gpa report`
+  surfaces compile/link logs). Restricted `out_of_scope_compile_error`
+  to host-side build failures only (C++/Bazel/header), not GLSL/SPIR-V.
+- Tightened `out_of_scope` enumeration (docs, build-system, TS-only,
+  perf-only, non-visual logic, editor/CI/lint) so the triager has a
+  concrete checklist to reject against rather than over-applying
+  "not a rendering bug".
+
+### Per-stage table — baseline vs. iteration 2
+
+Same 8 candidates, same query set, same `batch_quota=8`.
+
+| Stage                     | Baseline (commit 2462235) | Iteration 2 | Delta |
+| ------------------------- | ------------------------- | ----------- | ----- |
+| URLs from discovery       | 8                         | 8           | —     |
+| After URL dedup           | 5 (62.5%)                 | 5 (62.5%)   | —     |
+| After thread fetch        | 5 (100%)                  | 5 (100%)    | —     |
+| **After triage in_scope** | **1 (20%)**               | **5 (100%)**| **+4**|
+| After fingerprint dedup   | 1 (100%)                  | 5 (100%)    | +4    |
+| After successful draft    | 0 (0%)                    | 2 (40%)     | +2    |
+| **End-to-end yield**      | **0/8 = 0%**              | **2/8 = 25%** | **+25 pp** |
+
+Top rejection reasons (iteration 2):
+
+| reason          | count |
+| --------------- | ----- |
+| url_dedup       | 3     |
+| draft_invalid   | 3     |
+
+### Per-candidate trace — iteration 2
+
+| URL                                                | stage_reached         | reason            |
+| -------------------------------------------------- | --------------------- | ----------------- |
+| three.js/issues/33104 (Renderer blending)          | discovered            | url_dedup         |
+| three.js/issues/26613 (SVGLoader path)             | discovered            | url_dedup         |
+| three.js/issues/21330 (SVGLoader complex SVG)      | not_fingerprint_dup   | draft_invalid     |
+| three.js/issues/33121 (WebGPU WebXR shader err)    | **drafted**           | —                 |
+| three.js/issues/33207 (PMREMGenerator texunit)     | discovered            | url_dedup         |
+| three.js/issues/22312 (FBXLoader child mesh xform) | not_fingerprint_dup   | draft_invalid     |
+| three.js/issues/33341 (TSL nested struct)          | not_fingerprint_dup   | draft_invalid     |
+| three.js/issues/19677 (displacementMap normals)    | **drafted**           | —                 |
+
+### Did triage move out of #1 bottleneck?
+
+**Yes.** Triage went from rejecting 4/5 fresh candidates (80%) to rejecting
+0/5 (0%). Every URL that survived dedup now reaches the drafter. Notable
+flips: the WebGPU shader-compile and TSL nested-struct shader-compile
+threads — both fingerprinted as `shader_compile:*` — now pass triage
+instead of being misrejected against the `shader_compile` category itself;
+the SVGLoader and FBXLoader threads are now scored on their wrong-image
+symptom, not on which module emitted the wrong value. Even the
+displacementMap thread that the maintainer marked "expected behavior" got
+through — borderline-acceptable, drafter still produced a valid scenario.
+
+### New #1 bottleneck
+
+**Drafter.** 3/5 in-scope candidates fail with the same error pattern:
+`No filename-marked fenced blocks found. Expected: <!-- filename: <path> -->`.
+That is identical to the single drafter failure in the baseline run, now
+amplified 3x by the larger pool of in-scope candidates. The pipeline
+already retries the drafter once on `ValueError`, so both attempts are
+producing malformed responses. This is the next prompt to tune
+(`draft_core_system.md`) — likely the filename-marker convention is being
+crowded out by the drafter's longer outputs (SVG/FBX scenarios are large)
+or competing with code-fence formatting that the drafter is more
+comfortable emitting.
