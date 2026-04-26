@@ -1,0 +1,23 @@
+three.js bundle vendored for the OpenGPA browser-eval scenario
+================================================================
+
+Source repo : https://github.com/mrdoob/three.js
+Source SHA  : c2c5685879290d304c226a493061f6461021864c
+Bundle date : 2025 (snapshot via /data3/opengpa-snapshots/github_com__mrdoob__three__c2c568587929)
+
+Files
+-----
+  three.module.min.js   ES-module entry; imports from ./three.core.min.js.
+  three.core.min.js     Core implementation (classes, math, renderer).
+  LICENSE.three.js      MIT license, verbatim copy from upstream.
+
+This SHA is the *pre-fix* tree for three.js issue #33060 ("Feedback loop
+error with transmission + antialias:false + DoubleSide since r182").
+The fix landed in PR #33063.
+
+We pin the pre-fix SHA so the eval scenario reproduces the buggy
+configuration: MeshPhysicalMaterial({transmission:1, side:DoubleSide})
+on a WebGLRenderer({antialias:false}). On any backend lacking the
+WEBGL_multisampled_render_to_texture extension, the back-side
+transmission pass produces a feedback loop because the transmission
+sampler texture is the bound framebuffer's COLOR_ATTACHMENT0.

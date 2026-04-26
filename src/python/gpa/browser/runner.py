@@ -199,11 +199,18 @@ class BrowserRunner:
             f"?token={token}&port={engine_port}"
         )
 
-        # 3. Build chromium argv. Headless + ext-load + swiftshader.
+        # 3. Build chromium argv. Ext-load + swiftshader; --headless=new
+        # only when no DISPLAY (real extension content scripts require a
+        # windowed run, see _build_chromium_argv comment).
+        import tempfile as _tempfile
+        user_data_dir = Path(_tempfile.mkdtemp(
+            prefix=f"gpa-chrome-{opts.scenario_name}-",
+        ))
         argv = self._build_chromium_argv(
             chromium_path=chromium_path,
             extension_dir=opts.extension_dir,
             url=url,
+            user_data_dir=user_data_dir,
         )
 
         launcher = opts.launcher_fn or spawn_chromium
@@ -262,6 +269,13 @@ class BrowserRunner:
                 # Record current exit code if already dead, else leave None.
                 chromium_exit_code = proc.poll()
             static.shutdown()
+            # Best-effort: drop the per-run profile dir.
+            if not opts.keep_open:
+                import shutil as _shutil
+                try:
+                    _shutil.rmtree(user_data_dir, ignore_errors=True)
+                except Exception:
+                    pass
 
         duration = time.monotonic() - started
         return BrowserRunResult(
@@ -282,12 +296,24 @@ class BrowserRunner:
 
     @staticmethod
     def _build_chromium_argv(
-        *, chromium_path: str, extension_dir: Path, url: str
+        *, chromium_path: str, extension_dir: Path, url: str,
+        user_data_dir: Optional[Path] = None,
     ) -> List[str]:
         ext = str(extension_dir.resolve())
-        return [
-            chromium_path,
-            "--headless=new",
+        # Chromium MV3 extensions do NOT load in any --headless mode
+        # (neither the legacy nor --headless=new; chrome.runtime is
+        # undefined inside content scripts). For scenarios that depend
+        # on the WebGL extension's content scripts (gpa-trace.js,
+        # interceptor.js) we MUST run a real window. When a DISPLAY is
+        # set (Xvfb is fine) we drop --headless and run windowed; when
+        # there is no DISPLAY we fall back to --headless=new and accept
+        # that extension-only features won't activate.
+        import os as _os
+        use_headless = not _os.environ.get("DISPLAY")
+        argv: List[str] = [chromium_path]
+        if use_headless:
+            argv.append("--headless=new")
+        argv.extend([
             "--no-sandbox",
             "--disable-gpu-sandbox",
             "--enable-unsafe-swiftshader",
@@ -296,8 +322,12 @@ class BrowserRunner:
             f"--disable-extensions-except={ext}",
             "--no-first-run",
             "--no-default-browser-check",
-            url,
-        ]
+            "--window-size=320,240",
+        ])
+        if user_data_dir is not None:
+            argv.append(f"--user-data-dir={user_data_dir}")
+        argv.append(url)
+        return argv
 
     @staticmethod
     def _terminate_chromium(proc: subprocess.Popen) -> Optional[int]:

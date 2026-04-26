@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>r10_feedback_loop_three_transmission_browser — OpenGPA browser eval</title>
+<style>
+  body { font-family: sans-serif; margin: 1rem; background: #111; color: #ddd; }
+  #status { padding: 0.5rem 0.75rem; background: #222; border-radius: 4px;
+            font-family: monospace; font-size: 12px; margin-bottom: 0.5rem; }
+  canvas { border: 1px solid #444; display: block; }
+</style>
+<!-- Importmap so `import 'three'` resolves to the vendored bundle. -->
+<script type="importmap">
+{ "imports": { "three": "./framework/three.module.min.js" } }
+</script>
+</head>
+<body>
+<div id="status">booting...</div>
+<canvas id="c" width="320" height="240"></canvas>
+
+<script>
+  // Hand the WebGL extension our engine endpoint + token BEFORE three.js
+  // loads, so gpa.trace.enable() finds them via localStorage.
+  (function configureTrace() {
+    const params = new URLSearchParams(window.location.search);
+    const token  = params.get("token") || "";
+    const port   = params.get("port")  || "18080";
+    try {
+      localStorage.setItem("GPA_TRACE_TOKEN", token);
+      localStorage.setItem("GPA_TRACE_ENDPOINT",
+                           "http://127.0.0.1:" + port + "/api/v1");
+      localStorage.setItem("GPA_TRACE_MODE", "gated");
+    } catch (e) { /* ignore */ }
+  })();
+
+  function setStatus(s) {
+    const el = document.getElementById("status");
+    if (el) el.textContent = s;
+  }
+  window.__gpa_setStatus = setStatus;
+
+</script>
+
+<script type="module">
+  // Real three.js scene that reproduces the configuration described in
+  // three.js issue #33060: WebGLRenderer({antialias:false}) +
+  // MeshPhysicalMaterial({transmission:1, side:DoubleSide}). On backends
+  // without WEBGL_multisampled_render_to_texture (SwiftShader, many
+  // mobile GPUs) this triggers the back-side transmission pass to sample
+  // from the very texture that is the bound framebuffer's color
+  // attachment — a feedback loop.
+  //
+  // The OpenGPA agent sees:
+  //   * `addRoot(scene, 'scene')` — exposes scene.children[0].material.transmission
+  //   * `addRoot(renderer, 'renderer')` — exposes renderer info, capabilities
+  // and can reverse-resolve any captured uniform value back to the JS
+  // expression that produced it.
+  import * as THREE from 'three';
+
+  const TRANSMISSION_VALUE = 0.875;   // distinctive non-trivial number for trace lookup
+  const ROUGHNESS_VALUE    = 0.0625;  // another known-rare value
+
+  const setStatus = window.__gpa_setStatus;
+  setStatus("loading three.js (REVISION " + THREE.REVISION + ")");
+
+  // 1. Scene + camera --------------------------------------------------
+  const scene  = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, 320 / 240, 0.1, 100);
+  camera.position.set(0, 0, 4);
+
+  // 2. Renderer with the buggy configuration ---------------------------
+  const canvas   = document.getElementById("c");
+  const renderer = new THREE.WebGLRenderer({
+    canvas: canvas,
+    antialias: false,        // (1) — see scenario.md
+  });
+  renderer.setSize(320, 240, false);
+  renderer.setClearColor(0x222244, 1);
+
+  // 3. Glass sphere with double-sided transmission ---------------------
+  // (2) + (3) per scenario.md.
+  const glass = new THREE.MeshPhysicalMaterial({
+    color:        new THREE.Color(0x88ccff),
+    transmission: TRANSMISSION_VALUE,
+    roughness:    ROUGHNESS_VALUE,
+    ior:          1.45,
+    thickness:    0.5,
+    side:         THREE.DoubleSide,
+  });
+  glass.name = "feedback_glass";
+  const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 24), glass);
+  sphere.name  = "transmission_sphere";
+  scene.add(sphere);
+
+  // A simple light so MeshPhysicalMaterial actually shades.
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  scene.add(new THREE.DirectionalLight(0xffffff, 0.8));
+
+  // Stash globals — the JS scanner walks these, and so do the manual roots.
+  window.scene    = scene;
+  window.renderer = renderer;
+  window.camera   = camera;
+
+  // 4. Enable the OpenGPA JS trace and register roots ------------------
+  // gpa-trace.js is injected by the WebGL extension. If it didn't load
+  // (e.g. running this file standalone without the extension) we still
+  // render so the page is debuggable in a normal browser.
+  if (window.gpa && window.gpa.trace) {
+    window.gpa.trace.enable();
+    window.gpa.trace.addRoot(scene,    'scene');
+    window.gpa.trace.addRoot(renderer, 'renderer');
+    window.gpa.trace.addRoot(camera,   'camera');
+    window.gpa.trace.addRoot({
+      transmission: TRANSMISSION_VALUE,
+      roughness:    ROUGHNESS_VALUE,
+    }, 'app');
+    setStatus("gpa.trace enabled, registered roots: scene, renderer, camera, app");
+  } else {
+    setStatus("gpa.trace SDK not present (extension not loaded?)");
+  }
+
+  // 5. Render N frames, then signal completion -------------------------
+  const TARGET_FRAMES = 4;
+  let framesRendered = 0;
+
+  function tick() {
+    sphere.rotation.y += 0.01;
+    sphere.rotation.x += 0.005;
+    renderer.render(scene, camera);
+    framesRendered++;
+    if (framesRendered < TARGET_FRAMES) {
+      requestAnimationFrame(tick);
+    } else {
+      setStatus("done — " + framesRendered + " frames; signaling __gpa_done");
+      // Tiny delay so the trace POSTs (fetch keepalive) flush.
+      setTimeout(function () { window.__gpa_done = true; }, 250);
+    }
+  }
+  requestAnimationFrame(tick);
+</script>
+</body>
+</html>
