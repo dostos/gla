@@ -527,3 +527,62 @@ PYTHONPATH=src/python python3 -m gpa.eval.curation.pipeline --dry-run-stats \
 Per-candidate JSONL: `/tmp/yield-records.jsonl` (default).
 Wall-time: ~27 min (discoverer ~10s, then ~30-300s/candidate × 30).
 
+---
+
+## Iteration 6 — PR fetcher + new framework groups (2026-04-26)
+
+Iter 5 exposed two issues: PR URLs lost 6/28 to `fetch_failed` and triage was three.js-shaped. User picked option (a) thorough — fix the PR fetcher AND expand the corpus with framework groups not yet tested.
+
+### What changed
+
+- **`src/python/gpa/eval/curation/triage.py`** — added `fetch_pr_thread()` to dispatch `/pull/<n>` URLs to `repos/<o>/<r>/pulls/<n>` (was falling through to issue handler and 404'ing). Linked-issue context still pulled via existing `_extract_pr_refs` + `_fetch_linked_context` helpers so the drafter sees the originating bug report.
+- **`generalization_queries.yaml`** — expanded from 18 → 30 queries, adding 9 new framework groups: pmndrs/react-three-fiber, pmndrs/drei, pmndrs/postprocessing, CesiumGS/cesium, Kitware/vtk-js, KhronosGroup/glTF-Sample-Viewer, gpujs/gpu.js, iTowns/itowns, antvis/L7, visgl/luma.gl.
+- **`tests/unit/python/test_curation_triage.py`** — added 3 tests covering the PR-URL dispatch, PR body+comments fetch shape, and PR linked-issue context.
+
+### Per-stage table
+
+| Stage                   | Iter 3 (3.js, n=8) | Iter 5 (cross-family broken-PR, n=30) | **Iter 6 (cross-family + PR-fix + new groups, n=30)** |
+| ----------------------- | ------------------ | ------------------------------------- | ----------------------------------------------------- |
+| URL dedup pass          | 62.5%              | 93.3%                                 | **93.3%** (28/30)                                     |
+| Thread fetch            | 100%               | 78.6% (6 PR fail)                     | **100% (28/28)** ← PR fetcher fix                     |
+| Triage in_scope         | 80%                | 45.5%                                 | 50.0% (14/28)                                         |
+| Fingerprint novel       | 100%               | 100%                                  | 92.9% (13/14)                                         |
+| Drafted                 | 100%               | 60%                                   | **69.2% (9/13)**                                      |
+| **End-to-end yield**    | **50%**            | **20.0%**                             | **30.0% (9/30)**                                      |
+
+### Repo distribution of the 9 drafted
+
+| repo                                | drafted |
+| ----------------------------------- | ------- |
+| playcanvas/engine                   | 3 (2 issue + 1 PR) |
+| BabylonJS/Babylon.js                | 1       |
+| processing/p5.js                    | 1       |
+| CesiumGS/cesium                     | 1       |
+| Kitware/vtk-js                      | 1       |
+| KhronosGroup/glTF-Sample-Viewer     | 1       |
+| gpujs/gpu.js                        | 1       |
+
+7 different repos contributed drafted scenarios. Pro/scientific 3D libs (Cesium, VTK, glTF, gpu.js) yield well; React-declarative wrappers (R3F, drei) and high-level data-viz (L7, AntV) yield poorly because their bug reports look like "this prop/config doesn't work" — triage rejects as `not_rendering_bug` even though the underlying GL state IS wrong.
+
+### Top rejection reasons
+
+| reason                                            | count |
+| ------------------------------------------------- | ----- |
+| out_of_scope_not_rendering_bug                    | 13    |
+| draft_invalid                                     | 2     |
+| url_dedup                                         | 2     |
+| drafter_declined:not_portable_to_c_or_snapshot    | 2     |
+| out_of_scope_insufficient_info                    | 1     |
+| duplicate_of_existing_scenario                    | 1     |
+
+### Verdict
+
+Generalization is **partial**. Yield jumped 20.0% → 30.0% (+10pp absolute, +50% relative) on the broader corpus. The PR fetcher fix alone reclaimed 6 candidates that previously fetch-failed; the new pro/scientific groups added genuine novel drafted scenarios from 4 brand-new framework families (Cesium, VTK, glTF-Sample-Viewer, gpu.js).
+
+### Iter-7 candidates
+
+The `out_of_scope_not_rendering_bug` count (13) is the remaining headline rejection. Two paths:
+
+1. **Sample 5-6 of those rejections and read the actual issue content.** If the rejections are CORRECT (declarative-wrapper bugs that are genuinely config-not-render), we're at our ceiling on this corpus. If a meaningful fraction are OVER-AGGRESSIVE (R3F bugs that actually expose a wrong-render symptom), tune triage to recognize "declarative wrapper produced wrong-render".
+2. **Accept 30% as the cross-family steady state.** Move to real R12 mining at higher batch quota with this discoverer.
+

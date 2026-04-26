@@ -190,13 +190,69 @@ class Triage:
 
 
 def fetch_thread(url: str) -> IssueThread:
-    """Dispatch to fetch_issue_thread, fetch_commit_thread, or SO fetcher."""
+    """Dispatch to fetch_issue_thread, fetch_pr_thread, fetch_commit_thread,
+    or SO fetcher."""
     if "stackoverflow.com/questions/" in url:
         from gpa.eval.curation.stackoverflow import fetch_stackoverflow_thread
         return fetch_stackoverflow_thread(url)
     if "/commit/" in url:
         return fetch_commit_thread(url)
+    if "/pull/" in url:
+        return fetch_pr_thread(url)
     return fetch_issue_thread(url)
+
+
+def fetch_pr_thread(url: str) -> IssueThread:
+    """Fetch a merged-PR thread as an ``IssueThread``.
+
+    GitHub PR URLs (``.../pull/<n>``) need a different endpoint than issues:
+    ``repos/<o>/<r>/pulls/<n>`` for the PR body + ``repos/<o>/<r>/issues/<n>/comments``
+    for the conversation (PRs and issues share the numeric namespace, so the
+    issues-endpoint comments work for PRs too). Linked issues mentioned in the
+    PR body are pulled via the existing ``_fetch_linked_context`` helper so the
+    drafter still sees the originating bug report when one is referenced.
+
+    Mirrors :func:`fetch_issue_thread` shape so callers (Triage, measure_yield)
+    don't need to special-case PR URLs.
+    """
+    m = re.search(r"github\.com/([^/]+)/([^/]+)/pull/(\d+)", url)
+    if not m:
+        raise ValueError(f"Not a GitHub PR URL: {url}")
+    owner, repo, number = m.group(1), m.group(2), m.group(3)
+
+    pr_proc = subprocess.run(
+        ["gh", "api", f"repos/{owner}/{repo}/pulls/{number}"],
+        capture_output=True, text=True, check=True,
+    )
+    pr = json.loads(pr_proc.stdout)
+
+    # PR comments live on the issues endpoint (shared numeric namespace).
+    comments_proc = subprocess.run(
+        ["gh", "api", f"repos/{owner}/{repo}/issues/{number}/comments"],
+        capture_output=True, text=True, check=True,
+    )
+    comments = json.loads(comments_proc.stdout)
+
+    title = pr.get("title", "")
+    body = pr.get("body", "") or ""
+    comment_bodies = [c.get("body", "") for c in comments]
+
+    # Extract linked issues / PRs / commits the same way fetch_issue_thread does
+    # so the drafter sees the originating bug report when the PR references one.
+    all_text = "\n".join([body] + comment_bodies)
+    refs = _extract_pr_refs(all_text, default_owner=owner, default_repo=repo)
+    # Skip self-reference
+    refs = [r for r in refs if not (r[0].lower() == owner.lower()
+                                     and r[1].lower() == repo.lower()
+                                     and r[2] == number)]
+    linked_blocks = _fetch_linked_context(refs, limit=3)
+
+    return IssueThread(
+        url=url,
+        title=title,
+        body=body,
+        comments=comment_bodies + linked_blocks,
+    )
 
 
 def fetch_issue_thread(url: str) -> IssueThread:

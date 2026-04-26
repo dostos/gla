@@ -1,9 +1,11 @@
-# Iter 4 — generalization test queries.
+# Iter 6 — expanded cross-family corpus + new framework groups.
 #
-# Goal: confirm the iter-3 tuned discoverer + triager + drafter generalizes
-# across a broader query set spanning >=6 framework families and diverse bug
-# shapes (shadow, tone-mapping, color-space, instancing, transparency-sorting,
-# stencil, post-processing, depth, mipmaps).
+# Goal: confirm the iter-3 tuning generalizes across a broader query set
+# spanning >=18 framework families. Iter 5 showed 20% yield on 10 families;
+# iter 6 adds 9 more groups (R3F, drei, Cesium, VTK, glTF-Sample-Viewer, gpu.js,
+# itowns, antv/L7, luma.gl, postprocessing) to test if yield holds when more
+# bug-shapes (CAD/BIM, scientific viz, GPU compute, geo-3D, R3F-declarative)
+# enter the corpus.
 #
 # Mix per spec:
 #   - ~60% issue is:closed reason:completed
@@ -12,55 +14,75 @@
 #
 # All `is:issue` and `is:pr` queries live in `issue:` because the GitHub
 # /search/issues endpoint handles both (mirrors baseline conventions).
-# batch_quota=30 gives each of 18 queries ~1-2 candidates of headroom.
+# Total: 30 queries (was 18 in iter 5). batch_quota=30 with the iter-5
+# per-query fairness still gives ~1 candidate per query (full draining).
 
 batch_quota: 30
 queries:
   issue:
-    # === Web-3D engines beyond three.js (closed issues) ===
+    # === Web-3D engines (iter 5 carryover, closed issues) ===
     # Babylon.js — shadow / tone-mapping / instancing
     - 'repo:BabylonJS/Babylon.js is:issue is:closed reason:completed "shadow" "wrong" OR "incorrect" OR "artifact"'
     - 'repo:BabylonJS/Babylon.js is:issue is:closed reason:completed "tone mapping" OR "color space" OR "gamma" "wrong" OR "incorrect"'
-    - 'repo:BabylonJS/Babylon.js is:issue is:closed reason:completed "instanced" OR "instancing" "wrong" OR "transform"'
     # PlayCanvas — transparency / stencil / depth
     - 'repo:playcanvas/engine is:issue is:closed reason:completed "transparency" OR "transparent" "sorting" OR "order"'
     - 'repo:playcanvas/engine is:issue is:closed reason:completed "stencil" OR "depth" "wrong" OR "incorrect"'
     # A-Frame
     - 'repo:aframevr/aframe is:issue is:closed reason:completed "render" OR "material" "wrong" OR "incorrect"'
 
-    # === Web-map / geo (closed issues) ===
-    # MapLibre — tile/raster
+    # === Web-map / geo (iter 5 carryover, closed issues) ===
     - 'repo:maplibre/maplibre-gl-js is:issue is:closed reason:completed "tile" OR "raster" "wrong" OR "incorrect" OR "offset"'
-    # deck.gl — layer rendering
     - 'repo:visgl/deck.gl is:issue is:closed reason:completed "layer" "wrong" OR "incorrect" OR "render"'
-    # kepler.gl
     - 'repo:keplergl/kepler.gl is:issue is:closed reason:completed "render" OR "color" "wrong" OR "incorrect"'
 
-    # === Web-2D / canvas (closed issues) ===
-    # p5.js (WebGL)
+    # === Web-2D / canvas (iter 5 carryover) ===
     - 'repo:processing/p5.js is:issue is:closed reason:completed "WEBGL" "wrong" OR "incorrect" OR "broken"'
-    # PixiJS — mipmap / blend / post
     - 'repo:pixijs/pixijs is:issue is:closed reason:completed "mipmap" OR "filter" "wrong" OR "incorrect"'
     - 'repo:pixijs/pixijs is:issue is:closed reason:completed "blend" OR "post" "wrong" OR "incorrect"'
 
-    # === Merged-PR cohort (~30%) — "what got fixed" framing ===
-    # Babylon — shadow / depth fix PRs
+    # === NEW: pmndrs/react-three-fiber (declarative R3F, 30k stars) ===
+    - 'repo:pmndrs/react-three-fiber is:issue is:closed reason:completed "render" OR "material" "wrong" OR "broken"'
+    - 'repo:pmndrs/react-three-fiber is:pr is:merged "fix:" render OR shader OR uniform'
+
+    # === NEW: pmndrs/drei (R3F helpers, 9k stars) ===
+    - 'repo:pmndrs/drei is:issue is:closed reason:completed "render" OR "shadow" "wrong" OR "incorrect"'
+
+    # === NEW: pmndrs/postprocessing (R3F post-FX, 2.7k stars) ===
+    - 'repo:pmndrs/postprocessing is:issue is:closed reason:completed "effect" OR "pass" "wrong" OR "incorrect" OR "artifact"'
+
+    # === NEW: CesiumGS/cesium (3D geospatial, 15k stars, 1.5k open issues) ===
+    - 'repo:CesiumGS/cesium is:issue is:closed reason:completed "tile" OR "terrain" "wrong" OR "incorrect" OR "flicker"'
+    - 'repo:CesiumGS/cesium is:pr is:merged "fix:" shader OR uniform OR depth'
+
+    # === NEW: Kitware/vtk-js (scientific viz, 1.5k stars) ===
+    - 'repo:Kitware/vtk-js is:issue is:closed reason:completed "render" OR "color" "wrong" OR "incorrect"'
+
+    # === NEW: KhronosGroup/glTF-Sample-Viewer (reference glTF impl, 1.5k stars) ===
+    - 'repo:KhronosGroup/glTF-Sample-Viewer is:issue is:closed reason:completed "render" OR "material" OR "PBR" "wrong" OR "incorrect"'
+
+    # === NEW: gpujs/gpu.js (GPU compute via WebGL, 15k stars) ===
+    - 'repo:gpujs/gpu.js is:issue is:closed reason:completed "kernel" OR "output" "wrong" OR "incorrect"'
+
+    # === NEW: iTowns/itowns (geo-3D, 1.2k stars) ===
+    - 'repo:iTowns/itowns is:issue is:closed reason:completed "render" OR "tile" OR "layer" "wrong" OR "incorrect"'
+
+    # === NEW: antvis/L7 (large-scale geo data viz, 4k stars) ===
+    - 'repo:antvis/L7 is:issue is:closed reason:completed "render" OR "layer" "wrong" OR "incorrect"'
+
+    # === NEW: visgl/luma.gl (low-level WebGL/WebGPU, 2.4k stars) ===
+    - 'repo:visgl/luma.gl is:issue is:closed reason:completed "shader" OR "uniform" OR "buffer" "wrong" OR "incorrect"'
+    - 'repo:visgl/luma.gl is:pr is:merged "fix:" shader OR uniform OR texture'
+
+    # === Iter 5 carryover PRs (now fetchable thanks to iter 6 PR fetcher) ===
     - 'repo:BabylonJS/Babylon.js is:pr is:merged "fix:" shadow OR depth OR stencil'
-    # PlayCanvas — instancing / blend fix PRs
     - 'repo:playcanvas/engine is:pr is:merged "fix:" instancing OR blend OR transparency'
-    # MapLibre — tile/zoom fix PRs
     - 'repo:maplibre/maplibre-gl-js is:pr is:merged "fix:" tile OR zoom OR coord'
-    # deck.gl — layer/mipmap fix PRs
     - 'repo:visgl/deck.gl is:pr is:merged "fix:" layer OR mipmap OR texture'
-    # regl — uniform / fbo fix PRs
-    - 'repo:regl-project/regl is:pr is:merged "fix:" uniform OR framebuffer OR texture'
-    # twgl — utility-level fix PRs
-    - 'repo:greggman/twgl.js is:pr is:merged "fix:" uniform OR attribute OR framebuffer'
 
   commit: []
 
-  # === StackOverflow (~10%) — tag pairs (intersection) ===
-  # Two pairs covering broader frameworks underrepresented in coverage log.
+  # === StackOverflow — tag pairs (intersection) ===
+  # Same two pairs as iter 5 (~7% of the 30-query corpus).
   stackoverflow:
     - ["babylon.js", "shadow"]
     - ["pixi.js", "blend-mode"]

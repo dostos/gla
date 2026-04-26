@@ -1,6 +1,6 @@
 import json
 from unittest.mock import patch, MagicMock
-from gpa.eval.curation.triage import Triage, TriageResult, IssueThread, fetch_issue_thread, fetch_commit_thread
+from gpa.eval.curation.triage import Triage, TriageResult, IssueThread, fetch_issue_thread, fetch_commit_thread, fetch_pr_thread
 from gpa.eval.curation.llm_client import LLMResponse
 
 def _fake_response(text: str) -> LLMResponse:
@@ -238,6 +238,64 @@ def test_fetch_issue_thread_skips_self_reference():
 
     # Only 2 gh calls (issue + comments), no self-fetch
     assert mock_run.call_count == 2
+
+
+def test_fetch_pr_thread_calls_pulls_endpoint():
+    """A `/pull/<n>` URL fetches via the PR API for body + issues API for
+    comments — the iter-5 fix that keeps the 6 merged-PR queries from
+    bouncing at fetch_failed."""
+    pr_json = json.dumps({
+        "title": "fix: shadow depth wrapper crash",
+        "body": "Resolves crash on creating a shadow depth wrapper. See #18090.",
+        "number": 18091,
+        "merge_commit_sha": "abcdef1234567890",
+    })
+    comments_json = json.dumps([
+        {"body": "Reviewed, LGTM."},
+        {"body": "Ship it."},
+    ])
+    issue_json = json.dumps({
+        "title": "Crash creating ShadowGenerator",
+        "body": "Stack trace shows null deref in `_setupRTT`.",
+    })
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            MagicMock(stdout=pr_json, returncode=0),
+            MagicMock(stdout=comments_json, returncode=0),
+            # Linked-issue fetch tries pulls first (expected to 404), then issues:
+            MagicMock(stdout="", returncode=1),
+            MagicMock(stdout=issue_json, returncode=0),
+        ]
+        thread = fetch_pr_thread(
+            "https://github.com/BabylonJS/Babylon.js/pull/18091"
+        )
+
+    assert thread.title == "fix: shadow depth wrapper crash"
+    assert "shadow depth wrapper" in thread.body
+    # Conversation comments are present
+    assert "LGTM" in "\n".join(thread.comments)
+    assert "Ship it" in "\n".join(thread.comments)
+    # Linked-issue body is appended
+    joined = "\n".join(thread.comments)
+    assert "null deref" in joined
+    assert "#18090" in joined
+
+
+def test_fetch_pr_thread_rejects_non_pr_url():
+    import pytest
+    with pytest.raises(ValueError, match="Not a GitHub PR URL"):
+        fetch_pr_thread("https://github.com/owner/repo/issues/42")
+
+
+def test_fetch_thread_dispatches_pr_url():
+    """`fetch_thread()` must route `/pull/<n>` URLs to `fetch_pr_thread`,
+    not `fetch_issue_thread` (which would raise ValueError)."""
+    pr_stub = MagicMock(return_value=IssueThread(url="pr", title="p", body="b"))
+    import gpa.eval.curation.triage as T
+    with patch.object(T, "fetch_pr_thread", pr_stub):
+        result = T.fetch_thread("https://github.com/o/r/pull/123")
+    assert result.title == "p"
+    pr_stub.assert_called_once()
 
 
 def test_fetch_commit_thread_truncates_large_diffs():
