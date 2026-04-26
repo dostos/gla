@@ -249,8 +249,17 @@ class YieldMeasurer:
         # Use a sortable but stable proposed scenario id; the drafter will pick
         # its own id baked into the source comment, but we need a placeholder.
         proposed_id = f"yield_{_hash(cand.url)[:10]}"
+        from gpa.eval.curation.draft import DraftRejectedByModel
         try:
             draft = self._drafter.draft(thread, triage, scenario_id=proposed_id)
+        except DraftRejectedByModel as e:
+            # Principled refusal by the drafter LLM. Distinct bucket from
+            # format failures: it tells us the candidate was reviewed and
+            # judged un-draftable, not that the LLM mis-formatted its output.
+            rec.rejection_reason = f"drafter_declined:{e.reason}"
+            rec.notes = str(e)[:200]
+            self._emit(rec)
+            return
         except ValueError as e:
             # Drafter validation failure (missing citation, malformed YAML, etc.)
             rec.rejection_reason = "draft_invalid"

@@ -342,10 +342,25 @@ class CurationPipeline:
                     },
                 )
         else:
+            from gpa.eval.curation.draft import DraftRejectedByModel
             try:
                 draft = self._drafter.draft(
                     thread, triage, scenario_id=proposed_scenario_id
                 )
+            except DraftRejectedByModel as rejection:
+                # Drafter LLM emitted a principled refusal via the
+                # `<!-- draft_error: <reason> -->` marker. Retrying won't change
+                # the model's mind — log a structured rejection and move on.
+                log_rejection(
+                    coverage_log=self._log,
+                    summary_path=self._summary,
+                    issue_url=cand.url,
+                    source_type=cand.source_type,
+                    triage_verdict=triage.verdict,
+                    fingerprint=triage.fingerprint,
+                    rejection_reason=f"drafter_declined:{rejection.reason}",
+                )
+                return
             except ValueError as first_err:
                 # ValueError is a validation/structure failure from the drafter
                 # itself (missing SOURCE comment, no citation, malformed YAML,
@@ -359,6 +374,17 @@ class CurationPipeline:
                         scenario_id=proposed_scenario_id,
                         previous_error=str(first_err),
                     )
+                except DraftRejectedByModel as rejection:
+                    log_rejection(
+                        coverage_log=self._log,
+                        summary_path=self._summary,
+                        issue_url=cand.url,
+                        source_type=cand.source_type,
+                        triage_verdict=triage.verdict,
+                        fingerprint=triage.fingerprint,
+                        rejection_reason=f"drafter_declined:{rejection.reason}",
+                    )
+                    return
                 except Exception:
                     log_rejection(
                         coverage_log=self._log,

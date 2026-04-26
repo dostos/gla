@@ -177,3 +177,104 @@ producing malformed responses. This is the next prompt to tune
 crowded out by the drafter's longer outputs (SVG/FBX scenarios are large)
 or competing with code-fence formatting that the drafter is more
 comfortable emitting.
+
+## Iteration 3 — drafter format reliability + principled-rejection handling (2026-04-26)
+
+### Diagnosis (from standalone drafter probes on the 3 failing URLs)
+
+The "No filename-marked fenced blocks found" error was **not** a format
+failure. Standalone probes of all 3 failing candidates (#21330 SVGLoader,
+#22312 FBXLoader, #33341 TSL nested struct) showed the drafter LLM was
+correctly emitting the documented `<!-- draft_error: fix_pr_not_resolvable -->`
+HTML comment per the prompt's rejection policy — the parser just didn't
+recognize that signal, so principled rejections looked identical to format
+failures. The retry was futile because the model wasn't going to change
+its mind on a second pass with the same input.
+
+### Diff summary
+
+- **Prompt** (`draft_core_system.md`): moved the format contract to a
+  NON-NEGOTIABLE block at the very top with a complete worked example and
+  a 6-item self-check; **inverted the unresolvable-fix-PR policy** so
+  `bug_class: legacy` + empty `files: []` is the DEFAULT response when
+  there's no clean fix PR (was: prefer to reject). `<!-- draft_error -->`
+  is now restricted to bugs that are fundamentally not portable to a C
+  repro AND not portable to a snapshot reference AND not draftable as a
+  legacy stub. `fix_pr_not_resolvable` was removed as a valid rejection
+  reason.
+- **Parser** (`draft.py`): added `DraftRejectedByModel(ValueError)`
+  subclass; `_parse_files` detects the `<!-- draft_error: <reason> -->`
+  marker when no filename markers are present and raises this exception
+  with the slug, distinguishing principled refusals from format failures.
+- **Pipeline + measurement** (`pipeline.py`, `measure_yield.py`): catch
+  `DraftRejectedByModel` separately, route to a structured
+  `drafter_declined:<reason>` rejection bucket, and skip the retry
+  (model won't change its mind).
+
+### Per-stage table — baseline vs. iteration 2 vs. iteration 3
+
+Same 8 candidates, same query set, same `batch_quota=8`, same dry-run
+instrument. End-to-end yield doubled.
+
+| Stage                     | Baseline    | Iteration 2 | Iteration 3 |
+| ------------------------- | ----------- | ----------- | ----------- |
+| URLs from discovery       | 8           | 8           | 8           |
+| After URL dedup           | 5 (62.5%)   | 5 (62.5%)   | 5 (62.5%)   |
+| After thread fetch        | 5 (100%)    | 5 (100%)    | 5 (100%)    |
+| After triage in_scope     | 1 (20%)     | 5 (100%)    | 4 (80%)     |
+| After fingerprint dedup   | 1 (100%)    | 5 (100%)    | 4 (100%)    |
+| **After successful draft**| **0 (0%)**  | **2 (40%)** | **4 (100%)**|
+| **End-to-end yield**      | **0/8 = 0%**| **2/8 = 25%** | **4/8 = 50%** |
+
+Top rejection reasons (iteration 3):
+
+| reason                         | count |
+| ------------------------------ | ----- |
+| url_dedup                      | 3     |
+| out_of_scope_not_rendering_bug | 1     |
+
+`draft_invalid` and `drafter_declined:*` are absent — every triage-passing
+candidate now produces a parseable draft, three of them as `bug_class:
+legacy` (#21330 SVGLoader, #22312 FBXLoader, #33121 WebGPU XR) and one as
+`framework-internal` with a clean fix PR (#33341 TSL nested struct).
+
+### Per-candidate trace — iteration 3
+
+| URL                                                | stage_reached    | reason                            |
+| -------------------------------------------------- | ---------------- | --------------------------------- |
+| three.js/issues/33104 (Renderer blending)          | discovered       | url_dedup                         |
+| three.js/issues/26613 (SVGLoader path)             | discovered       | url_dedup                         |
+| three.js/issues/21330 (SVGLoader complex SVG)      | **drafted**      | — (legacy)                        |
+| three.js/issues/33121 (WebGPU WebXR shader err)    | **drafted**      | — (legacy)                        |
+| three.js/issues/33207 (PMREMGenerator texunit)     | discovered       | url_dedup                         |
+| three.js/issues/22312 (FBXLoader child mesh xform) | **drafted**      | — (legacy)                        |
+| three.js/issues/33341 (TSL nested struct)          | **drafted**      | — (framework-internal, PR #32724) |
+| three.js/issues/19677 (displacementMap normals)    | thread_fetched   | out_of_scope_not_rendering_bug    |
+
+The displacementMap thread flipped from drafted (iter2) → out_of_scope
+(iter3). Triage prompt was untouched; this is run-to-run variance on a
+borderline candidate the maintainer marked "expected behavior."
+
+### New #1 bottleneck
+
+**URL dedup, by raw count.** 3/8 = 37.5% of candidates are dropped by URL
+dedup against the production coverage log — that's the single biggest
+attrition step now. This is *healthy* attrition (we're correctly avoiding
+re-mining covered ground) and it will tighten further as
+`batch_quota` grows past 8 and the surviving fraction stabilizes around
+the predicted 10-30% range. The relevant signal is that **of every 5
+fresh URLs that pass dedup, 4 now reach `drafted`** — ~80% novel-to-draft
+conversion vs. 0% in baseline and 40% in iter2.
+
+The next real improvement targets are:
+1. Triage variance on borderline candidates (1/5 fresh now flipping
+   per-run) — could be tightened with a confidence threshold or a
+   "thread-too-thin" rejection reason.
+2. Difficulty filter (`--with-difficulty-check`) — now finally meaningful
+   to enable, since the drafter produces 4 candidates per 8 queries to
+   filter against.
+3. Coverage log growth — at the current per-batch yield (4/8 = 50% novel
+   in-scope drafts), 50 batches at quota 20 would commit ~500 new
+   scenarios in principle; in practice `bug_class: legacy` scenarios
+   should be flagged in the eval set selector so they're not over-weighted
+   relative to clean-fix-PR scenarios.

@@ -10,12 +10,37 @@ from gpa.eval.curation.triage import IssueThread, TriageResult
 
 
 _FILENAME_MARKER_RE = re.compile(r"<!--\s*filename:\s*([^\s]+)\s*-->", re.IGNORECASE)
+# Explicit drafter-rejection marker. The drafter prompt instructs the LLM to
+# emit this as a top-level HTML comment when a candidate fundamentally cannot
+# be drafted (not portable to C, not portable to snapshot, etc.). The reason
+# is a slug like `not_portable_to_c_or_snapshot` or `not_a_rendering_bug`.
+_DRAFT_ERROR_MARKER_RE = re.compile(
+    r"<!--\s*draft_error:\s*([a-z0-9_]+)\s*-->", re.IGNORECASE
+)
 # Opening fence: ```<lang>\n at the start of a line.
 _FENCE_OPEN_RE = re.compile(r"^```([a-zA-Z0-9_+-]*)\s*$", re.MULTILINE)
 # Closing fence: ``` (bare) at the start of a line.
 _FENCE_CLOSE_RE = re.compile(r"^```\s*$", re.MULTILINE)
 
 _ALLOWED_EXTENSIONS = {".c", ".h", ".md", ".glsl", ".vert", ".frag"}
+
+
+class DraftRejectedByModel(ValueError):
+    """The drafter LLM explicitly declined to draft a scenario.
+
+    Raised when the LLM emits a `<!-- draft_error: <reason> -->` marker (per the
+    drafter prompt's principled-rejection convention). This is distinct from a
+    format failure: retrying the LLM will not produce a different answer, and
+    the upstream pipeline can route these to a separate bucket from
+    'draft_invalid' when reporting yield.
+
+    The `reason` attribute holds the slug from the marker (e.g.,
+    `not_portable_to_c_or_snapshot`).
+    """
+
+    def __init__(self, reason: str, message: str = ""):
+        self.reason = reason
+        super().__init__(message or f"drafter declined: {reason}")
 
 
 class DraftResult:
@@ -153,12 +178,16 @@ class Draft:
         ``<!-- filename: X -->`` HTML comment marker.  Blocks without a
         preceding filename marker are ignored.
 
-        Raises ValueError if:
-          - No filename-marked blocks are found
-          - A filename uses an absolute path or contains ``..``
-          - A filename has an extension outside the allowed set
-          - Duplicate filenames are emitted
-          - ``main.c`` (or any ``.c`` file) or ``scenario.md`` is missing
+        Raises:
+          DraftRejectedByModel: if the LLM emitted a
+            ``<!-- draft_error: <reason> -->`` marker AND no filename-marked
+            blocks (principled refusal per drafter prompt).
+          ValueError: if
+            - No filename-marked blocks AND no draft_error marker are found
+            - A filename uses an absolute path or contains ``..``
+            - A filename has an extension outside the allowed set
+            - Duplicate filenames are emitted
+            - ``main.c`` (or any ``.c`` file) or ``scenario.md`` is missing
         """
         # Find every filename marker and its position.
         markers = [
@@ -223,6 +252,19 @@ class Draft:
             out[filename] = body
 
         if not out:
+            # If the LLM emitted an explicit principled-rejection marker,
+            # surface it as DraftRejectedByModel so callers can route it to
+            # a separate bucket from format failures (and skip the retry,
+            # which won't change the model's mind).
+            err_match = _DRAFT_ERROR_MARKER_RE.search(text)
+            if err_match:
+                raise DraftRejectedByModel(
+                    reason=err_match.group(1).strip().lower(),
+                    message=(
+                        f"drafter declined: <!-- draft_error: "
+                        f"{err_match.group(1).strip()} -->"
+                    ),
+                )
             raise ValueError(
                 "No filename-marked fenced blocks found. "
                 "Expected: <!-- filename: <path> -->\n```<lang>\n...\n```"
