@@ -278,3 +278,113 @@ The next real improvement targets are:
    scenarios in principle; in practice `bug_class: legacy` scenarios
    should be flagged in the eval set selector so they're not over-weighted
    relative to clean-fix-PR scenarios.
+
+## Iteration 4 — generalization test (2026-04-26)
+
+Measurement-only iteration. **No prompt or pipeline changes.** Goal: confirm
+the iter-3 tuning (50% on 8-query three.js-heavy set) generalizes before
+scaling to real R12 mining.
+
+### Broadened query set
+
+- 20 queries, `batch_quota=30`. 12 closed-issue queries (60%), 6
+  `is:pr is:merged "fix:"` queries (30%), 2 StackOverflow tag pairs (10%) —
+  spanning 9 framework families: BabylonJS/Babylon.js, playcanvas/engine,
+  aframevr/aframe, maplibre/maplibre-gl-js, visgl/deck.gl,
+  keplergl/kepler.gl, processing/p5.js, pixijs/pixijs, regl-project/regl,
+  greggman/twgl.js. Bug-shape diversity: shadow, tone-mapping, color-space,
+  instancing, transparency-sorting, stencil, post-processing, mipmap, blend.
+- Stored at `src/python/gpa/eval/curation/queries/generalization_queries.yaml`
+  for repeatability.
+
+### Per-stage table — baseline vs. iter 2 vs. iter 3 vs. iter 4
+
+Percentages used so the larger denominator (n=30) is comparable to iter 3
+(n=8). Note: iter 4 uses different candidates entirely; this is a
+generalization comparison, not a same-corpus re-measurement.
+
+| Stage                       | Baseline (n=8) | Iter 2 (n=8) | Iter 3 (n=8) | Iter 4 (n=30) |
+| --------------------------- | -------------- | ------------ | ------------ | ------------- |
+| URLs from discovery         | 100%           | 100%         | 100%         | 100%          |
+| After URL dedup             | 62.5%          | 62.5%        | 62.5%        | **100%**      |
+| After thread fetch          | 100% / cum     | 100% / cum   | 100% / cum   | 100% / cum    |
+| After triage in_scope       | 20%            | 100%         | 80%          | **53.3%**     |
+| After fingerprint dedup     | 100%           | 100%         | 100%         | 93.8%         |
+| After successful draft      | 0%             | 40%          | 100%         | **46.7%**     |
+| **End-to-end yield**        | **0%**         | **25%**      | **50%**      | **23.3%**     |
+
+Top rejection reasons (iter 4):
+
+| reason                                            | count |
+| ------------------------------------------------- | ----- |
+| out_of_scope_not_rendering_bug                    | 12    |
+| drafter_declined:thread_too_thin                  | 3     |
+| draft_invalid                                     | 3     |
+| out_of_scope_insufficient_info                    | 1     |
+| drafter_declined:not_portable_to_c_or_snapshot    | 1     |
+| duplicate_of_existing_scenario                    | 1     |
+| draft_error                                       | 1     |
+| not_reproducible                                  | 1     |
+
+### Verdict — does the tuning generalize?
+
+**No, partially.** End-to-end yield fell from 50% (iter 3) to **23.3%**
+(iter 4), a ~27 pp drop. Both prior gates regressed:
+
+- **Triage acceptance fell 80% → 53.3%.** The drop is real signal, not
+  prompt regression: the broader query set surfaces user-questions and
+  workflow chatter that the iter-3 triage prompt correctly rejects as
+  out-of-scope (12/30 = 40% rejection at this gate alone).
+- **Novel-to-draft conversion fell 100% → 46.7%.** Drafter is now
+  declining (3 thread_too_thin, 1 not_portable) and format-failing
+  (3 draft_invalid, 1 draft_error) on threads that the new query set
+  surfaces but the drafter can't constructively handle.
+
+Yield is positive (>0%) and the pipeline runs end-to-end without
+crashing across a 9-family corpus, so the tuning *partially* generalizes —
+just not at the 50% iter-3 rate.
+
+### New #1 bottleneck — Discoverer query-greediness
+
+A measurement artifact dominated this run: with `batch_quota=30` and the
+first 3 issue queries (all Babylon) each returning 30+ candidates, **all
+30 candidates ended up Babylon-only.** The Discoverer iterates queries
+sequentially with a single shared quota counter (`discover.py:215-220`),
+so high-yield queries at the top of the list crowd out lower-yield
+queries below. The 6 PR-fix queries and 2 SO queries never ran. As a
+consequence, this iteration's "generalization" signal is really
+"how does iter-3 perform on a single family (BabylonJS) that has a
+different issue-thread shape than three.js?" — not "across 9 families."
+
+The iter-4 yield numbers are still useful as a single-family
+generalization probe (Babylon: lots of user Q&A in issues, lots of
+thin threads), but the cross-family question remains open.
+
+### Recommended iteration 5
+
+Two-part fix targeting the measurement artifact AND the highest-impact
+quality gate:
+
+1. **Make the Discoverer round-robin or per-query-cap.** Either
+   `_quota / len(queries)` per query, or interleave one candidate per
+   query in turn. This is a one-function change in `discover.py:Discoverer.run()`
+   and would let a single batch reach all 9+ families.
+2. **Re-run iter 4 after the Discoverer fix.** With true cross-family
+   coverage, expected yield is between iter 3's 50% (three.js-only,
+   well-trodden) and iter 4's 23.3% (Babylon-only, lots of Q&A).
+
+Once the discovery balance is fixed, the question "do real R12 mining"
+becomes: at expected ~30-40% yield across 9 families × 30 candidates =
+~80-100 new in-scope drafts per batch, that's enough headroom to start
+real mining without further prompt tuning.
+
+### Reproducing iter 4
+
+```bash
+PYTHONPATH=src/python python3 -m gpa.eval.curation.pipeline --dry-run-stats \\
+    --batch-quota 30 \\
+    --config src/python/gpa/eval/curation/queries/generalization_queries.yaml
+```
+
+Per-candidate JSONL: `/tmp/yield-records.jsonl` (default).
+Wall-time: ~28 min (discoverer ~10s, then ~30-180s/candidate × 30).

@@ -1,0 +1,66 @@
+# Iter 4 — generalization test queries.
+#
+# Goal: confirm the iter-3 tuned discoverer + triager + drafter generalizes
+# across a broader query set spanning >=6 framework families and diverse bug
+# shapes (shadow, tone-mapping, color-space, instancing, transparency-sorting,
+# stencil, post-processing, depth, mipmaps).
+#
+# Mix per spec:
+#   - ~60% issue is:closed reason:completed
+#   - ~30% is:pr is:merged "fix:"
+#   - ~10% StackOverflow tag pairs
+#
+# All `is:issue` and `is:pr` queries live in `issue:` because the GitHub
+# /search/issues endpoint handles both (mirrors baseline conventions).
+# batch_quota=30 gives each of 18 queries ~1-2 candidates of headroom.
+
+batch_quota: 30
+queries:
+  issue:
+    # === Web-3D engines beyond three.js (closed issues) ===
+    # Babylon.js — shadow / tone-mapping / instancing
+    - 'repo:BabylonJS/Babylon.js is:issue is:closed reason:completed "shadow" "wrong" OR "incorrect" OR "artifact"'
+    - 'repo:BabylonJS/Babylon.js is:issue is:closed reason:completed "tone mapping" OR "color space" OR "gamma" "wrong" OR "incorrect"'
+    - 'repo:BabylonJS/Babylon.js is:issue is:closed reason:completed "instanced" OR "instancing" "wrong" OR "transform"'
+    # PlayCanvas — transparency / stencil / depth
+    - 'repo:playcanvas/engine is:issue is:closed reason:completed "transparency" OR "transparent" "sorting" OR "order"'
+    - 'repo:playcanvas/engine is:issue is:closed reason:completed "stencil" OR "depth" "wrong" OR "incorrect"'
+    # A-Frame
+    - 'repo:aframevr/aframe is:issue is:closed reason:completed "render" OR "material" "wrong" OR "incorrect"'
+
+    # === Web-map / geo (closed issues) ===
+    # MapLibre — tile/raster
+    - 'repo:maplibre/maplibre-gl-js is:issue is:closed reason:completed "tile" OR "raster" "wrong" OR "incorrect" OR "offset"'
+    # deck.gl — layer rendering
+    - 'repo:visgl/deck.gl is:issue is:closed reason:completed "layer" "wrong" OR "incorrect" OR "render"'
+    # kepler.gl
+    - 'repo:keplergl/kepler.gl is:issue is:closed reason:completed "render" OR "color" "wrong" OR "incorrect"'
+
+    # === Web-2D / canvas (closed issues) ===
+    # p5.js (WebGL)
+    - 'repo:processing/p5.js is:issue is:closed reason:completed "WEBGL" "wrong" OR "incorrect" OR "broken"'
+    # PixiJS — mipmap / blend / post
+    - 'repo:pixijs/pixijs is:issue is:closed reason:completed "mipmap" OR "filter" "wrong" OR "incorrect"'
+    - 'repo:pixijs/pixijs is:issue is:closed reason:completed "blend" OR "post" "wrong" OR "incorrect"'
+
+    # === Merged-PR cohort (~30%) — "what got fixed" framing ===
+    # Babylon — shadow / depth fix PRs
+    - 'repo:BabylonJS/Babylon.js is:pr is:merged "fix:" shadow OR depth OR stencil'
+    # PlayCanvas — instancing / blend fix PRs
+    - 'repo:playcanvas/engine is:pr is:merged "fix:" instancing OR blend OR transparency'
+    # MapLibre — tile/zoom fix PRs
+    - 'repo:maplibre/maplibre-gl-js is:pr is:merged "fix:" tile OR zoom OR coord'
+    # deck.gl — layer/mipmap fix PRs
+    - 'repo:visgl/deck.gl is:pr is:merged "fix:" layer OR mipmap OR texture'
+    # regl — uniform / fbo fix PRs
+    - 'repo:regl-project/regl is:pr is:merged "fix:" uniform OR framebuffer OR texture'
+    # twgl — utility-level fix PRs
+    - 'repo:greggman/twgl.js is:pr is:merged "fix:" uniform OR attribute OR framebuffer'
+
+  commit: []
+
+  # === StackOverflow (~10%) — tag pairs (intersection) ===
+  # Two pairs covering broader frameworks underrepresented in coverage log.
+  stackoverflow:
+    - ["babylon.js", "shadow"]
+    - ["pixi.js", "blend-mode"]
