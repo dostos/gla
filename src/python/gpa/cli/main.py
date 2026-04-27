@@ -150,10 +150,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_check.add_argument("--json", dest="json_output", action="store_true")
 
     # ---- dump -------------------------------------------------------------
+    # Per-draw subtargets (drawcall/shader/textures/attachments) were removed
+    # in favour of the narrow ``gpa explain-draw`` and ``gpa check-config``
+    # commands. The remaining three (frame / drawcalls / pixel) have no narrow
+    # replacement yet.
     p_dump = sub.add_parser("dump", help="Raw REST data access")
     _add_session_arg(p_dump)
-    p_dump.add_argument("what", help="frame | drawcalls | drawcall | shader | "
-                                     "textures | attachments | pixel")
+    p_dump.add_argument("what", help="frame | drawcalls | pixel")
     p_dump.add_argument("--frame", type=int, default=None)
     p_dump.add_argument("--dc", type=int, default=None)
     p_dump.add_argument("--x", type=int, default=None)

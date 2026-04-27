@@ -168,22 +168,6 @@ TOOLS: List[Dict[str, Any]] = [
         },
     },
     {
-        "name": "explain_pixel",
-        "description": (
-            "Full explanation of why a pixel has its color — traces through object, material, "
-            "render pass, shader params"
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "frame_id": {"type": "integer"},
-                "x": {"type": "integer"},
-                "y": {"type": "integer"},
-            },
-            "required": ["frame_id", "x", "y"],
-        },
-    },
-    {
         "name": "list_render_passes",
         "description": (
             "Show the render pass structure — which passes exist, their draw call ranges, "
@@ -211,20 +195,6 @@ TOOLS: List[Dict[str, Any]] = [
                 "frame_id": {"type": "integer", "description": "Frame ID"},
             },
             "required": ["frame_id"],
-        },
-    },
-    {
-        "name": "query_material",
-        "description": (
-            "Get material properties for a named object — shader, textures, PBR parameters"
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "frame_id": {"type": "integer"},
-                "object_name": {"type": "string"},
-            },
-            "required": ["frame_id", "object_name"],
         },
     },
     {
@@ -655,14 +625,6 @@ def _tool_query_object(client: APIClient, args: Dict[str, Any]) -> str:
     return json.dumps(data, indent=2)
 
 
-def _tool_explain_pixel(client: APIClient, args: Dict[str, Any]) -> str:
-    frame_id = int(args["frame_id"])
-    x = int(args["x"])
-    y = int(args["y"])
-    data = client.get(f"/frames/{frame_id}/explain/{x}/{y}")
-    return json.dumps(data, indent=2)
-
-
 def _tool_list_render_passes(client: APIClient, args: Dict[str, Any]) -> str:
     frame_id = int(args["frame_id"])
     data = client.get(f"/frames/{frame_id}/passes")
@@ -1039,19 +1001,6 @@ def _tool_gpa_scene_explain(client: APIClient, args: Dict[str, Any]) -> str:
     return json.dumps(data, indent=2)
 
 
-def _tool_query_material(client: APIClient, args: Dict[str, Any]) -> str:
-    frame_id = int(args["frame_id"])
-    object_name = str(args["object_name"])
-    data = client.get(f"/frames/{frame_id}/objects/{object_name}")
-    # The material name is in the object info; fetch it and surface the material field
-    if "error" not in data:
-        mat_name = data.get("material")
-        if mat_name:
-            mat_data = client.get(f"/frames/{frame_id}/objects/{object_name}")
-            return json.dumps({"object": object_name, "material": mat_name, "detail": mat_data}, indent=2)
-    return json.dumps(data, indent=2)
-
-
 _DISPATCH = {
     "query_frame": _tool_query_frame,
     "inspect_drawcall": _tool_inspect_drawcall,
@@ -1060,9 +1009,7 @@ _DISPATCH = {
     "compare_frames": _tool_compare_frames,
     "control_capture": _tool_control_capture,
     "query_object": _tool_query_object,
-    "explain_pixel": _tool_explain_pixel,
     "list_render_passes": _tool_list_render_passes,
-    "query_material": _tool_query_material,
     "query_annotations": _tool_query_annotations,
     "gpa_report": _tool_gpa_report,
     "gpa_check": _tool_gpa_check,

@@ -71,47 +71,6 @@ def _dump_drawcalls(client: RestClient, frame_id: int, fmt: str) -> str:
     return _plain_table(items, columns)
 
 
-def _dump_drawcall(client: RestClient, frame_id: int, dc_id: int, fmt: str) -> str:
-    data = client.get_json(f"/api/v1/frames/{frame_id}/drawcalls/{dc_id}")
-    if fmt == "json":
-        return json.dumps(data, indent=2)
-    if fmt == "compact":
-        return _compact_kv(data)
-    lines = []
-    for k, v in data.items():
-        if isinstance(v, (list, dict)):
-            lines.append(f"{k}\t{json.dumps(v)}")
-        else:
-            lines.append(f"{k}\t{v}")
-    return "\n".join(lines)
-
-
-def _dump_shader(client: RestClient, frame_id: int, dc_id: int, fmt: str) -> str:
-    data = client.get_json(f"/api/v1/frames/{frame_id}/drawcalls/{dc_id}/shader")
-    if fmt == "json":
-        return json.dumps(data, indent=2)
-    if fmt == "compact":
-        return _compact_kv(data)
-    lines = [f"shader_id\t{data.get('shader_id')}"]
-    for p in data.get("parameters") or []:
-        lines.append(
-            f"param\tname={p.get('name')}\ttype={p.get('type')}\tvalue={p.get('value')}"
-        )
-    return "\n".join(lines)
-
-
-def _dump_textures(client: RestClient, frame_id: int, dc_id: int, fmt: str) -> str:
-    data = client.get_json(f"/api/v1/frames/{frame_id}/drawcalls/{dc_id}/textures")
-    textures = data.get("textures") or []
-    if fmt == "json":
-        return json.dumps(data, indent=2)
-    if fmt == "compact":
-        return "\n".join(_compact_kv(t) for t in textures)
-    columns = ["slot", "texture_id", "width", "height", "format",
-               "collides_with_fbo_attachment"]
-    return _plain_table(textures, columns)
-
-
 def _dump_pixel(
     client: RestClient, frame_id: int, x: int, y: int, fmt: str
 ) -> str:
@@ -124,24 +83,27 @@ def _dump_pixel(
     return "\n".join(lines)
 
 
-def _dump_attachments(
-    client: RestClient, frame_id: int, dc_id: int, fmt: str
-) -> str:
-    data = client.get_json(
-        f"/api/v1/frames/{frame_id}/drawcalls/{dc_id}/attachments"
-    )
-    if fmt == "json":
-        return json.dumps(data, indent=2)
-    atts = data.get("fbo_color_attachments") or []
-    active = data.get("active_attachment_count", 0)
-    if fmt == "compact":
-        return _compact_kv(
-            {"active_attachment_count": active, "fbo_color_attachments": atts}
-        )
-    lines = [f"active_attachment_count\t{active}"]
-    for i, tex_id in enumerate(atts):
-        lines.append(f"COLOR_ATTACHMENT{i}\t{tex_id}")
-    return "\n".join(lines)
+# --------------------------------------------------------------------------- #
+# Removed subtargets — preserve the names so users get a helpful redirect
+# rather than a generic "unknown target" error. The audit
+# (docs/superpowers/specs/2026-04-27-bidirectional-narrow-queries-design.md)
+# identified `dump drawcall|shader|textures|attachments` as the +$0.39/pair
+# regression cause: agents called dump 6-8x per scenario and grep'd verbose
+# JSON. The bidirectional-narrow commands replace them. Keep the names alive
+# so a stale prompt or muscle-memory invocation fails LOUDLY (exit 3) with a
+# concrete redirect message instead of silently doing the wrong thing.
+# --------------------------------------------------------------------------- #
+
+
+REMOVED_SUBTARGETS = {
+    "drawcall": "use `gpa explain-draw <id>` instead",
+    "shader": "use `gpa explain-draw <id> --field shader` instead",
+    "textures": "use `gpa explain-draw <id> --field textures` instead",
+    "attachments": (
+        "use `gpa check-config --rule mipmap-on-npot-without-min-filter` "
+        "(or another config rule) instead"
+    ),
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -152,10 +114,6 @@ def _dump_attachments(
 _DISPATCH = {
     "frame": ("frame", True, False, False),
     "drawcalls": ("drawcalls", True, False, False),
-    "drawcall": ("drawcall", True, True, False),
-    "shader": ("shader", True, True, False),
-    "textures": ("textures", True, True, False),
-    "attachments": ("attachments", True, True, False),
     "pixel": ("pixel", True, False, True),
 }
 
@@ -174,6 +132,15 @@ def run(
 ) -> int:
     if print_stream is None:
         print_stream = sys.stdout
+
+    # Removed subtargets — fail loud with a redirect to the narrow command.
+    if what in REMOVED_SUBTARGETS:
+        redirect = REMOVED_SUBTARGETS[what]
+        print(
+            f"[gpa] `dump {what}` was removed — {redirect}.",
+            file=sys.stderr,
+        )
+        return 3
 
     if what not in _DISPATCH:
         known = ", ".join(sorted(_DISPATCH))
@@ -217,14 +184,6 @@ def run(
             text = _dump_frame(client, frame_id, fmt)
         elif what == "drawcalls":
             text = _dump_drawcalls(client, frame_id, fmt)
-        elif what == "drawcall":
-            text = _dump_drawcall(client, frame_id, int(dc), fmt)
-        elif what == "shader":
-            text = _dump_shader(client, frame_id, int(dc), fmt)
-        elif what == "textures":
-            text = _dump_textures(client, frame_id, int(dc), fmt)
-        elif what == "attachments":
-            text = _dump_attachments(client, frame_id, int(dc), fmt)
         elif what == "pixel":
             text = _dump_pixel(client, frame_id, int(x), int(y), fmt)
         else:  # pragma: no cover

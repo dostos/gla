@@ -114,28 +114,6 @@ def test_dump_pixel_plain(session_dir, injected_rest, monkeypatch):
     assert "g\t0" in out
 
 
-def test_dump_requires_dc(session_dir, injected_rest, monkeypatch):
-    monkeypatch.setenv("GPA_SESSION", str(session_dir))
-    buf = io.StringIO()
-    rc = dump_cmd.run(
-        what="drawcall", frame=1, client=injected_rest, print_stream=buf,
-    )
-    assert rc == 1
-
-
-def test_dump_attachments_plain(session_dir, injected_rest, monkeypatch):
-    monkeypatch.setenv("GPA_SESSION", str(session_dir))
-    buf = io.StringIO()
-    dump_cmd.run(
-        what="attachments", frame=1, dc=0,
-        client=injected_rest, print_stream=buf,
-    )
-    out = buf.getvalue()
-    assert "COLOR_ATTACHMENT0\t7" in out
-    assert "COLOR_ATTACHMENT1\t12" in out
-    assert "active_attachment_count\t2" in out
-
-
 def test_dump_unknown_target(session_dir, injected_rest, monkeypatch):
     monkeypatch.setenv("GPA_SESSION", str(session_dir))
     buf = io.StringIO()
@@ -143,6 +121,46 @@ def test_dump_unknown_target(session_dir, injected_rest, monkeypatch):
         what="bogus", frame=1, client=injected_rest, print_stream=buf,
     )
     assert rc == 1
+
+
+# --------------------------------------------------------------------------- #
+# Removed subtargets — anti-regression for the +$0.39/pair dump pattern
+# (see docs/superpowers/specs/2026-04-27-bidirectional-narrow-queries-design.md).
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    "subtarget,redirect_substr",
+    [
+        ("drawcall", "explain-draw"),
+        ("shader", "explain-draw"),
+        ("textures", "explain-draw"),
+        ("attachments", "check-config"),
+    ],
+)
+def test_dump_removed_subtarget_shows_redirect(
+    subtarget, redirect_substr,
+    session_dir, injected_rest, monkeypatch, capsys,
+):
+    """Each removed subtarget must fail with exit-3 + a concrete redirect.
+
+    Silently-broken aliases would re-introduce the dump-pattern regression
+    we removed; loud failure with a pointer to the narrow command keeps the
+    agent on-rails.
+    """
+    monkeypatch.setenv("GPA_SESSION", str(session_dir))
+    buf = io.StringIO()
+    rc = dump_cmd.run(
+        what=subtarget, frame=1, dc=0,
+        client=injected_rest, print_stream=buf,
+    )
+    assert rc == 3
+    captured = capsys.readouterr()
+    assert subtarget in captured.err
+    assert "removed" in captured.err.lower()
+    assert redirect_substr in captured.err
+    # Nothing should have been written to stdout — the redirect is on stderr.
+    assert buf.getvalue() == ""
 
 
 # --------------------------------------------------------------------------- #
