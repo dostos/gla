@@ -158,6 +158,7 @@ def create_app(provider=None, auth_token: str = "",
         return await call_next(request)
 
     from .routes_frames import router as frames_router
+    from .routes_frames_list import router as frames_list_router
     from .routes_drawcalls import router as drawcalls_router
     from .routes_pixel import router as pixel_router
     from .routes_control import router as control_router
@@ -175,6 +176,7 @@ def create_app(provider=None, auth_token: str = "",
     from .routes_explain_pixel import router as explain_pixel_router
 
     app.include_router(frames_router, prefix="/api/v1")
+    app.include_router(frames_list_router, prefix="/api/v1")
     app.include_router(drawcalls_router, prefix="/api/v1")
     app.include_router(pixel_router, prefix="/api/v1")
     app.include_router(control_router, prefix="/api/v1")

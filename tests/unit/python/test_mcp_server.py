@@ -214,3 +214,164 @@ def test_gpa_check_with_dc_id(api_client):
     assert payload["status"] == "warn"
     assert payload["findings"]
     assert payload["findings"][0]["dc_id"] == 0
+
+
+# --------------------------------------------------------------------------- #
+# C3: cleanup-batch-1 MCP-tool parity with the new CLI commands
+# --------------------------------------------------------------------------- #
+
+
+class TestNewMcpToolsRegistered:
+    """The 5 newly wired tools must be advertised AND dispatched.
+
+    Catches the common 'forgot to add to _DISPATCH' regression where the
+    tool surfaces in tools/list but every call returns Unknown tool.
+    """
+
+    NEW_TOOLS = [
+        "gpa_check_config",
+        "gpa_explain_draw",
+        "gpa_diff_draws",
+        "gpa_scene_find",
+        "gpa_scene_explain",
+    ]
+
+    def test_each_tool_listed_and_dispatched(self):
+        names = {t["name"] for t in mcp_server.TOOLS}
+        for tool in self.NEW_TOOLS:
+            assert tool in names, f"missing tool: {tool}"
+            assert tool in mcp_server._DISPATCH, f"missing dispatch: {tool}"
+
+    def test_each_tool_description_has_example(self):
+        """Per cli-for-agents principle, tool descriptions must include "
+        "at least one ``Example:`` invocation so an LLM can copy it."""
+        defs = {t["name"]: t for t in mcp_server.TOOLS}
+        for tool in self.NEW_TOOLS:
+            desc = defs[tool]["description"]
+            assert "Example:" in desc, (
+                f"{tool} description missing 'Example:' invocation"
+            )
+
+
+def test_gpa_check_config_tool_returns_findings(api_client):
+    """Default conftest mock has feedback loop + NaN uniform; the
+    rule-engine route should surface at least one config finding."""
+    text = mcp_server._tool_gpa_check_config(
+        api_client, {"frame_id": 1, "severity": "warn"}
+    )
+    payload = json.loads(text)
+    assert payload["frame_id"] == 1
+    assert isinstance(payload["rules_evaluated"], list)
+    assert isinstance(payload["findings"], list)
+
+
+def test_gpa_check_config_invalid_severity_returns_error(api_client):
+    text = mcp_server._tool_gpa_check_config(
+        api_client, {"frame_id": 1, "severity": "critical"}
+    )
+    payload = json.loads(text)
+    assert "error" in payload
+
+
+def test_gpa_explain_draw_tool_returns_explanation(api_client):
+    text = mcp_server._tool_gpa_explain_draw(
+        api_client, {"frame_id": 1, "draw_id": 0}
+    )
+    payload = json.loads(text)
+    assert payload["frame_id"] == 1
+    assert payload["draw_call_id"] == 0
+    # The mock has 2 uniforms (uColor, uBad) and 2 textures.
+    assert "uniforms_set" in payload
+    assert "textures_sampled" in payload
+    assert "relevant_state" in payload
+
+
+def test_gpa_explain_draw_field_filter(api_client):
+    """``fields`` whitelists the response — only requested top-level keys
+    survive (plus the always-on identifying keys)."""
+    text = mcp_server._tool_gpa_explain_draw(
+        api_client,
+        {"frame_id": 1, "draw_id": 0, "fields": ["uniforms_set"]},
+    )
+    payload = json.loads(text)
+    assert "uniforms_set" in payload
+    assert "textures_sampled" not in payload
+    assert "relevant_state" not in payload
+    # Identifying keys preserved so the response stays self-describing.
+    assert payload["frame_id"] == 1
+    assert payload["draw_call_id"] == 0
+
+
+def test_gpa_explain_draw_invalid_draw_id_returns_error(api_client):
+    text = mcp_server._tool_gpa_explain_draw(
+        api_client, {"frame_id": 1, "draw_id": "not-an-int"}
+    )
+    payload = json.loads(text)
+    assert "error" in payload
+
+
+def test_gpa_diff_draws_tool_state_scope(api_client):
+    """Both draws come from the same mock so the diff is empty — but the
+    payload shape must be stable."""
+    text = mcp_server._tool_gpa_diff_draws(
+        api_client, {"frame_id": 1, "a": 0, "b": 0}
+    )
+    payload = json.loads(text)
+    assert payload["frame_id"] == 1
+    assert payload["a"] == 0
+    assert payload["b"] == 0
+    assert payload["scope"] == "state"
+    assert "changes" in payload
+
+
+def test_gpa_diff_draws_invalid_scope_returns_error(api_client):
+    text = mcp_server._tool_gpa_diff_draws(
+        api_client, {"frame_id": 1, "a": 0, "b": 0, "scope": "bogus"}
+    )
+    payload = json.loads(text)
+    assert "error" in payload
+
+
+def test_gpa_scene_find_no_predicate_returns_error(api_client):
+    text = mcp_server._tool_gpa_scene_find(
+        api_client, {"frame_id": 1}
+    )
+    payload = json.loads(text)
+    assert "error" in payload
+
+
+def test_gpa_scene_find_with_predicate(api_client):
+    """Even with no annotations posted the route returns 0 matches (not 4xx)."""
+    text = mcp_server._tool_gpa_scene_find(
+        api_client,
+        {"frame_id": 1, "predicate": "material:transparent", "limit": 5},
+    )
+    payload = json.loads(text)
+    assert payload["frame_id"] == 1
+    assert payload["match_count"] == 0
+    assert payload["matches"] == []
+    # Default conftest has no scene annotations so this also asserts the
+    # endpoint stays well-formed against an empty annotation store.
+    assert payload["annotation_present"] is False
+
+
+def test_gpa_scene_explain_returns_pixel_trace(api_client):
+    """Pixel inside the mock viewport (800x600) → topmost-draw resolution."""
+    text = mcp_server._tool_gpa_scene_explain(
+        api_client, {"frame_id": 1, "x": 400, "y": 300}
+    )
+    payload = json.loads(text)
+    assert payload["frame_id"] == 1
+    assert payload["pixel"] == [400, 300]
+    # The mock has draw 0 covering the full 800x600 viewport, so resolution
+    # is approximate (not 'miss').
+    assert payload["resolved"] in ("approximate", "miss")
+    assert "draw_call_id" in payload
+
+
+def test_gpa_scene_explain_negative_pixel_returns_error(api_client):
+    text = mcp_server._tool_gpa_scene_explain(
+        api_client, {"frame_id": 1, "x": -1, "y": 0}
+    )
+    payload = json.loads(text)
+    assert "error" in payload

@@ -164,6 +164,10 @@ def build_parser() -> argparse.ArgumentParser:
     # ---- frames -----------------------------------------------------------
     p_frames = sub.add_parser("frames", help="List captured frame ids")
     _add_session_arg(p_frames)
+    p_frames.add_argument(
+        "--json", dest="json_output", action="store_true",
+        help="Emit JSON ({\"frames\":[…]}) instead of one id per line",
+    )
 
     # ---- check-config -----------------------------------------------------
     check_config_cmd.add_subparser(sub)
@@ -299,7 +303,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             fmt=args.fmt,
         )
     if args.cmd == "frames":
-        return frames_cmd.run(session_dir=args.session)
+        return frames_cmd.run(
+            session_dir=args.session,
+            json_output=args.json_output,
+        )
     if args.cmd == "check-config":
         return check_config_cmd.run(
             session_dir=args.session,

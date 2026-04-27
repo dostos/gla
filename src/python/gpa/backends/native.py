@@ -186,6 +186,24 @@ class NativeBackend(FrameProvider):
             return None
         return self._convert_overview(ov)
 
+    def list_frame_ids(self) -> List[int]:
+        """Enumerate every frame id currently retained by the engine.
+
+        The native backend keeps a fixed-size ring buffer (default 60
+        frames) inside ``FrameStore``.  We don't currently expose a
+        ``frame_ids()`` C++ method, so we reuse the ABC default which
+        probes backwards from the latest overview until it hits a miss.
+        Capped per-call so callers can rely on bounded latency.
+
+        TODO(c2-native): once ``QueryEngine`` exposes a direct frame_id
+        list (one ``store_->frame_ids()`` C++ method + a pybind
+        ``.def("frame_ids", ...)``), drop the probe loop and return the
+        list verbatim. The probe remains safe in the meantime: the
+        engine's ring buffer is at most ``capacity`` (60) frames so the
+        loop scans <=60 ids in the common case.
+        """
+        return super().list_frame_ids()
+
     def list_draw_calls(self, frame_id: int, limit: int = 50, offset: int = 0) -> List[DrawCallInfo]:
         raw = self._qe.list_draw_calls(frame_id, limit, offset)
         return [self._convert_drawcall(dc) for dc in raw]

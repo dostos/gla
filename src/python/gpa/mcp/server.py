@@ -323,6 +323,179 @@ TOOLS: List[Dict[str, Any]] = [
             "required": ["check_name"],
         },
     },
+    {
+        "name": "gpa_check_config",
+        "description": (
+            "Cross-validate a captured frame against a hand-curated rule "
+            "library (config-style 'is this idiomatic GL?' rules). Surfaces "
+            "depth/blend/cull misconfigurations, missing clears, and other "
+            "configuration smells with severity tags. Example: "
+            '`{"frame_id": "latest", "severity": "warn"}` runs every '
+            "default-enabled rule at warn-or-higher; "
+            '`{"frame_id": 4, "rules": ["depth-test-disabled"]}` runs just '
+            "that rule."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "frame_id": {
+                    "type": ["integer", "string"],
+                    "description": "Frame ID or 'latest'",
+                    "default": "latest",
+                },
+                "severity": {
+                    "type": "string",
+                    "enum": ["error", "warn", "info"],
+                    "description": "Minimum severity to surface (default warn).",
+                    "default": "warn",
+                },
+                "rules": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Restrict evaluation to these rule ids. Omit to run "
+                        "every default-enabled rule."
+                    ),
+                },
+            },
+        },
+    },
+    {
+        "name": "gpa_explain_draw",
+        "description": (
+            "Single-call explanation for one draw call: scene-node path, "
+            "shader/material name, non-default uniforms, textures sampled, "
+            "and the three pipeline-state values (depth-test, blend, cull) "
+            "that most often explain visual outcomes. Replaces ~5 separate "
+            "MCP queries (overview + drawcalls + drawcall + textures + "
+            "annotations). Example: "
+            '`{"frame_id": "latest", "draw_id": 12}` returns everything an '
+            "agent needs to reason about draw 12 in one round trip; "
+            '`{"frame_id": 4, "draw_id": 7, "fields": ["uniforms_set"]}` '
+            "narrows the response to just the uniform table."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "frame_id": {
+                    "type": ["integer", "string"],
+                    "description": "Frame ID or 'latest'",
+                    "default": "latest",
+                },
+                "draw_id": {
+                    "type": "integer",
+                    "description": "Draw call ID within the frame.",
+                },
+                "fields": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Optional whitelist of top-level fields to keep "
+                        "(scene_node_path, uniforms_set, textures_sampled, "
+                        "relevant_state, ...). Omit to receive the full "
+                        "payload."
+                    ),
+                },
+            },
+            "required": ["draw_id"],
+        },
+    },
+    {
+        "name": "gpa_diff_draws",
+        "description": (
+            "Compare two draw calls within the same frame and return only "
+            "the differences (pipeline-state, uniforms, or textures, "
+            "depending on `scope`). Powerful for 'why does draw N look "
+            "different from draw N-1?' reasoning. Example: "
+            '`{"frame_id": "latest", "a": 11, "b": 12}` defaults to the '
+            "state scope and surfaces blend/depth/cull flips; "
+            '`{"frame_id": 1, "a": 0, "b": 1, "scope": "uniforms"}` shows '
+            "only changed decoded uniforms."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "frame_id": {
+                    "type": ["integer", "string"],
+                    "description": "Frame ID or 'latest'",
+                    "default": "latest",
+                },
+                "a": {"type": "integer", "description": "First draw call ID"},
+                "b": {"type": "integer", "description": "Second draw call ID"},
+                "scope": {
+                    "type": "string",
+                    "enum": ["state", "uniforms", "textures", "all"],
+                    "description": "Diff scope (default state).",
+                    "default": "state",
+                },
+            },
+            "required": ["a", "b"],
+        },
+    },
+    {
+        "name": "gpa_scene_find",
+        "description": (
+            "Predicate-driven scene-graph search. Returns scene nodes that "
+            "match every supplied predicate (CSV-AND form), each annotated "
+            "with the draw-call ids whose debug_groups resolve to the node. "
+            "Predicates: material:transparent, material:opaque, "
+            "material-name:<substr>, name-contains:<substr>, type:<exact>, "
+            "uniform-has-nan, texture:missing. Example: "
+            '`{"frame_id": "latest", "predicate": "material:transparent"}` '
+            "lists every transparent node; "
+            '`{"frame_id": 4, "predicate": "uniform-has-nan,name-contains:helmet", "limit": 5}` '
+            "narrows by two predicates."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "frame_id": {
+                    "type": ["integer", "string"],
+                    "description": "Frame ID or 'latest'",
+                    "default": "latest",
+                },
+                "predicate": {
+                    "type": "string",
+                    "description": (
+                        "One predicate, or several joined with ',' "
+                        "(e.g. 'material:transparent,name-contains:helmet')."
+                    ),
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max matches to return (default 10).",
+                    "default": 10,
+                },
+            },
+            "required": ["predicate"],
+        },
+    },
+    {
+        "name": "gpa_scene_explain",
+        "description": (
+            "Pixel→draw_call→scene_node trace. Given a pixel coordinate, "
+            "answers 'which draw call produced this pixel and which scene "
+            "node was that draw rendering?' using an approximate "
+            "viewport/scissor hit-test. Reports `resolved: 'approximate'` "
+            "(or `'miss'` when no draw covers the pixel). Example: "
+            '`{"frame_id": "latest", "x": 400, "y": 300}` returns the '
+            "draw_call_id, scene_node_path, material_name, and the "
+            "uniform/texture inputs that produced the pixel."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "frame_id": {
+                    "type": ["integer", "string"],
+                    "description": "Frame ID or 'latest'",
+                    "default": "latest",
+                },
+                "x": {"type": "integer", "description": "Pixel X coordinate"},
+                "y": {"type": "integer", "description": "Pixel Y coordinate"},
+            },
+            "required": ["x", "y"],
+        },
+    },
 ]
 
 
@@ -699,6 +872,173 @@ def _tool_gpa_trace_value(client: APIClient, args: Dict[str, Any]) -> str:
     return json.dumps(data, indent=2)
 
 
+def _tool_gpa_check_config(client: APIClient, args: Dict[str, Any]) -> str:
+    """Run the rule-engine check-config endpoint and return its JSON payload.
+
+    Mirrors the CLI command (and the REST route): resolves 'latest' alias,
+    folds in optional severity / rule-id filters as query params.
+    """
+    frame_id = _resolve_frame_id_for_checks(client, args.get("frame_id", "latest"))
+    if frame_id is None:
+        return json.dumps({"error": "no frames captured yet"}, indent=2)
+
+    severity = args.get("severity") or "warn"
+    if severity not in {"error", "warn", "info"}:
+        return json.dumps(
+            {"error": f"invalid severity {severity!r}; must be error|warn|info"},
+            indent=2,
+        )
+
+    params: Dict[str, Any] = {"severity": severity}
+
+    rules = args.get("rules")
+    if isinstance(rules, list) and rules:
+        # APIClient builds the query as ``k=v`` pairs; FastAPI accepts
+        # comma-separated values for a single ``rule`` query param.
+        params["rule"] = ",".join(str(r) for r in rules if r)
+
+    data = client.get(f"/frames/{frame_id}/check-config", params)
+    return json.dumps(data, indent=2)
+
+
+def _tool_gpa_explain_draw(client: APIClient, args: Dict[str, Any]) -> str:
+    """Single-call explanation for one draw call.
+
+    Optional ``fields`` filters the top-level payload to a whitelist so
+    agents can request just the slice they care about.
+    """
+    frame_id = _resolve_frame_id_for_checks(client, args.get("frame_id", "latest"))
+    if frame_id is None:
+        return json.dumps({"error": "no frames captured yet"}, indent=2)
+
+    draw_id = args.get("draw_id")
+    try:
+        draw_id = int(draw_id)
+    except (TypeError, ValueError):
+        return json.dumps({"error": f"invalid draw_id: {draw_id!r}"}, indent=2)
+
+    data = client.get(f"/frames/{frame_id}/draws/{draw_id}/explain")
+
+    fields = args.get("fields")
+    if (
+        isinstance(fields, list)
+        and fields
+        and isinstance(data, dict)
+        and "error" not in data
+    ):
+        keep = {str(f) for f in fields if f}
+        # Always preserve the identifying header so the response is
+        # self-describing even after filtering.
+        keep |= {"frame_id", "draw_call_id"}
+        data = {k: v for k, v in data.items() if k in keep}
+
+    return json.dumps(data, indent=2)
+
+
+def _tool_gpa_diff_draws(client: APIClient, args: Dict[str, Any]) -> str:
+    """Diff two draw calls within the same frame.
+
+    ``a`` and ``b`` are both required.  ``scope`` controls which channels
+    of difference are surfaced (state / uniforms / textures / all).
+    """
+    frame_id = _resolve_frame_id_for_checks(client, args.get("frame_id", "latest"))
+    if frame_id is None:
+        return json.dumps({"error": "no frames captured yet"}, indent=2)
+
+    a = args.get("a")
+    b = args.get("b")
+    try:
+        a = int(a)
+        b = int(b)
+    except (TypeError, ValueError):
+        return json.dumps(
+            {"error": f"diff_draws requires integer 'a' and 'b' (got {a!r}, {b!r})"},
+            indent=2,
+        )
+
+    scope = args.get("scope") or "state"
+    if scope not in {"state", "uniforms", "textures", "all"}:
+        return json.dumps(
+            {"error": f"invalid scope {scope!r}; must be state|uniforms|textures|all"},
+            indent=2,
+        )
+
+    data = client.get(
+        f"/frames/{frame_id}/draws/diff",
+        {"a": a, "b": b, "scope": scope},
+    )
+    return json.dumps(data, indent=2)
+
+
+def _tool_gpa_scene_find(client: APIClient, args: Dict[str, Any]) -> str:
+    """Predicate-driven scene-graph search.
+
+    The ``predicate`` argument is a single string holding one or more
+    predicates joined with ``,`` (matching the CLI form). FastAPI's
+    ``predicate=…`` query parameter is a list, so we pass it once and let
+    the route's CSV splitter expand it.
+    """
+    frame_id = _resolve_frame_id_for_checks(client, args.get("frame_id", "latest"))
+    if frame_id is None:
+        return json.dumps({"error": "no frames captured yet"}, indent=2)
+
+    predicate = args.get("predicate")
+    if not isinstance(predicate, str) or not predicate.strip():
+        return json.dumps(
+            {"error": "scene_find requires a non-empty 'predicate' string"},
+            indent=2,
+        )
+
+    limit = args.get("limit", 10)
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        return json.dumps({"error": f"invalid limit: {limit!r}"}, indent=2)
+    if limit < 1:
+        limit = 1
+    if limit > 200:
+        limit = 200
+
+    data = client.get(
+        f"/frames/{frame_id}/scene/find",
+        {"predicate": predicate, "limit": limit},
+    )
+    return json.dumps(data, indent=2)
+
+
+def _tool_gpa_scene_explain(client: APIClient, args: Dict[str, Any]) -> str:
+    """Pixel → draw → scene-node trace.
+
+    Wraps the ``/frames/{id}/explain-pixel`` route. ``x``/``y`` are
+    required and must both be non-negative.
+    """
+    frame_id = _resolve_frame_id_for_checks(client, args.get("frame_id", "latest"))
+    if frame_id is None:
+        return json.dumps({"error": "no frames captured yet"}, indent=2)
+
+    x = args.get("x")
+    y = args.get("y")
+    try:
+        x = int(x)
+        y = int(y)
+    except (TypeError, ValueError):
+        return json.dumps(
+            {"error": f"scene_explain requires integer 'x' and 'y' (got {x!r}, {y!r})"},
+            indent=2,
+        )
+    if x < 0 or y < 0:
+        return json.dumps(
+            {"error": f"scene_explain requires non-negative x and y (got {x}, {y})"},
+            indent=2,
+        )
+
+    data = client.get(
+        f"/frames/{frame_id}/explain-pixel",
+        {"x": x, "y": y},
+    )
+    return json.dumps(data, indent=2)
+
+
 def _tool_query_material(client: APIClient, args: Dict[str, Any]) -> str:
     frame_id = int(args["frame_id"])
     object_name = str(args["object_name"])
@@ -727,6 +1067,11 @@ _DISPATCH = {
     "gpa_report": _tool_gpa_report,
     "gpa_check": _tool_gpa_check,
     "gpa_trace_value": _tool_gpa_trace_value,
+    "gpa_check_config": _tool_gpa_check_config,
+    "gpa_explain_draw": _tool_gpa_explain_draw,
+    "gpa_diff_draws": _tool_gpa_diff_draws,
+    "gpa_scene_find": _tool_gpa_scene_find,
+    "gpa_scene_explain": _tool_gpa_scene_explain,
 }
 
 

@@ -79,6 +79,33 @@ class FrameProvider(ABC):
         """Get overview of a specific frame."""
         ...
 
+    # -- Frame enumeration --------------------------------------------------
+
+    def list_frame_ids(self) -> List[int]:
+        """Return every frame id currently retrievable on this backend.
+
+        Default behaviour: probe backwards from the latest frame id until a
+        ``get_frame_overview()`` miss, capped at 4096 frames so a runaway
+        scan can't pin the engine.  Backends that can answer this directly
+        (``NativeBackend`` does, via the engine's ring buffer) should
+        override.
+        """
+        latest = self.get_latest_overview()
+        if latest is None:
+            return []
+        ids: List[int] = []
+        # Cap probing at 4096 frames — protects pathological cases where
+        # a backend lies about ``latest`` without bounding the history.
+        max_probe = 4096
+        for fid in range(int(latest.frame_id), -1, -1):
+            if len(ids) >= max_probe:
+                break
+            if self.get_frame_overview(fid) is None:
+                break
+            ids.append(fid)
+        ids.sort()
+        return ids
+
     # -- Draw calls ---------------------------------------------------------
 
     @abstractmethod
