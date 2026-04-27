@@ -968,3 +968,189 @@ PYTHONPATH=src/python python3 /tmp/iter10_run_4_urls.py \
 (One-off driver lives at `/tmp/iter10_run_4_urls.py`; the reusable
 bifurcation + iter-10 validator code is in `gpa.eval.curation.validate`
 and `gpa.eval.curation.draft`.)
+
+## Iteration 11 — Cat 2 sub-category expansion scout (2026-04-26)
+
+Iters 6/8 confirmed 30% as the steady-state ceiling on the broad
+`generalization_queries.yaml` corpus, which is dominated by
+**`framework-app-dev × web-3d`** (three.js / Babylon / PlayCanvas /
+A-Frame / R3F / drei / Cesium / VTK-js / glTF-Sample-Viewer / iTowns /
+gpu.js / luma.gl / etc.). Iter 11 measures whether the same tuned
+triage + drafter generalize to the four **non-`web-3d`** Cat-2
+sub-categories called out in `docs/flywheel-matrix.md`: `web-2d`,
+`web-map`, `native-engine`, `scientific`. **No prompt or pipeline
+changes** — measurement-only; pinned `cat2_expansion_queries.yaml`
+isolated from the broad corpus.
+
+### Phase 1 — vet table
+
+| # | repo                              | stars  | pushed     | open | has_issues | verdict | reason                                                                |
+|---|-----------------------------------|--------|------------|------|------------|---------|-----------------------------------------------------------------------|
+| 1 | konvajs/konva                     | 14369  | 2026-04-11 |   23 | y          | KEEP    | web-2d canonical canvas lib                                            |
+| 2 | fabricjs/fabric.js                | 31117  | 2026-04-22 |  466 | y          | KEEP    | web-2d, very active                                                    |
+| 3 | mojs/mojs                         | 18693  | 2026-04-14 |   37 | y          | KEEP    | web-2d motion graphics                                                 |
+| 4 | bokeh/bokeh                       | 20379  | 2026-04-24 |  868 | y          | KEEP    | scientific data-vis (WebGL backend)                                    |
+| 5 | mapbox/mapbox-gl-js               | 12251  | 2026-04-24 | 1449 | y          | KEEP    | web-map canonical                                                      |
+| 6 | openlayers/openlayers             | 12401  | 2026-04-26 |  856 | y          | KEEP    | web-map alternate                                                      |
+| 7 | Leaflet/Leaflet                   | 44928  | 2026-04-20 |  544 | y          | KEEP    | web-map but mostly DOM (consumer-misuse query only)                    |
+| 8 | maplibre/maplibre-gl-js           |  —     |  —         |  —   |  —         | KEEP    | already in broad corpus, added consumer-misuse-shaped query            |
+| 9 | godotengine/godot                 | 109991 | 2026-04-24 | 18124| y          | KEEP    | native-engine, low expected yield (Q&A is on godotengine.org forum)    |
+| 10| godotengine/godot-docs            |  5202  | 2026-04-25 | 1071 | y          | KEEP    | native-engine docs Q&A                                                 |
+| 11| KhronosGroup/glTF-Sample-Viewer   |  1456  | 2026-04-14 |   16 | y          | KEEP    | scientific reference impl (already in broad corpus, used here for "as documented" closes only) |
+| —|  bokeh/bokehjs                    |   —    |  —         |   —  |  —         | CULL    | 404 — not a separate repo (bokehjs lives in bokeh/bokeh)               |
+| —|  blender/blender                  | 18225  | 2026-04-26 |    0 | y          | CULL    | 0 open issues on GitHub — uses GitLab/JIRA                             |
+| —|  Kitware/VTK                      |  3136  | 2026-04-26 |    0 | y          | CULL    | 0 open — uses GitLab                                                   |
+| —|  Kitware/ParaView                 |  1610  | 2026-04-26 |    5 | **n**      | CULL    | has_issues=false on GitHub                                             |
+| —|  EpicGames/UnrealEngine           | 33195  | 2026-04-26 | 2030 | **n**      | CULL    | has_issues=false                                                       |
+| —|  Unity-Technologies/UnityCsRef…   | 12799  | 2025-10-24 |   19 | **n**      | CULL    | has_issues=false                                                       |
+| —|  azimap/azimap                    |   —    |   —        |   —  |  —         | CULL    | 404                                                                    |
+
+11 frameworks kept across 4 sub-cats; 7 culled (mainly because their
+issue trackers don't live on GitHub, or `has_issues=false`). The
+native-engine sub-cat is genuinely low-resolution on GitHub: of the
+three giants only Godot exposes Issues; Unity / Unreal route bug reports
+through proprietary platforms.
+
+### Phase 2 — final query count by sub-cat
+
+| sub-cat        | issue queries | SO pairs | total |
+|----------------|---------------|----------|-------|
+| web-2d         | 5             | 1        | 6     |
+| web-map        | 4             | 0        | 4     |
+| native-engine  | 3             | 0        | 3     |
+| scientific     | 2             | 0        | 2     |
+| **TOTAL**      | **14**        | **1**    | **15**|
+
+All 15 stay inside the 30/min `/search/issues` rate-limit budget. SO
+budget unaffected (separate StackExchange limit).
+
+### Phase 3 — dry-run results (batch_quota=20)
+
+```
+Queries:                15
+URLs from discovery:    20
+After URL dedup:        19   (19/20 = 95.0% fresh)
+After thread fetch:     19   (19/19 = 100.0% fetched)
+After triage in_scope:   3   (3/19  = 15.8% accept)
+After fingerprint dedup: 3   (3/3   = 100.0% novel)
+After successful draft:  2   (2/3   = 66.7% draft success)
+
+End-to-end yield:        2/20 = 10.0%
+```
+
+Top rejection reasons:
+
+| reason                         | count |
+|--------------------------------|-------|
+| out_of_scope_not_rendering_bug | 15    |
+| out_of_scope_insufficient_info |  1    |
+| url_dedup                      |  1    |
+| draft_invalid                  |  1    |
+
+### Per-stage table — Iter 6 vs. Iter 8 (broad) vs. **Iter 11 (non-web-3d)**
+
+| Stage                 | Iter 6 (n=30, 18 grp) | Iter 8 (n=40, 22 grp) | **Iter 11 (n=20, 11 grp, non-web-3d)** |
+|-----------------------|-----------------------|-----------------------|----------------------------------------|
+| URL dedup pass        | 93.3% (28/30)         | 92.5% (37/40)         | **95.0% (19/20)**                       |
+| Thread fetch          | 100% (28/28)          | 100% (37/37)          | **100.0% (19/19)**                      |
+| Triage in_scope       | 50.0% (14/28)         | 40.5% (15/37)         | **15.8% (3/19)**                        |
+| Fingerprint novel     | 92.9% (13/14)         | 100% (15/15)          | **100.0% (3/3)**                        |
+| Drafted               | 69.2% (9/13)          | 80.0% (12/15)         | **66.7% (2/3)**                         |
+| **End-to-end yield**  | **30.0%**             | **30.0%**             | **10.0% (2/20)**                        |
+
+### Drafted candidates + repo distribution
+
+Of the 20 candidates pulled, only 2 reached the drafted state:
+
+| URL                                              | sub-cat   | bug_class           |
+|--------------------------------------------------|-----------|---------------------|
+| mapbox/mapbox-gl-js/issues/13543                 | web-map   | (drafted)           |
+| openlayers/openlayers/issues/16510               | web-map   | (drafted)           |
+
+Per-repo across all 20 candidates:
+
+| repo                              | candidates | in_scope | drafted | sub-cat       |
+|-----------------------------------|-----------:|---------:|--------:|---------------|
+| fabricjs/fabric.js                | 4          | 0        | 0       | web-2d        |
+| processing/p5.js                  | 2          | 0        | 0       | web-2d        |
+| konvajs/konva                     | 1          | 0        | 0       | web-2d        |
+| bokeh/bokeh                       | 1          | 0        | 0       | scientific    |
+| KhronosGroup/glTF-Sample-Viewer   | 1          | 1        | 0       | scientific    |
+| mapbox/mapbox-gl-js               | 2          | 1        | **1**   | web-map       |
+| openlayers/openlayers             | 2          | 1        | **1**   | web-map       |
+| Leaflet/Leaflet                   | 2          | 0        | 0       | web-map       |
+| maplibre/maplibre-gl-js           | 2          | 0        | 0       | web-map       |
+| godotengine/godot                 | 2          | 0        | 0       | native-engine |
+| godotengine/godot-docs            | 1          | 0        | 0       | native-engine |
+
+Per-sub-cat yield:
+
+| sub-cat       | candidates | in_scope | drafted | yield  |
+|---------------|-----------:|---------:|--------:|-------:|
+| web-2d        | 8          | 0        | 0       | 0.0%   |
+| web-map       | 8          | 2        | **2**   | 25.0%  |
+| native-engine | 3          | 0        | 0       | 0.0%   |
+| scientific    | 2          | 1        | 0       | 0.0%   |
+
+### Verdict — does the tuning generalize to non-web-3d Cat 2?
+
+**No, partially.** End-to-end yield fell to **10.0%**, a third of the
+broad-corpus 30%. The signature is concentrated at one stage:
+**triage in_scope dropped to 15.8% (3/19) — vs. iter-6/8's ~50/40%.**
+
+The drop is real signal, not prompt regression: the consumer-misuse-
+shaped corpus (`reason:not_planned`, `"as documented"`, `"working as
+expected"`) surfaces threads where the maintainer's response is "this
+is not a framework bug; do X instead" — i.e. **the user's app code is
+wrong but the wrong code never reaches the GPU as wrong-state**. The
+triage prompt correctly rejects these as `out_of_scope_not_rendering_bug`
+because OpenGPA can't observe app-logic mistakes that resolve before
+draw-call dispatch (event-handler bugs, prop typos, layer-z fights
+fixed by a prop change, etc.). This matches the iter-7 audit
+conclusion that the triage rejections are accurate.
+
+**Sub-cat distribution of the 2 successful drafts is informative:**
+both came from `web-map` (mapbox-gl-js, openlayers). Nothing from
+`web-2d`, `native-engine`, or `scientific`. Web-map wins because
+mapbox/openlayers consumer-misuse threads are typically "tile is
+wrong / layer renders incorrectly" — the fix is in user code but the
+wrong-render IS observable. Web-2d (Konva, fabric, mojs) skews toward
+"this prop doesn't fire / event handler bug" which is host-side. Godot
+GitHub Issues skew toward engine-internal triage and "not in scope of
+official support" closures. Scientific (bokeh, glTF-SV) is too sparse
+at n=2 to read.
+
+### Implication for mining strategy
+
+Cat 2 sub-cat expansion is **not** a free yield-boost lever. The
+existing `web-3d`-shaped triage tuning generalizes to web-map at a
+~25% rate but to web-2d / native-engine / scientific consumer-misuse
+threads at ~0% on this small sample. Two paths if Cat 2 expansion
+becomes a priority:
+
+1. **Bias future Cat 2 queries toward web-map only.** It's the only
+   non-web-3d sub-cat where consumer-misuse bugs reliably reach the
+   GPU as wrong-state.
+2. **Rework the triage prompt for web-2d / native-engine consumer-misuse**
+   to recognise app-logic-resolved-before-GPU as in-scope when the
+   wrong-render is reproducible from a minimal repro — but that
+   conflicts with the explicit out-of-scope list in
+   `triage_system.md` ("non-visual logic bugs that don't reach the
+   GPU"). This is a deliberate design boundary, so loosening it
+   would require a broader scope discussion, not a tuning pass.
+
+For now: **keep `cat2_expansion_queries.yaml` as a scout-only artefact.
+Do NOT add it to the main mining loop.** The 30%-on-broad-corpus
+ceiling remains the production benchmark.
+
+### Reproducing iter 11
+
+```bash
+PYTHONPATH=src/python python3 -m gpa.eval.curation.pipeline --dry-run-stats \
+    --batch-quota 20 \
+    --config src/python/gpa/eval/curation/queries/cat2_expansion_queries.yaml
+```
+
+Wall-time: ~7 minutes (faster than iter 8 at ~25 min for n=40 because
+many more thread-fetched candidates rejected fast at triage).
+Per-candidate JSONL: `/tmp/yield-records.jsonl` (default).

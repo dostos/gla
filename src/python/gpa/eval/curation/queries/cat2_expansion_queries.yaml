@@ -1,0 +1,105 @@
+# Cat 2 sub-category expansion (scout) — non-web-3d framework-app-dev coverage.
+#
+# Goal: dry-run-measure whether the iter 8 / iter 10 tuned triage + drafter
+# generalize beyond `web-3d` Cat 2 (the heaviest-mined sub-cat to date).
+# `generalization_queries.yaml` is left untouched — this file is the SEPARATE
+# scout corpus the flywheel-matrix update calls for.
+#
+# Sub-cat coverage (per docs/flywheel-matrix.md row 2):
+#   - web-2d        — Konva, fabricjs, mojs, p5.js (consumer-misuse-shaped)
+#   - web-map       — mapbox-gl-js, OpenLayers, Leaflet, maplibre (selectively)
+#   - native-engine — Godot only (Unreal / Unity disable Issues)
+#   - scientific    — bokeh, KhronosGroup/glTF-Sample-Viewer (Blender/VTK
+#                     route bugs via GitLab/JIRA, not GitHub Issues)
+#
+# Bias toward the CONSUMER-MISUSE bug shape described in
+# `prompts/triage_system.md`: closed as `not_planned`, "as documented",
+# "working as expected", or `is:question`-style threads where the
+# maintainer's response is "use API X / set config Y." Avoiding
+# `"fix:" is:pr is:merged` (those are framework-internal — wrong category).
+#
+# 15 queries × batch_quota=20 → per_query_cap = floor(20/15) = 1; pass 2
+# absorbs the 5 unfilled slots back into the highest-yielding queries
+# in YAML order (per discoverer fairness logic, iter 5).
+#
+# Vet table (gh api repos/*/, 2026-04-26):
+#   konvajs/konva           14k stars, 23 open, pushed 2026-04-11   KEEP
+#   fabricjs/fabric.js      31k stars, 466 open, pushed 2026-04-22  KEEP
+#   mojs/mojs               18k stars, 37 open, pushed 2026-04-14   KEEP
+#   processing/p5.js        23k stars, 513 open, pushed 2026-04-23  KEEP
+#   bokeh/bokeh             20k stars, 868 open, pushed 2026-04-24  KEEP
+#   mapbox/mapbox-gl-js     12k stars, 1449 open, pushed 2026-04-24 KEEP
+#   openlayers/openlayers   12k stars, 856 open, pushed 2026-04-26  KEEP
+#   Leaflet/Leaflet         44k stars, 544 open, pushed 2026-04-20  KEEP
+#   maplibre/maplibre-gl-js (already covered by generalization_queries.yaml,
+#                            adding consumer-misuse-shaped query only)
+#   godotengine/godot       109k stars, 18k open, pushed 2026-04-24 KEEP
+#   godotengine/godot-docs  5k stars, 1k open, pushed 2026-04-25    KEEP
+#   KhronosGroup/glTF-Sample-Viewer 1.5k stars, 16 open             KEEP
+# Culled:
+#   bokeh/bokehjs           404 (not a separate repo — it's part of bokeh/bokeh)
+#   blender/blender         has_issues=true but reports 0 open (uses GitLab)
+#   Kitware/VTK             same — reports 0 open issues (uses GitLab)
+#   Kitware/ParaView        has_issues=false on GitHub
+#   EpicGames/UnrealEngine  has_issues=false
+#   Unity-Technologies/UnityCsReference  has_issues=false
+#   azimap/azimap           404
+# Out of scope:
+#   Native-engine forum Q&A (Godot Q&A, Unity Answers) lives outside
+#     GitHub — task accepts this as low-yield budget.
+
+batch_quota: 20
+queries:
+  issue:
+    # === web-2d (5 queries) ===
+    # Konva — closed-as-not-planned (often "not how Konva works, use X")
+    - 'repo:konvajs/konva is:issue is:closed reason:not_planned "wrong" OR "incorrect" OR "not working"'
+    # fabricjs — "as documented" / "working as expected"
+    - 'repo:fabricjs/fabric.js is:issue is:closed "working as expected" OR "as documented" OR "not a bug"'
+    # fabricjs — closed-as-not-planned (api misuse)
+    - 'repo:fabricjs/fabric.js is:issue is:closed reason:not_planned "render" OR "draw" OR "canvas"'
+    # mojs — animation lib, consumer-misuse closed-as-not-planned
+    - 'repo:mojs/mojs is:issue is:closed reason:not_planned "wrong" OR "incorrect" OR "not working"'
+    # p5.js (already in generalization corpus, but only as `reason:completed`).
+    # Add a consumer-misuse-shaped query: closed as not_planned with WEBGL.
+    - 'repo:processing/p5.js is:issue is:closed reason:not_planned "WEBGL" OR "render" "wrong" OR "incorrect"'
+
+    # === web-map (4 queries) ===
+    # mapbox-gl-js — consumer-misuse closed-as-not-planned
+    - 'repo:mapbox/mapbox-gl-js is:issue is:closed reason:not_planned "layer" OR "tile" OR "render"'
+    # OpenLayers — closed as "as documented"
+    - 'repo:openlayers/openlayers is:issue is:closed "as documented" OR "working as expected" OR "by design"'
+    # Leaflet — closed-as-not-planned (Leaflet is mostly DOM-based, but
+    # plugins layer GL on top; the user-misconfig threads tend to look like
+    # "tiles look wrong" and the fix is in their setup)
+    - 'repo:Leaflet/Leaflet is:issue is:closed reason:not_planned "tile" OR "render" OR "layer"'
+    # maplibre — consumer-misuse-shaped (separate from the framework-internal
+    # `reason:completed` query already in the broad corpus)
+    - 'repo:maplibre/maplibre-gl-js is:issue is:closed reason:not_planned "wrong" OR "incorrect" OR "broken"'
+
+    # === native-engine (3 queries) — low-yield warning per task ===
+    # Godot — closed as "not planned" with rendering label. Most user-error
+    # threads on Godot live on the Q&A forum (godotengine.org), not GitHub,
+    # so expectations are tempered.
+    - 'repo:godotengine/godot is:issue is:closed reason:not_planned "rendering" OR "shader" OR "material"'
+    # Godot — "as documented" / "by design" closes
+    - 'repo:godotengine/godot is:issue is:closed "by design" OR "working as intended" "render" OR "shader"'
+    # Godot-docs — "this is documented" type threads (Q&A redirected)
+    - 'repo:godotengine/godot-docs is:issue is:closed reason:not_planned "render" OR "shader" OR "material"'
+
+    # === scientific (2 queries) ===
+    # bokeh (Python data-vis with WebGL backend) — consumer-misuse-shaped
+    - 'repo:bokeh/bokeh is:issue is:closed reason:not_planned "webgl" OR "render" OR "plot"'
+    # KhronosGroup/glTF-Sample-Viewer — reference impl, "this is correct
+    # behavior, your asset is wrong" closes
+    - 'repo:KhronosGroup/glTF-Sample-Viewer is:issue is:closed "as documented" OR "working as expected" OR "by design"'
+
+  commit: []
+
+  # === StackOverflow tag pair — web-2d coverage of canvas-based libs ===
+  # SO is biased toward consumer-misuse by structure: the asker is using a
+  # framework and got the wrong result; the highest-voted answer says "do X."
+  # 1 pair to stay inside the 5-pair informal SO budget the iter 6+ corpus
+  # uses for mix balance.
+  stackoverflow:
+    - ["konvajs", "rendering"]
