@@ -5,7 +5,8 @@ load("@rules_cc//cc:defs.bzl", "cc_binary")
 # into a single cc_binary named after the directory.
 
 # Get scenario directories: every dir that has a scenario.md in it.
-_SCENARIO_MDS = glob(["*/scenario.md"])
+# allow_empty=False: we WANT to fail loudly if the eval dir is empty.
+_SCENARIO_MDS = glob(["*/scenario.md"], allow_empty = False)
 _SCENARIO_DIRS = [m[:-len("/scenario.md")] for m in _SCENARIO_MDS]
 
 # Debug info required for native `gpa trace` DWARF scanning (see
@@ -14,9 +15,13 @@ _SCENARIO_DIRS = [m[:-len("/scenario.md")] for m in _SCENARIO_MDS]
 #     bazel build --strip=never //tests/eval/...
 # The `-fno-omit-frame-pointer` flag is also required for Phase 2 stack-local
 # reverse lookups (frame-pointer walking).
+#
+# allow_empty=True on the inner globs: maintainer-framing scenarios (r200+)
+# have scenario.md but no .c file, so the glob legitimately returns empty.
+# Without this, --incompatible_disallow_empty_glob fails the build.
 [cc_binary(
     name = d,
-    srcs = glob([d + "/*.c"]),
+    srcs = glob([d + "/*.c"], allow_empty = True),
     copts = [
         "-g",
         "-gdwarf-4",
@@ -24,4 +29,4 @@ _SCENARIO_DIRS = [m[:-len("/scenario.md")] for m in _SCENARIO_MDS]
         "-O0",
     ],
     linkopts = ["-lGL", "-lX11", "-lm"],
-) for d in _SCENARIO_DIRS if glob([d + "/*.c"])]
+) for d in _SCENARIO_DIRS if glob([d + "/*.c"], allow_empty = True)]
