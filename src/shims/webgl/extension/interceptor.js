@@ -20,6 +20,12 @@
     frontFace: 0,
     scissor: [0, 0, 0, 0],
     enabledCaps: {},
+    // Debug-marker stack — populated by glPushDebugGroup / EXT_debug_marker.
+    // Snapshotted onto every recorded drawcall as `debug_groups` so that
+    // Tier-3 commands (`gpa scene-find`, `gpa explain-draw`) can correlate
+    // framework-emitted scene annotations back to their GL draws.
+    debugGroupStack: [],
+    debugGroupErrors: 0,
   };
 
   // ---------------------------------------------------------------------------
@@ -56,10 +62,17 @@
       frameId: state.frameNumber,
       drawCalls: state.drawCalls,
       viewport: state.viewport,
+      // Number of misuses of the debug-marker stack observed this frame
+      // (e.g. popDebugGroup with empty stack). Surfaced for diagnostics —
+      // a non-zero value signals plugin or app-level bugs.
+      debugGroupErrors: state.debugGroupErrors,
       // Framebuffer readback (gl.readPixels) is expensive — deferred to on-demand
       // requests from the bridge rather than sent every frame.
     };
     state.ws.send(JSON.stringify(frameData));
+    // Reset the per-frame error counter; the stack itself MUST persist across
+    // frame boundaries because three.js may push/pop spanning a render() call.
+    state.debugGroupErrors = 0;
   }
 
   function recordDrawCall(gl, mode, vertexCount, indexCount, instanceCount) {
@@ -73,6 +86,9 @@
       viewport: state.viewport.slice(),
       textures: Object.assign({}, state.boundTextures),
       boundFramebuffer: state.boundFramebuffer,
+      // Snapshot copy — must NOT alias state.debugGroupStack since later
+      // pushes/pops would mutate already-recorded drawcalls otherwise.
+      debug_groups: state.debugGroupStack.slice(),
     });
     // Publish current (frame, drawcall) indices for orthogonal shims
     // (e.g. gpa-trace.js) to correlate their sidecar POSTs.
@@ -155,6 +171,90 @@
       state.boundFramebuffer = framebuffer;
       return origBindFramebuffer.call(this, target, framebuffer);
     };
+
+    // -- Debug markers (Tier-3 link primitive) -------------------------------
+    // WebGL2 exposes pushDebugGroup(source, id, message) natively. WebGL1
+    // contexts can opt in via the EXT_debug_marker extension which provides
+    // pushGroupMarkerEXT(message) / popGroupMarkerEXT(). The plugin layer
+    // (e.g. threejs_link_plugin.js) calls gl.pushDebugGroup(...) once per
+    // scene-graph node so each captured drawcall carries a path back to its
+    // framework-level origin.
+    //
+    // Field name on the recorded drawcall is `debug_groups` (snake_case) to
+    // match the C++ engine's `NormalizedDrawCall::debug_groups` and the
+    // Python backend `gpa.backends.base.DrawCall.debug_groups`.
+
+    function _coerceMessage(args) {
+      // WebGL2 native: pushDebugGroup(source, id, message) -> args[2] is the label.
+      // EXT_debug_marker (WebGL1): pushGroupMarkerEXT(marker) -> args[0] is the label.
+      // Accept either shape and fall back gracefully.
+      if (args.length >= 3 && typeof args[2] === 'string') return args[2];
+      if (args.length >= 1 && typeof args[0] === 'string') return args[0];
+      return '';
+    }
+
+    const origPushDebugGroup = proto.pushDebugGroup;
+    if (typeof origPushDebugGroup === 'function') {
+      proto.pushDebugGroup = function () {
+        try {
+          state.debugGroupStack.push(_coerceMessage(arguments));
+        } catch (e) {
+          state.debugGroupErrors++;
+        }
+        return origPushDebugGroup.apply(this, arguments);
+      };
+    }
+
+    const origPopDebugGroup = proto.popDebugGroup;
+    if (typeof origPopDebugGroup === 'function') {
+      proto.popDebugGroup = function () {
+        if (state.debugGroupStack.length === 0) {
+          // Pop on empty stack — clamp at 0 and increment the diagnostic
+          // counter so the bug surfaces in the per-frame payload.
+          state.debugGroupErrors++;
+        } else {
+          state.debugGroupStack.pop();
+        }
+        return origPopDebugGroup.apply(this, arguments);
+      };
+    }
+
+    // EXT_debug_marker fallback (mostly for WebGL1). The extension's methods
+    // live on the extension object returned by getExtension(), not on the
+    // context prototype, so we patch getExtension to wrap the returned ext.
+    // We only install this once per prototype.
+    const origGetExtension = proto.getExtension;
+    if (typeof origGetExtension === 'function' && !proto.__gpaGetExtensionPatched) {
+      proto.getExtension = function (extName) {
+        const ext = origGetExtension.call(this, extName);
+        if (!ext || extName !== 'EXT_debug_marker' || ext.__gpaPatched) return ext;
+        ext.__gpaPatched = true;
+        const origPushMarker = ext.pushGroupMarkerEXT;
+        const origPopMarker = ext.popGroupMarkerEXT;
+        if (typeof origPushMarker === 'function') {
+          ext.pushGroupMarkerEXT = function (marker) {
+            try {
+              state.debugGroupStack.push(typeof marker === 'string' ? marker : '');
+            } catch (e) {
+              state.debugGroupErrors++;
+            }
+            return origPushMarker.call(this, marker);
+          };
+        }
+        if (typeof origPopMarker === 'function') {
+          ext.popGroupMarkerEXT = function () {
+            if (state.debugGroupStack.length === 0) {
+              state.debugGroupErrors++;
+            } else {
+              state.debugGroupStack.pop();
+            }
+            return origPopMarker.call(this);
+          };
+        }
+        return ext;
+      };
+      proto.__gpaGetExtensionPatched = true;
+    }
 
     // -- Capability toggles --------------------------------------------------
     const origEnable = proto.enable;
