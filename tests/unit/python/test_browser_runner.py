@@ -301,3 +301,50 @@ def test_spawn_chromium_uses_subprocess_popen(tmp_path):
     assert captured["argv"] == ["/bin/true", "--foo"]
     assert captured["kwargs"]["stdout"] == subprocess.DEVNULL
     assert captured["kwargs"]["stderr"] == subprocess.PIPE
+
+
+# --------------------------------------------------------------------------- #
+# Static-server plugin-alias mount
+# --------------------------------------------------------------------------- #
+
+
+def test_static_server_serves_plugin_alias(tmp_path):
+    """`_start_static_server(extra_files=…)` exposes off-tree files at fixed URLs.
+
+    Used by ``BrowserRunner`` to ship the three.js link plugin (which lives
+    in ``src/python/gpa/framework/`` rather than under any scenario dir).
+    """
+    import urllib.request
+
+    from gpa.browser.runner import _start_static_server
+
+    # Prepare a serve_root that does NOT contain the plugin file.
+    serve_root = tmp_path / "serve"
+    serve_root.mkdir()
+    (serve_root / "index.html").write_text("<html>hi</html>")
+
+    plugin_src = tmp_path / "framework" / "threejs_link_plugin.js"
+    plugin_src.parent.mkdir()
+    plugin_body = "// plugin under test\nexport const x = 1;\n"
+    plugin_src.write_text(plugin_body)
+
+    handle = _start_static_server(
+        serve_root,
+        port=0,
+        extra_files={"/_plugins/threejs-link.js": plugin_src},
+    )
+    try:
+        # 1) Alias path returns the plugin verbatim with JS content-type.
+        url = f"http://127.0.0.1:{handle.port}/_plugins/threejs-link.js"
+        with urllib.request.urlopen(url, timeout=2.0) as resp:
+            data = resp.read().decode()
+            ctype = resp.headers.get("Content-Type", "")
+        assert data == plugin_body
+        assert "javascript" in ctype
+
+        # 2) Regular files in serve_root still work (no alias swallow).
+        url2 = f"http://127.0.0.1:{handle.port}/index.html"
+        with urllib.request.urlopen(url2, timeout=2.0) as resp:
+            assert b"<html>hi</html>" in resp.read()
+    finally:
+        handle.shutdown()

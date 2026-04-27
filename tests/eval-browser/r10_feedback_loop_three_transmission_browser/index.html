@@ -9,9 +9,15 @@
             font-family: monospace; font-size: 12px; margin-bottom: 0.5rem; }
   canvas { border: 1px solid #444; display: block; }
 </style>
-<!-- Importmap so `import 'three'` resolves to the vendored bundle. -->
+<!-- Importmap so `import 'three'` resolves to the vendored bundle, and
+     `gpa-threejs-link` resolves to the runner-mounted plugin. The runner
+     serves /_plugins/threejs-link.js via an alias on the static-server
+     handler (see src/python/gpa/browser/runner.py::_make_quiet_handler). -->
 <script type="importmap">
-{ "imports": { "three": "./framework/three.module.min.js" } }
+{ "imports": {
+    "three": "./framework/three.module.min.js",
+    "gpa-threejs-link": "/_plugins/threejs-link.js"
+} }
 </script>
 </head>
 <body>
@@ -20,7 +26,9 @@
 
 <script>
   // Hand the WebGL extension our engine endpoint + token BEFORE three.js
-  // loads, so gpa.trace.enable() finds them via localStorage.
+  // loads, so gpa.trace.enable() finds them via localStorage. Also expose
+  // the same values to the page on `window` so the Tier-3 link plugin
+  // (gpa-threejs-link) can POST scene-graph annotations to the engine.
   (function configureTrace() {
     const params = new URLSearchParams(window.location.search);
     const token  = params.get("token") || "";
@@ -31,6 +39,10 @@
                            "http://127.0.0.1:" + port + "/api/v1");
       localStorage.setItem("GPA_TRACE_MODE", "gated");
     } catch (e) { /* ignore */ }
+    // Tier-3 link plugin reads these directly (not via localStorage).
+    window.GPA_AUTH_TOKEN = token;
+    window.GPA_ENDPOINT   = "http://127.0.0.1:" + port;
+    window.GPA_FRAME_ID   = 0;
   })();
 
   function setStatus(s) {
@@ -56,6 +68,18 @@
   // and can reverse-resolve any captured uniform value back to the JS
   // expression that produced it.
   import * as THREE from 'three';
+  // Tier-3 link plugin — emits debug-markers per Mesh/Light/Group AND
+  // POSTs the flattened scene tree to /api/v1/frames/{id}/annotations.
+  // Failure to load is non-fatal (e.g. running this scenario standalone
+  // without the gpa runner). The runner serves the plugin at
+  // /_plugins/threejs-link.js via the static-server alias map.
+  let installGpaLinkPlugin = null;
+  try {
+    const mod = await import('gpa-threejs-link');
+    installGpaLinkPlugin = mod.installGpaLinkPlugin;
+  } catch (e) {
+    console.warn('[r10] gpa-threejs-link plugin not available:', e.message);
+  }
 
   const TRANSMISSION_VALUE = 0.875;   // distinctive non-trivial number for trace lookup
   const ROUGHNESS_VALUE    = 0.0625;  // another known-rare value
@@ -119,6 +143,20 @@
     setStatus("gpa.trace SDK not present (extension not loaded?)");
   }
 
+  // 4b. Install Tier-3 three.js link plugin -----------------------------
+  // Wraps renderer.render: pushes a debug-marker per node around its draw
+  // calls and POSTs the flattened scene tree to the engine annotations
+  // endpoint. The CLI commands `gpa scene-find` and `gpa scene-explain
+  // --pixel` join GL draws back to scene-graph nodes via the resulting
+  // LinkRecord set.
+  if (installGpaLinkPlugin) {
+    installGpaLinkPlugin({
+      scene, renderer,
+      endpoint: window.GPA_ENDPOINT,
+      token:    window.GPA_AUTH_TOKEN,
+    });
+  }
+
   // 5. Render N frames, then signal completion -------------------------
   const TARGET_FRAMES = 4;
   let framesRendered = 0;
@@ -132,8 +170,24 @@
       requestAnimationFrame(tick);
     } else {
       setStatus("done — " + framesRendered + " frames; signaling __gpa_done");
-      // Tiny delay so the trace POSTs (fetch keepalive) flush.
-      setTimeout(function () { window.__gpa_done = true; }, 250);
+      // Give the link-plugin's deferred POSTs (one per render() call,
+      // queued via requestAnimationFrame) a moment to flush before we
+      // POST the gpa_done sentinel so the runner waits for everything.
+      setTimeout(function () {
+        // POST gpa_done to a high frame id so it doesn't clobber the
+        // link-plugin's annotations on frames 0..3.
+        try {
+          fetch(window.GPA_ENDPOINT + "/api/v1/frames/9999/annotations", {
+            method:  "POST",
+            headers: {
+              "Content-Type":  "application/json",
+              "Authorization": "Bearer " + (window.GPA_AUTH_TOKEN || ""),
+            },
+            body: JSON.stringify({ gpa_done: true }),
+          }).catch(() => {});
+        } catch (e) { /* ignore */ }
+        window.__gpa_done = true;
+      }, 500);
     }
   }
   requestAnimationFrame(tick);

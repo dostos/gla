@@ -176,3 +176,28 @@ The pre-fix three.js ES-module bundle is vendored at
 copied verbatim from the upstream snapshot above. See
 `framework/SOURCE.txt` for SHA + license attribution
 (`framework/LICENSE.three.js` is the upstream MIT license).
+
+## Tier-3 Link Plugin
+
+This scenario imports the OpenGPA three.js link plugin
+(`src/python/gpa/framework/threejs_link_plugin.js`, mounted by the
+runner at `/_plugins/threejs-link.js`) via the `gpa-threejs-link`
+importmap entry. The plugin wraps `renderer.render()`, pushes
+`gl.pushDebugGroup` markers per Mesh/Light/Group around each node's
+draws, and POSTs the flattened scene tree to
+`/api/v1/frames/<id>/annotations`. After capture, agents can run
+
+```
+gpa scene-find name-contains:sphere --frame latest --json
+gpa scene-find type:Mesh             --frame latest
+```
+
+to traverse the scene graph.
+
+**Known gap (2026-04-27):** the WebGL extension's
+`interceptor.js` does NOT yet record `gl.pushDebugGroup` /
+`gl.popDebugGroup` calls into `NormalizedDrawCall.debug_groups`. Until
+that is wired, `gpa scene-find` matches return correct nodes but
+empty `draw_call_ids`. See
+`docs/superpowers/specs/2026-04-27-bidirectional-narrow-queries-design.md`
+section "Browser-eval smoke validation (2026-04-27)" for details.

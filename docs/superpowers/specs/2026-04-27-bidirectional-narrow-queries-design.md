@@ -532,3 +532,103 @@ default Bazel mode because at least one scenario directory
 `scenario.md` and no `.c` source. The validation captures above used
 `--incompatible_disallow_empty_glob=false` to side-step that glob
 strictness; tightening the BUILD definition is left as a follow-up.
+
+---
+
+## Browser-eval smoke validation (2026-04-27)
+
+End-to-end Tier-3 path against a live three.js page, validating that the
+shipped link plugin emits scene-graph annotations to the engine and that
+the bidirectional CLI commands return non-empty link records when the
+plugin is wired in.
+
+**Scenario:** `r10_feedback_loop_three_transmission_browser` (path
+`tests/eval-browser/r10_feedback_loop_three_transmission_browser/`).
+Existing real three.js scene was modified rather than creating a new
+smoke scenario — r10 already vendored `three.module.min.js` and was wired
+into `gpa run-browser`.
+
+**Plugin loading mechanism:** the runner's static-server handler now
+exposes the canonical plugin file
+(`src/python/gpa/framework/threejs_link_plugin.js`) at the alias path
+`/_plugins/threejs-link.js` (see
+`src/python/gpa/browser/runner.py::_make_quiet_handler`). The scenario's
+`<script type="importmap">` adds a `gpa-threejs-link` entry pointing at
+that alias, and the module script does
+`await import('gpa-threejs-link')` followed by
+`installGpaLinkPlugin({ scene, renderer, endpoint, token })`. The
+runner's URL-param injection (`?token=...&port=...`) is reused — the
+inline bootstrap script copies those params into
+`window.GPA_AUTH_TOKEN`, `window.GPA_ENDPOINT`, `window.GPA_FRAME_ID = 0`
+before the module loads.
+
+**Engine endpoints exercised:**
+
+- `POST /api/v1/frames/{0,1,2,3}/annotations` — link-plugin's
+  per-render scene-tree dump, key `"threejs-link"`.
+- `POST /api/v1/frames/9999/annotations` — `gpa_done: true` sentinel
+  (separate frame id so it does not clobber the link records).
+- `GET  /api/v1/frames/3/scene/find?predicate=…` — backing endpoint for
+  `gpa scene-find`.
+- `GET  /api/v1/frames/3/explain-pixel?x=…&y=…` — backing endpoint for
+  `gpa scene-explain --pixel`. Returned 404 (see gaps).
+- `GET  /api/v1/frames/3/draws/0/explain` — backing endpoint for
+  `gpa explain-draw`. Returned 404 (see gaps).
+
+**Sample-output table** (verbatim, truncated to ≤10 lines each):
+
+| Command | Sample output |
+|---|---|
+| `gpa scene-find name-contains:sphere --frame 3 --json` | `{"annotation_present": true, "frame_id": 3, "limit": 10, "match_count": 1, "matches": [{"draw_call_ids": [], "material_name": "feedback_glass", "path": "0c4d…/transmission_sphere", "type": "Mesh", "uuid": "48cc…"}], "predicate": "name-contains:sphere", "truncated": false}` |
+| `gpa scene-find type:Mesh --frame 3` | `scene-find frame 3  predicate=type:Mesh  matches=1 (limit 10)` / `  0c4d…/transmission_sphere  Mesh      feedback_glass                draws=[]` |
+| `gpa scene-find material:transparent --frame 3` | `scene-find frame 3  predicate=material:transparent  matches=0 (limit 10)` / `(no nodes matched)` (the glass sphere uses `MeshPhysicalMaterial` with `transmission` rather than `transparent:true`, which is correct three.js semantics for transmission). |
+| `gpa scene-explain --pixel 160,120 --frame 3 --json` | `[gpa] GET /api/v1/frames/3/explain-pixel?x=160&y=120 → HTTP 404: {"detail":"frame 3 not found"}` |
+| `gpa explain-draw 0 --frame 3 --json` | `[gpa] draw 0 not found in frame 3. Try gpa report to list draws.` |
+
+**Confirmed working:**
+
+1. The link plugin loads as an ES module via the runner's `/_plugins/`
+   alias mount.
+2. CORS allows the cross-origin POST from the static-server origin to
+   the engine.
+3. Per-render scene-tree annotations land on the engine (verified via
+   raw `GET /annotations` — frames 0–3 each contain a 4-node scene).
+4. `gpa scene-find` correctly reports `annotation_present: true` and
+   matches predicates against the captured nodes (`name-contains:sphere`
+   and `type:Mesh` both return the `transmission_sphere` Mesh with
+   `material_name: feedback_glass`).
+5. `gpa_done` sentinel POST to a high frame id (`9999`) does not
+   clobber the per-render link annotations on frames 0–3.
+
+**Known gaps (documented; will land as follow-ups):**
+
+- **`draw_call_ids: []` on every match.** The browser-side WebGL shim
+  (`src/shims/webgl/extension/interceptor.js`) does NOT intercept
+  `gl.pushDebugGroup` / `gl.popDebugGroup`. The link plugin emits these
+  calls correctly, but they pass through to the GL backend without being
+  recorded into `NormalizedDrawCall.debug_groups`, so the backend join
+  in `routes_scene_find.py::_build_path_to_drawcalls` returns an empty
+  map. Tier-2 commands (`explain-draw`, `diff-draws`) cannot show the
+  `scene_node_path` column for browser-captured frames until this is
+  fixed. **Fix:** add `pushDebugGroup`/`popDebugGroup` patches to
+  `interceptor.js` mirroring the LD_PRELOAD shim's
+  `gl_wrappers.c::gpa_gl_PushDebugGroup` behaviour, and propagate the
+  per-frame group stack into `recordDrawCall()`.
+- **No `NormalizedFrame` in the engine.** The browser Phase-1 MVP runner
+  captures reflection-trace sources and (now) Tier-3 annotations, but
+  the WebSocket bridge that would forward draw-call data to the engine
+  (`src/shims/webgl/bridge/bridge.js`) is not run by `gpa run-browser`.
+  As a result `/frames` is empty and `gpa explain-draw` /
+  `gpa scene-explain --pixel` cannot resolve any draw. The annotations
+  endpoint is keyed by frame id only, so `scene-find` works against
+  whatever frame id the plugin chose — but everything that joins to a
+  draw call is gated on the bridge being live. **Fix:** wire the bridge
+  in alongside the static server in `BrowserRunner.run()`, or let the
+  link plugin POST link-records directly via the JS-proxy fallback (§2.1
+  mechanism B).
+- **Time-of-day reservation.** `gpa_done` is POSTed to frame 9999 to
+  avoid overwriting link annotations on frames 0–3. The
+  `AnnotationsStore.put()` semantics overwrite the entire frame's dict;
+  if a future plugin wants to coexist with `gpa_done` on the same frame
+  it would need a merge-on-write put endpoint. Out of scope for this
+  smoke test.

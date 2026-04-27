@@ -91,11 +91,55 @@ def spawn_chromium(argv: List[str]) -> subprocess.Popen:
 # --------------------------------------------------------------------------- #
 
 
-class _QuietHandler(http.server.SimpleHTTPRequestHandler):
-    """``SimpleHTTPRequestHandler`` that doesn't spam stderr for each request."""
+def _make_quiet_handler(
+    extra_files: Optional[Dict[str, Path]] = None,
+):
+    """Return a ``SimpleHTTPRequestHandler`` subclass with optional aliasing.
 
-    def log_message(self, *_args, **_kwargs) -> None:  # pragma: no cover - noise suppression
-        return
+    *extra_files* maps URL path (e.g. ``/_plugins/threejs-link.js``) to an
+    absolute file on disk that lives outside the static-server root. Used
+    to expose first-party framework plugins (e.g. the three.js link
+    plugin) at a stable URL without copying them into every scenario.
+    """
+    aliases: Dict[str, Path] = dict(extra_files or {})
+
+    class _QuietHandler(http.server.SimpleHTTPRequestHandler):
+        """``SimpleHTTPRequestHandler`` with quiet logging + alias mounts."""
+
+        def log_message(self, *_args, **_kwargs) -> None:  # pragma: no cover
+            return
+
+        def do_GET(self) -> None:  # noqa: N802 - matches stdlib casing
+            # Strip query string before alias lookup.
+            path = self.path.split("?", 1)[0]
+            target = aliases.get(path)
+            if target is not None and target.is_file():
+                try:
+                    data = target.read_bytes()
+                except OSError:
+                    self.send_error(500, "alias read failed")
+                    return
+                self.send_response(200)
+                # Heuristic content-type; .js for our plugin path.
+                ctype = "application/javascript" if str(target).endswith(".js") \
+                    else "application/octet-stream"
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(data)))
+                # Permit cross-origin imports (the engine is on a different
+                # port, but this isn't strictly required for same-origin
+                # ``<script src>`` from the scenario page).
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            super().do_GET()
+
+    return _QuietHandler
+
+
+# Back-compat alias for any external callers / tests that referenced the
+# previous concrete class name. Resolves to the no-aliases variant.
+_QuietHandler = _make_quiet_handler()
 
 
 class _ThreadingTCPServer(socketserver.ThreadingTCPServer):
@@ -104,18 +148,24 @@ class _ThreadingTCPServer(socketserver.ThreadingTCPServer):
 
 
 def _start_static_server(
-    serve_root: Path, port: int = 0
+    serve_root: Path,
+    port: int = 0,
+    extra_files: Optional[Dict[str, Path]] = None,
 ) -> "_StaticServerHandle":
     """Spin up a :mod:`http.server` thread rooted at *serve_root*.
 
     Returns a handle exposing ``port`` and ``shutdown()``. ``port=0`` picks
-    an ephemeral port.
+    an ephemeral port. *extra_files* mounts arbitrary on-disk files at
+    fixed URL paths — used to serve first-party plugins (e.g. the
+    three.js link plugin) at ``/_plugins/...`` regardless of which
+    scenario is running.
     """
     root_str = str(serve_root.resolve())
+    handler_cls = _make_quiet_handler(extra_files)
 
     def _handler_factory(*args, **kwargs):
         # Directory kwarg requires Python 3.7+.
-        return _QuietHandler(*args, directory=root_str, **kwargs)
+        return handler_cls(*args, directory=root_str, **kwargs)
 
     server = _ThreadingTCPServer(("127.0.0.1", port), _handler_factory)
     actual_port = server.server_address[1]
@@ -190,7 +240,20 @@ class BrowserRunner:
         # 2. Static server rooted at the parent of scenario_dir so the URL
         #    is http://localhost:<port>/<scenario_name>/index.html.
         serve_root = opts.scenario_dir.parent.resolve()
-        static = _start_static_server(serve_root, port=opts.static_port)
+        # Mount first-party framework plugins at stable URLs so scenarios
+        # can `<script src="/_plugins/threejs-link.js">` regardless of
+        # where the scenario lives. The plugin file ships in the gpa
+        # python package next to the runner.
+        plugin_path = (
+            Path(__file__).resolve().parent.parent
+            / "framework" / "threejs_link_plugin.js"
+        )
+        extra_files: Dict[str, Path] = {}
+        if plugin_path.is_file():
+            extra_files["/_plugins/threejs-link.js"] = plugin_path
+        static = _start_static_server(
+            serve_root, port=opts.static_port, extra_files=extra_files,
+        )
 
         token = opts.session.read_token()
         engine_port = opts.session.read_port()
