@@ -304,7 +304,7 @@ def _collect_candidates_for_value(
 
 
 # ----------------------------------------------------------------------
-# Value extraction for the uniform / texture routes
+# Value extraction for the uniform / value routes
 # ----------------------------------------------------------------------
 
 def _param_field(p: Any, key: str, default: Any = None) -> Any:

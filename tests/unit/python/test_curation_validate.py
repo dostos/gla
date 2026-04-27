@@ -349,3 +349,80 @@ def test_validator_uses_llm_fallback_on_ambiguous(tmp_path):
     result = v.validate(draft)
     assert result.ok is True
     assert "LLM fallback" in result.reason
+
+
+def test_validator_accepts_empty_framebuffer_for_metadata_only_signatures(tmp_path):
+    """The Tier-1 native backend returns ``framebuffer_png=b""``; metadata-only
+    matchers (``missing_draw_call`` / ``unexpected_state_in_draw`` /
+    ``nan_or_inf_in_uniform``) must still validate against ``metadata`` rather
+    than failing with "no framebuffer captured"."""
+    scenario_id = "r_test_meta_only"
+    draft = DraftResult(
+        scenario_id=scenario_id,
+        c_source="// SOURCE: https://x/1\nint main(){return 0;}",
+        md_body=(
+            "# R_TEST_META_ONLY\n"
+            "## User Report\nb\n## Expected Correct Output\ne\n## Actual Broken Output\na\n"
+            "## Ground Truth\n> quote\ndiag\n"
+            + _FIX_BLOCK +
+            "## Difficulty Rating\n3/5\n"
+            "## Adversarial Principles\n- p\n## How GPA Helps\nh\n"
+            "## Source\n- **URL**: https://x/1\n## Tier\ncore\n## API\nopengl\n"
+            "## Framework\nnone\n"
+            "## Bug Signature\n```yaml\n"
+            "type: missing_draw_call\n"
+            "spec:\n  expected_count: 3\n"
+            "```\n"
+            "## Predicted GPA Helpfulness\n- **Verdict**: yes\n- **Reasoning**: x\n"
+        ),
+    )
+    fake_runner = MagicMock()
+    fake_runner.build_and_capture.return_value = {
+        "framebuffer_png": b"",
+        "metadata": {"draw_call_count": 2, "draw_calls": []},
+    }
+    v = Validator(eval_dir=tmp_path, runner=fake_runner)
+    result = v.validate(draft)
+    # `missing_draw_call` matches when actual < expected (2 < 3 → matched).
+    # The point of this test is the absence of "no framebuffer captured" — i.e.
+    # the validator must reach the matcher despite ``framebuffer_png == b""``.
+    assert "no framebuffer captured" not in result.reason, (
+        f"empty framebuffer must not abort metadata-only signature; got reason={result.reason!r}"
+    )
+    assert result.ok is True
+    assert "signature matched" in result.reason
+
+
+def test_validator_still_rejects_pixel_signature_with_empty_framebuffer(tmp_path):
+    """Pixel-based matchers (``framebuffer_dominant_color``,
+    ``color_histogram_in_region``) genuinely need PNG bytes — empty bytes must
+    still fast-fail for those signature types."""
+    scenario_id = "r_test_pixel_needs_fb"
+    draft = DraftResult(
+        scenario_id=scenario_id,
+        c_source="// SOURCE: https://x/1\nint main(){return 0;}",
+        md_body=(
+            "# R_TEST_PIXEL_NEEDS_FB\n"
+            "## User Report\nb\n## Expected Correct Output\ne\n## Actual Broken Output\na\n"
+            "## Ground Truth\n> quote\ndiag\n"
+            + _FIX_BLOCK +
+            "## Difficulty Rating\n3/5\n"
+            "## Adversarial Principles\n- p\n## How GPA Helps\nh\n"
+            "## Source\n- **URL**: https://x/1\n## Tier\ncore\n## API\nopengl\n"
+            "## Framework\nnone\n"
+            "## Bug Signature\n```yaml\n"
+            "type: framebuffer_dominant_color\n"
+            "spec:\n  color: [1.0, 0.0, 0.0, 1.0]\n  tolerance: 0.1\n"
+            "```\n"
+            "## Predicted GPA Helpfulness\n- **Verdict**: yes\n- **Reasoning**: x\n"
+        ),
+    )
+    fake_runner = MagicMock()
+    fake_runner.build_and_capture.return_value = {
+        "framebuffer_png": b"",
+        "metadata": {"draw_call_count": 0, "draw_calls": []},
+    }
+    v = Validator(eval_dir=tmp_path, runner=fake_runner)
+    result = v.validate(draft)
+    assert result.ok is False
+    assert result.reason == "no framebuffer captured"

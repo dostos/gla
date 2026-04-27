@@ -123,8 +123,8 @@ GPA_TOOLS = [
     {
         "name": "query_frame",
         "description": (
-            "Get frame overview, draw call list, or framebuffer data. "
-            "Use 'overview' to see draw call count and framebuffer size. "
+            "Get frame overview or draw call list. "
+            "Use 'overview' to see draw call count and frame summary. "
             "Use 'drawcalls' to list all draw calls with their details."
         ),
         "input_schema": {

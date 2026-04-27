@@ -267,9 +267,14 @@ class Validator:
         except Exception as e:
             return ValidationResult(ok=False, reason=f"build/run failed: {e}")
 
-        fb = capture.get("framebuffer_png")
+        fb = capture.get("framebuffer_png") or b""
         meta = capture.get("metadata") or {}
-        if not fb:
+        sig_type = scenario.bug_signature.get("type")
+        # Pixel-based matchers need real PNG bytes; metadata-only matchers
+        # (missing_draw_call, unexpected_state_in_draw, nan_or_inf_in_uniform)
+        # operate on `meta` and tolerate empty framebuffer bytes.
+        _PIXEL_MATCHERS = {"color_histogram_in_region", "framebuffer_dominant_color"}
+        if sig_type in _PIXEL_MATCHERS and not fb:
             return ValidationResult(ok=False, reason="no framebuffer captured")
 
         # Signature match

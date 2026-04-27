@@ -166,7 +166,8 @@ class ScenarioRunner:
         """Build the scenario via Bazel, run it under Xvfb with OpenGPA shim, capture frame.
 
         Returns a dict with keys:
-          - framebuffer_png: bytes of the captured PNG
+          - framebuffer_png: bytes (always empty under the Tier-1 native
+            backend; metadata-only signature matchers tolerate this)
           - metadata: dict with draw_call_count and draw_calls
         """
         # 1. Build
