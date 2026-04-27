@@ -34,13 +34,14 @@ def _have_node() -> bool:
 def test_js_interceptor_debug_groups():
     """Run the JS debug-marker harness and assert it exits 0.
 
-    Eight cases cover the full acceptance matrix for the Tier-3 link
+    Cases cover the full acceptance matrix for the Tier-3 link
     primitive: empty stack, single push+pop, nested push+pop, draw
     after pop reverts to outer group, popDebugGroup on empty stack
     increments debugGroupErrors, WebGL1 + EXT_debug_marker fallback
     populates the same field, WebGL1 without EXT_debug_marker is a
-    silent no-op, and the per-frame error counter resets between
-    sends.
+    silent no-op, the per-frame error counter resets between sends,
+    and the message-coercion helper handles 0-arg + single-arg
+    fallback paths.
     """
     assert JS_TEST.exists(), f"missing JS parity harness: {JS_TEST}"
     proc = subprocess.run(
