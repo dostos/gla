@@ -22,8 +22,6 @@ from pathlib import Path
 from typing import List, Optional, Sequence
 
 from gpa.cli import __version__
-from gpa.cli.commands import annotate as annotate_cmd
-from gpa.cli.commands import annotations as annotations_cmd
 from gpa.cli.commands import check as check_cmd
 from gpa.cli.commands import check_config as check_config_cmd
 from gpa.cli.commands import diff_draws as diff_draws_cmd
@@ -59,7 +57,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"gpa {__version__}")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p_start = sub.add_parser("start", help="Start a persistent engine session")
+    p_start = sub.add_parser(
+        "start",
+        help="Start a persistent engine session",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  gpa start                                       # 1) default port 18080\n"
+            "  gpa start --port 0                              # 2) auto-pick free port\n"
+            "  gpa start --no-daemon                           # 3) keep engine attached\n"
+            "  eval \"$(gpa start)\"                             # 4) export env to shell\n"
+        ),
+    )
     _add_session_arg(p_start)
     p_start.add_argument(
         "--port",
@@ -81,15 +90,43 @@ def build_parser() -> argparse.ArgumentParser:
         help="Keep engine in the current process group",
     )
 
-    p_stop = sub.add_parser("stop", help="Terminate the active session")
+    p_stop = sub.add_parser(
+        "stop",
+        help="Terminate the active session",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  gpa stop                                        # 1) stop active session\n"
+            "  gpa stop --session /tmp/gpa-abc                 # 2) stop a specific session\n"
+            "  GPA_SESSION=/tmp/gpa-abc gpa stop               # 3) via env\n"
+        ),
+    )
     _add_session_arg(p_stop)
 
-    p_env = sub.add_parser("env", help="Print env exports for the active session")
+    p_env = sub.add_parser(
+        "env",
+        help="Print env exports for the active session",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  gpa env                                         # 1) print exports\n"
+            "  eval \"$(gpa env)\"                               # 2) load into shell\n"
+            "  gpa env --session /tmp/gpa-abc                  # 3) specific session\n"
+        ),
+    )
     _add_session_arg(p_env)
 
     p_run = sub.add_parser(
         "run",
         help="Launch a target under an embedded engine + shim",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  gpa run -- ./my_gl_app                          # 1) simplest\n"
+            "  gpa run --timeout 5 -- ./my_gl_app              # 2) auto-kill after 5s\n"
+            "  gpa run --port 0 -- ./my_gl_app                 # 3) ephemeral port\n"
+            "  gpa run -- bazel-bin/tests/eval/r4_3d_map       # 4) eval scenario\n"
+        ),
     )
     _add_session_arg(p_run)
     p_run.add_argument("--port", type=int, default=18080, help="REST API port")
@@ -109,6 +146,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_runb = sub.add_parser(
         "run-browser",
         help="Run a browser-mode eval scenario under Chromium + WebGL shim",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  gpa run-browser --scenario r21_threejs_envmap                # 1) simplest\n"
+            "  gpa run-browser --scenario r21_threejs_envmap --timeout 60   # 2) longer wait\n"
+            "  gpa run-browser --scenario my_scn --keep-open                # 3) leave chrome\n"
+            "  gpa run-browser --scenario my_scn --chromium-path /usr/bin/chromium\n"
+        ),
     )
     _add_session_arg(p_runb)
     p_runb.add_argument("--scenario", required=True,
@@ -126,6 +171,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_report = sub.add_parser(
         "report",
         help="Run every diagnostic check on a captured frame",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  gpa report                                      # 1) latest frame\n"
+            "  gpa report --frame 7                            # 2) specific frame\n"
+            "  gpa report --json                               # 3) machine-readable\n"
+            "  gpa report --only feedback-loops,nan-uniforms   # 4) subset\n"
+            "  gpa report --skip empty-capture                 # 5) drop noisy checks\n"
+        ),
     )
     _add_session_arg(p_report)
     p_report.add_argument("--frame", type=int, default=None,
@@ -141,6 +195,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_check = sub.add_parser(
         "check",
         help="Drill-down into a single diagnostic",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  gpa check feedback-loops                        # 1) one check\n"
+            "  gpa check nan-uniforms --frame 7                # 2) specific frame\n"
+            "  gpa check feedback-loops --dc 12                # 3) one draw call\n"
+            "  gpa check empty-capture --json                  # 4) JSON\n"
+        ),
     )
     _add_session_arg(p_check)
     p_check.add_argument("name", help="Check name (e.g. feedback-loops)")
@@ -154,7 +216,19 @@ def build_parser() -> argparse.ArgumentParser:
     # in favour of the narrow ``gpa explain-draw`` and ``gpa check-config``
     # commands. The remaining three (frame / drawcalls / pixel) have no narrow
     # replacement yet.
-    p_dump = sub.add_parser("dump", help="Raw REST data access")
+    p_dump = sub.add_parser(
+        "dump",
+        help="Raw REST data access (frame | drawcalls | pixel)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  gpa dump frame                                  # 1) latest frame overview\n"
+            "  gpa dump drawcalls --frame 7                    # 2) draw-call list\n"
+            "  gpa dump pixel --x 100 --y 200                  # 3) pixel at (100,200)\n"
+            "  gpa dump frame --format json                    # 4) JSON output\n"
+            "  gpa dump drawcalls --format compact             # 5) one line per row\n"
+        ),
+    )
     _add_session_arg(p_dump)
     p_dump.add_argument("what", help="frame | drawcalls | pixel")
     p_dump.add_argument("--frame", type=int, default=None)
@@ -175,7 +249,18 @@ def build_parser() -> argparse.ArgumentParser:
                         help=argparse.SUPPRESS)
 
     # ---- frames -----------------------------------------------------------
-    p_frames = sub.add_parser("frames", help="List captured frame ids")
+    p_frames = sub.add_parser(
+        "frames",
+        help="List captured frame ids",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  gpa frames                                      # 1) one id per line\n"
+            "  gpa frames --json                               # 2) JSON {\"frames\":[…]}\n"
+            "  gpa frames | wc -l                              # 3) count captured frames\n"
+            "  gpa frames | tail -1 | xargs -I% gpa report --frame %  # 4) latest\n"
+        ),
+    )
     _add_session_arg(p_frames)
     p_frames.add_argument(
         "--json", dest="json_output", action="store_true",
@@ -191,23 +276,6 @@ def build_parser() -> argparse.ArgumentParser:
     scene_find_cmd.add_subparser(sub)
     scene_explain_cmd.add_subparser(sub)
 
-    # ---- annotate ---------------------------------------------------------
-    p_annotate = sub.add_parser(
-        "annotate",
-        help="POST KEY=VALUE annotation pairs to a frame",
-    )
-    _add_session_arg(p_annotate)
-    p_annotate.add_argument("--frame", type=int, required=True)
-    p_annotate.add_argument("pairs", nargs="+", help="KEY=VALUE pairs")
-
-    # ---- annotations ------------------------------------------------------
-    p_ann = sub.add_parser(
-        "annotations",
-        help="Retrieve the annotation payload for a frame",
-    )
-    _add_session_arg(p_ann)
-    p_ann.add_argument("--frame", type=int, required=True)
-
     # ---- trace ------------------------------------------------------------
     p_trace = sub.add_parser(
         "trace",
@@ -220,24 +288,35 @@ def build_parser() -> argparse.ArgumentParser:
     trace_sub = p_trace.add_subparsers(dest="trace_cmd", required=True)
 
     p_t_uniform = trace_sub.add_parser(
-        "uniform", help="Trace a uniform by name (requires --dc)"
+        "uniform",
+        help="Trace a uniform by name (requires --dc)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  gpa trace uniform uZoom --dc 4                  # 1) simplest\n"
+            "  gpa trace uniform uZoom --dc 4 --frame 7        # 2) specific frame\n"
+            "  gpa trace uniform uZoom --dc 4 --json           # 3) JSON\n"
+            "  gpa scene-find uniform-has-nan --json \\\n"
+            "    | jq -r '.matches[].draw_call_ids[0]' \\\n"
+            "    | xargs -I% gpa trace uniform uColor --dc %   # 4) pipeline\n"
+        ),
     )
     p_t_uniform.add_argument("name", help="Uniform name (e.g. uZoom)")
     p_t_uniform.add_argument("--frame", type=int, default=None)
     p_t_uniform.add_argument("--dc", type=int, default=None)
     p_t_uniform.add_argument("--json", dest="json_output", action="store_true")
 
-    p_t_texture = trace_sub.add_parser(
-        "texture", help="Trace a texture id (requires --dc)"
-    )
-    p_t_texture.add_argument("tex_id", type=int, help="GL texture object id")
-    p_t_texture.add_argument("--frame", type=int, default=None)
-    p_t_texture.add_argument("--dc", type=int, default=None)
-    p_t_texture.add_argument("--json", dest="json_output", action="store_true")
-
     p_t_value = trace_sub.add_parser(
         "value",
         help="Trace a literal value (number/string/bool) across the frame",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  gpa trace value 16.58                           # 1) frame-wide search\n"
+            "  gpa trace value 16.58 --dc 4                    # 2) one draw call\n"
+            "  gpa trace value hello --frame 7 --json          # 3) string literal\n"
+            "  gpa trace value true                            # 4) boolean\n"
+        ),
     )
     p_t_value.add_argument("literal", help="Literal value (e.g. 16.58 or hello)")
     p_t_value.add_argument("--frame", type=int, default=None)
@@ -361,22 +440,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             frame=args.frame,
             json_output=args.json_output,
         )
-    if args.cmd == "annotate":
-        return annotate_cmd.run(
-            frame=args.frame,
-            pairs=args.pairs,
-            session_dir=args.session,
-        )
-    if args.cmd == "annotations":
-        return annotations_cmd.run(
-            frame=args.frame,
-            session_dir=args.session,
-        )
     if args.cmd == "trace":
         if args.trace_cmd == "uniform":
             target = args.name
-        elif args.trace_cmd == "texture":
-            target = str(args.tex_id)
         elif args.trace_cmd == "value":
             target = args.literal
         else:  # pragma: no cover

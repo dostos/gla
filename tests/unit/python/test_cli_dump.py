@@ -1,4 +1,4 @@
-"""Tests for ``gpa dump`` output formats and ``gpa frames``/``annotate``."""
+"""Tests for ``gpa dump`` output formats and ``gpa frames``."""
 
 from __future__ import annotations
 
@@ -8,8 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from gpa.cli.commands import annotate as annotate_cmd
-from gpa.cli.commands import annotations as annotations_cmd
 from gpa.cli.commands import dump as dump_cmd
 from gpa.cli.commands import frames as frames_cmd
 from gpa.cli.rest_client import RestClient, RestError
@@ -273,27 +271,3 @@ def test_frames_falls_back_to_latest_when_no_list_route(
     assert out == "1"
 
 
-# --------------------------------------------------------------------------- #
-# annotate / annotations
-# --------------------------------------------------------------------------- #
-
-
-def test_annotate_and_get_roundtrip(session_dir, injected_rest, monkeypatch):
-    monkeypatch.setenv("GPA_SESSION", str(session_dir))
-
-    post_buf = io.StringIO()
-    rc = annotate_cmd.run(
-        frame=1, pairs=["scene=main", "count=7"],
-        client=injected_rest, print_stream=post_buf,
-    )
-    assert rc == 0
-    posted = json.loads(post_buf.getvalue())
-    assert posted.get("ok") is True
-
-    get_buf = io.StringIO()
-    rc2 = annotations_cmd.run(
-        frame=1, client=injected_rest, print_stream=get_buf,
-    )
-    assert rc2 == 0
-    stored = json.loads(get_buf.getvalue())
-    assert stored == {"scene": "main", "count": 7}

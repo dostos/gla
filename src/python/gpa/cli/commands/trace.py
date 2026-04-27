@@ -175,45 +175,6 @@ def run_uniform(
     return 0
 
 
-def run_texture(
-    *,
-    tex_id: int,
-    frame: Optional[int] = None,
-    dc: Optional[int] = None,
-    session_dir: Optional[Path] = None,
-    json_output: bool = False,
-    client: Optional[RestClient] = None,
-    print_stream=None,
-) -> int:
-    if print_stream is None:
-        print_stream = sys.stdout
-    client, err = _connect(session_dir=session_dir, client=client)
-    if err is not None:
-        return err
-    try:
-        dc_id = _require_dc(dc)
-    except ValueError as exc:
-        print(f"[gpa] {exc}", file=sys.stderr)
-        return 2
-
-    frame_id = _resolve_frame(client, frame)
-    if frame_id is None:
-        print("[gpa] no frames captured yet", file=sys.stderr)
-        return 4
-
-    path = (
-        f"/api/v1/frames/{frame_id}/drawcalls/{dc_id}"
-        f"/trace/texture/{int(tex_id)}"
-    )
-    try:
-        resp = client.get_json(path)
-    except RestError as exc:
-        print(f"[gpa] {exc}", file=sys.stderr)
-        return 1
-    _emit(resp, json_output=json_output, print_stream=print_stream)
-    return 0
-
-
 def run_value(
     *,
     literal: str,
@@ -272,17 +233,6 @@ def run(
     if subcommand == "uniform":
         return run_uniform(
             name=target, frame=frame, dc=dc, session_dir=session_dir,
-            json_output=json_output, client=client, print_stream=print_stream,
-        )
-    if subcommand == "texture":
-        try:
-            tid = int(target)
-        except (TypeError, ValueError):
-            print(f"[gpa] texture id must be an integer, got: {target!r}",
-                  file=sys.stderr)
-            return 2
-        return run_texture(
-            tex_id=tid, frame=frame, dc=dc, session_dir=session_dir,
             json_output=json_output, client=client, print_stream=print_stream,
         )
     if subcommand == "value":

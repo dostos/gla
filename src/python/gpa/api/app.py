@@ -167,7 +167,6 @@ def create_app(provider=None, auth_token: str = "",
     from .routes_metadata import router as metadata_router
     from .routes_objects import router as objects_router
     from .routes_passes import router as passes_router
-    from .routes_explain import router as explain_router
     from .routes_annotations import router as annotations_router
     from .routes_trace import router as trace_router
     from .routes_check_config import router as check_config_router
@@ -185,7 +184,6 @@ def create_app(provider=None, auth_token: str = "",
     app.include_router(metadata_router, prefix="/api/v1")
     app.include_router(objects_router, prefix="/api/v1")
     app.include_router(passes_router, prefix="/api/v1")
-    app.include_router(explain_router, prefix="/api/v1")
     app.include_router(annotations_router, prefix="/api/v1")
     app.include_router(trace_router, prefix="/api/v1")
     app.include_router(check_config_router, prefix="/api/v1")

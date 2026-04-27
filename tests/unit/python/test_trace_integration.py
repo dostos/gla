@@ -348,45 +348,6 @@ def test_trace_plain_text_shape_matches_spec(client):
 
 
 # ----------------------------------------------------------------------
-# Texture tracing
-# ----------------------------------------------------------------------
-
-
-def test_trace_texture_reverse_lookup(client):
-    """Tex id 7 is bound at dc 0 (from conftest); seed a payload that
-    claims ``layer.targetTexture`` holds the value 7 and verify CLI
-    renders it.
-    """
-    client.post(
-        "/api/v1/frames/1/drawcalls/0/sources",
-        json={
-            "value_index": {
-                "n:7": [
-                    {"path": "layer.targetTexture", "type": "number",
-                     "confidence": "high"},
-                ],
-            },
-        },
-        headers=AUTH_HEADERS,
-    )
-    rest = _rest_client(client)
-    buf = io.StringIO()
-    rc = trace_cmd.run_texture(
-        tex_id=7, frame=1, dc=0, client=rest, print_stream=buf,
-        json_output=True,
-    )
-    assert rc == 0
-    import json as _json
-    payload = _json.loads(buf.getvalue())
-    assert payload["value"] == 7
-    assert any(
-        c["path"] == "layer.targetTexture" for c in payload["candidates"]
-    )
-    # Texture metadata surfaced for the agent.
-    assert payload.get("texture", {}).get("width") == 800
-
-
-# ----------------------------------------------------------------------
 # Negative paths
 # ----------------------------------------------------------------------
 

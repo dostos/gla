@@ -8,8 +8,6 @@ Phase 2 (this module): query-side endpoints for reverse-lookup:
 
 - ``GET /frames/{id}/drawcalls/{dc}/trace/uniform/{name}`` — resolve a
   decoded uniform to its value, then find app-level fields that hold it.
-- ``GET /frames/{id}/drawcalls/{dc}/trace/texture/{tex_id}`` — find
-  app-level fields that hold the given texture id.
 - ``GET /frames/{id}/drawcalls/{dc}/trace/value?query=<literal>`` —
   direct reverse-lookup on a numeric / string literal.
 
@@ -340,20 +338,6 @@ def _find_uniform_value(dc, name: str) -> Optional[Any]:
     return None
 
 
-def _find_texture_for_slot(dc, tex_id: int) -> Optional[Dict[str, Any]]:
-    for t in getattr(dc, "textures", None) or []:
-        tid = _param_field(t, "texture_id")
-        if tid == tex_id:
-            return {
-                "slot": _param_field(t, "slot"),
-                "texture_id": tid,
-                "width": _param_field(t, "width"),
-                "height": _param_field(t, "height"),
-                "format": _param_field(t, "format"),
-            }
-    return None
-
-
 def _no_match_hint() -> str:
     return (
         "no app-level field currently holds this value — value may be "
@@ -444,35 +428,6 @@ def trace_uniform(
         frame_id=frame_id, dc_id=dc_id, field=name, value=value,
         candidates=cands, matched_hash=mhash, store=store,
     ))
-
-
-@router.get("/frames/{frame_id}/drawcalls/{dc_id}/trace/texture/{tex_id}")
-def trace_texture(
-    frame_id: Union[int, str], dc_id: int, tex_id: int, request: Request,
-):
-    """Reverse-lookup the app-level field(s) holding *tex_id*."""
-    provider = request.app.state.provider
-    frame_id = resolve_frame_id(frame_id, provider)
-    dc = provider.get_draw_call(frame_id, dc_id)
-    if dc is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Draw call {dc_id} in frame {frame_id} not found",
-        )
-    tex_entry = _find_texture_for_slot(dc, tex_id)
-    # Not being bound at this dc is fine — we still answer the
-    # reverse-lookup query. tex_entry is surfaced as a convenience field.
-    store = request.app.state.trace_store
-    cands, mhash = _collect_candidates_for_value(
-        store, frame_id, dc_id, tex_id
-    )
-    resp = _build_response(
-        frame_id=frame_id, dc_id=dc_id, field=f"texture:{tex_id}",
-        value=tex_id, candidates=cands, matched_hash=mhash, store=store,
-    )
-    if tex_entry is not None:
-        resp["texture"] = tex_entry
-    return safe_json_response(resp)
 
 
 @router.get("/frames/{frame_id}/drawcalls/{dc_id}/trace/value")

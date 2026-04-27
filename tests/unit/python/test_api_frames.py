@@ -43,27 +43,3 @@ class TestFrameOverviewById:
         assert resp.status_code == 401
 
 
-class TestFramebuffer:
-    def test_get_framebuffer_501(self, client, auth_headers):
-        """Framebuffer readback is not yet implemented."""
-        resp = client.get("/api/v1/frames/1/framebuffer", headers=auth_headers)
-        assert resp.status_code == 501
-
-    def test_get_framebuffer_nonexistent_501(self, client, auth_headers):
-        """Framebuffer readback is not yet implemented for any frame."""
-        resp = client.get("/api/v1/frames/9999/framebuffer", headers=auth_headers)
-        assert resp.status_code == 501
-
-    def test_get_framebuffer_depth_501(self, client, auth_headers):
-        """Depth buffer readback is not yet implemented."""
-        resp = client.get(
-            "/api/v1/frames/1/framebuffer/depth", headers=auth_headers
-        )
-        assert resp.status_code == 501
-
-    def test_get_framebuffer_depth_nonexistent_501(self, client, auth_headers):
-        """Depth buffer readback is not yet implemented for any frame."""
-        resp = client.get(
-            "/api/v1/frames/9999/framebuffer/depth", headers=auth_headers
-        )
-        assert resp.status_code == 501

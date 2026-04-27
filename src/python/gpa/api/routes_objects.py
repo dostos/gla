@@ -19,18 +19,6 @@ async def list_objects(frame_id: int, request: Request):
     return safe_json_response({"frame_id": frame_id, "objects": [asdict(o) for o in objects]})
 
 
-@router.get("/frames/{frame_id}/objects/at/{x}/{y}")
-async def object_at_pixel(frame_id: int, x: int, y: int, request: Request):
-    fqe = request.app.state.framework_query_engine
-    if not fqe:
-        raise HTTPException(status_code=501, detail="Framework query engine not configured")
-    # For now, explain_pixel doesn't do draw call attribution
-    explanation = fqe.explain_pixel(frame_id, x, y)
-    if not explanation:
-        raise HTTPException(status_code=404, detail="No pixel explanation available")
-    return safe_json_response(asdict(explanation))
-
-
 @router.get("/frames/{frame_id}/objects/{name}")
 async def get_object(frame_id: int, name: str, request: Request):
     fqe = request.app.state.framework_query_engine

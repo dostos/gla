@@ -121,17 +121,3 @@ def test_get_pass_404(fqe_client):
     assert resp.status_code == 404
 
 
-# ---------------------------------------------------------------------------
-# /objects/at/{x}/{y}
-# ---------------------------------------------------------------------------
-
-def test_object_at_pixel_404_when_no_explanation(fqe_client):
-    client, _ = fqe_client
-    resp = client.get("/api/v1/frames/1/objects/at/100/200", headers=AUTH_HEADERS)
-    assert resp.status_code == 404
-
-
-def test_object_at_pixel_no_auth_401(fqe_client):
-    client, _ = fqe_client
-    resp = client.get("/api/v1/frames/1/objects/at/100/200")
-    assert resp.status_code == 401

@@ -224,19 +224,6 @@ class TestFrameworkIntegration:
         assert 0 in data["draw_call_ids"]
         assert 1 in data["draw_call_ids"]
 
-    def test_explain_pixel(self, integration_client, auth):
-        integration_client.post(
-            "/api/v1/frames/0/metadata", json=SAMPLE_METADATA, headers=auth
-        )
-
-        r = integration_client.get("/api/v1/frames/0/explain/400/300", headers=auth)
-        assert r.status_code == 200
-        data = r.json()
-        assert data["pixel"]["r"] == 200
-        assert data["pixel"]["g"] == 50
-        assert "gl_capture" in data["data_sources"]
-        assert "metadata" in data["data_sources"]
-
     def test_metadata_summary(self, integration_client, auth):
         integration_client.post(
             "/api/v1/frames/0/metadata", json=SAMPLE_METADATA, headers=auth
