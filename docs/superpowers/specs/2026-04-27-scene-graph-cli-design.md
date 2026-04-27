@@ -446,3 +446,38 @@ These should be resolved before the implementation plan is approved:
 4. **Filter language scope.** Is `--filter type:Mesh,name:Helmet` (CSV AND) enough, or do we need a real expression grammar (e.g. `material.transparent=true AND geometry.vertex_count>1000`)? Recommend starting with the CSV form and adding an expression mode when an eval scenario actually demands it.
 
 5. **Draw-call correlation.** Both subcommands are useful without correlation, but they get strictly better when scene nodes carry `draw_call_ids`. The full Tier-3 plan (`2026-04-18-framework-integration.md`) ties this to debug-marker capture (Task 3). Does this spec depend on Tier-3 Task 3 landing first, or do we ship `inspect-scene` against bare annotations and add correlation as a follow-up?
+
+---
+
+## Validation results — phase 1 (config-only)
+
+`gpa check-config` was run against the four R9 carryover scenarios after capture
+under the live engine + GL shim. No framework annotation was supplied, so this
+exercises only the GL-state-derived rule path. Each scenario was a single-frame
+capture; rules ran with `--severity info`.
+
+| Scenario | Frame size | Findings | Rule ids fired |
+|---|---|---|---|
+| `r10_feedback_loop_error_with_transmission_an` | 800x600 | 2 | `depth-write-without-depth-test` (warn), `mipmap-on-npot-without-min-filter` (warn) |
+| `r22_point_sprite_rendering_issues_with_three` | 800x600 | 0 | (none — frame state was clean against the 7 enabled rules) |
+| `r25_filters_with_backbuffers_seem_not_to_wor` | 256x256 | 1 | `depth-write-without-depth-test` (warn) |
+| `r27_bug_black_squares_appear_when_rendering_` | 512x512 | 1 | `depth-write-without-depth-test` (warn) |
+
+Notes:
+
+- All 8 rules loaded and evaluated. `unused-uniform-set` is disabled-by-default
+  (info, awaits a FrameProvider field) so 7 rules ran for each frame.
+- The `depth-write-without-depth-test` fire is a real GL signature in three
+  scenarios — depth_test=False, depth_write=True. Whether it points at the
+  underlying bug class for these specific scenarios will be measured in the
+  next eval round; the value here is that the agent now has a one-shot
+  GL-state warning to consult before reading source.
+- `r22` produced no findings against the captured frame, which is the
+  expected outcome for a bug class that does not project onto any of the
+  current rules' GL signatures (it was a point-sprite vertex-attribute
+  issue). It's a candidate for a future rule — `point-sprite-without-PROGRAM_POINT_SIZE`.
+- This validates the rule pipeline end-to-end (engine load, REST query,
+  frame-state extraction, rule fire, finding serialization). Cost-delta
+  measurement against the no-GPA control is the next eval round's job;
+  this section is evidence that check-config produces actionable output
+  on real captures, not a cost-delta claim.

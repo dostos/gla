@@ -25,6 +25,7 @@ from gpa.cli import __version__
 from gpa.cli.commands import annotate as annotate_cmd
 from gpa.cli.commands import annotations as annotations_cmd
 from gpa.cli.commands import check as check_cmd
+from gpa.cli.commands import check_config as check_config_cmd
 from gpa.cli.commands import dump as dump_cmd
 from gpa.cli.commands import env as env_cmd
 from gpa.cli.commands import frames as frames_cmd
@@ -160,6 +161,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_frames = sub.add_parser("frames", help="List captured frame ids")
     _add_session_arg(p_frames)
 
+    # ---- check-config -----------------------------------------------------
+    check_config_cmd.add_subparser(sub)
+
     # ---- annotate ---------------------------------------------------------
     p_annotate = sub.add_parser(
         "annotate",
@@ -286,6 +290,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         )
     if args.cmd == "frames":
         return frames_cmd.run(session_dir=args.session)
+    if args.cmd == "check-config":
+        return check_config_cmd.run(
+            session_dir=args.session,
+            frame=args.frame,
+            severity=args.severity,
+            rules=args.rules,
+            rule=args.rule,
+            json_output=args.json_output,
+        )
     if args.cmd == "annotate":
         return annotate_cmd.run(
             frame=args.frame,

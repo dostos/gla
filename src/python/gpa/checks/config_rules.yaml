@@ -1,0 +1,106 @@
+# Hand-curated metadata for `gpa check-config` rules.
+#
+# YAML carries: id, severity, message, hint, default_enabled.
+# Predicate logic lives in `rules.py`. The engine binds rows to Python
+# classes by `id` at load time. Adding a new rule is a 5-line patch
+# here + a Rule subclass in rules.py.
+#
+# Severity vocabulary:
+#   error = certainly broken; almost no false positives
+#   warn  = likely-wrong; small false-positive rate
+#   info  = stylistic / disabled / awaiting capture support
+
+rules:
+  - id: auto-clear-with-no-explicit-clear
+    severity: error
+    default_enabled: true
+    message: >-
+      Frame contains draw calls but no glClear was issued before the
+      first draw. If renderer.autoClear is false, the framework expects
+      the app to clear manually — the previous frame's contents will
+      ghost into this one.
+    hint: >-
+      Either call renderer.clear() at the top of the frame, or restore
+      renderer.autoClear=true.
+
+  - id: color-space-encoding-mismatch
+    severity: warn
+    default_enabled: true
+    message: >-
+      Frame mixes textures with linear (RGBA8) and sRGB
+      (SRGB8_ALPHA8) internal formats. Sampling them through the same
+      shader without explicit conversion causes washed-out or
+      over-saturated output.
+    hint: >-
+      Pick one color space per material slot and set
+      texture.colorSpace (three.js) or set the equivalent flag on the
+      framework's image loader.
+
+  - id: tone-mapping-on-non-float-target
+    severity: warn
+    default_enabled: true
+    message: >-
+      Tone-mapping precondition triggered: HDR-format inputs are
+      sampled but every active render target is RGBA8. The tone-mapping
+      output will band visibly.
+    hint: >-
+      Either disable renderer.toneMapping (NoToneMapping) or render to
+      an RGBA16F target before the final blit.
+
+  - id: premultiplied-alpha-incoherence
+    severity: warn
+    default_enabled: true
+    message: >-
+      Frame mixes premultiplied (ONE / ONE_MINUS_SRC_ALPHA) and
+      straight (SRC_ALPHA / ONE_MINUS_SRC_ALPHA) blend modes across
+      draw calls. Without per-material alignment this produces
+      double-darkening or halo artefacts at material boundaries.
+    hint: >-
+      Decide on one alpha convention per scene. In three.js, set
+      material.premultipliedAlpha consistently or disable transparency
+      on materials that should be opaque.
+
+  - id: depth-write-without-depth-test
+    severity: warn
+    default_enabled: true
+    message: >-
+      One or more draws have GL_DEPTH_TEST disabled but
+      glDepthMask(GL_TRUE) — the depth buffer is being written through
+      without being read.
+    hint: >-
+      Set material.depthWrite=false on transparent / overlay materials
+      whose depth buffer state should not leak into later passes.
+
+  - id: viewport-not-equal-framebuffer-size
+    severity: info
+    default_enabled: true
+    message: >-
+      Default framebuffer is bound but glViewport does not match
+      the framebuffer's dimensions.
+    hint: >-
+      Confirm renderer.setSize() and renderer.setPixelRatio() are
+      being called after CSS resize. Off-screen passes (FBO != 0) are
+      excluded from this check.
+
+  - id: mipmap-on-npot-without-min-filter
+    severity: warn
+    default_enabled: true
+    message: >-
+      One or more bound textures have non-power-of-two dimensions.
+      On WebGL1 (and on GLES2 without OES_texture_npot), sampling
+      these with a mipmap-requiring min_filter renders fully black.
+    hint: >-
+      Either resize the texture to a power-of-two, or set
+      texture.minFilter = THREE.LinearFilter (no mipmap) before
+      .needsUpdate = true.
+
+  - id: unused-uniform-set
+    severity: info
+    default_enabled: false
+    message: >-
+      Rule disabled — needs a per-shader active-uniform list from the
+      capture backend; not yet exposed by FrameProvider.
+    hint: >-
+      Once FrameProvider exposes shader_active_uniforms, this rule
+      will fire when uniforms are set but never declared in the
+      compiled program.

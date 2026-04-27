@@ -169,6 +169,7 @@ def create_app(provider=None, auth_token: str = "",
     from .routes_explain import router as explain_router
     from .routes_annotations import router as annotations_router
     from .routes_trace import router as trace_router
+    from .routes_check_config import router as check_config_router
 
     app.include_router(frames_router, prefix="/api/v1")
     app.include_router(drawcalls_router, prefix="/api/v1")
@@ -182,5 +183,6 @@ def create_app(provider=None, auth_token: str = "",
     app.include_router(explain_router, prefix="/api/v1")
     app.include_router(annotations_router, prefix="/api/v1")
     app.include_router(trace_router, prefix="/api/v1")
+    app.include_router(check_config_router, prefix="/api/v1")
 
     return app
