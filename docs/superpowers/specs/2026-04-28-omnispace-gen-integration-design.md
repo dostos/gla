@@ -101,6 +101,7 @@ Agent: same MCP queries; same joint names; same diagnostic logic.
 
 - **Workbench (Phase 1):** sidecar's local counter is authoritative. Engine has no captured frames in this mode; metadata is stored against the sidecar's IDs. MCP tools that need GL data return 404 — correct.
 - **Open3D (Phase 2):** sidecar reads `GET /api/v1/frames/current/overview` to get the engine's `frame_id`, POSTs metadata under that ID. `MetadataStore` accepts arbitrary frame IDs, so the join is implicit.
+  - *Race:* Between the read and the POST, batch rendering may advance the engine's "current" frame, causing a systematic off-by-N join. Mitigation: the sidecar runs immediately after the renderer's swap call and before the next draw, so at most one frame is in flight. The eval scenario (`tests/eval/r37_joint_offset_smplx/`) is the load-bearing check; if it surfaces a stable off-by-N, Phase 2 either pins frame IDs explicitly (engine returns the just-captured ID via the swap callback) or accepts the offset as a Phase-2 limitation.
 
 ## Error handling
 
