@@ -114,7 +114,8 @@ class OpenGPAThreePlugin {
 export default OpenGPAThreePlugin;
 export { OpenGPAThreePlugin };
 
-// Backwards compat for Chrome extension's <script>-tag injection:
+// Also expose on window for consumers loading this file via <script> tag
+// (e.g. plain HTML pages without a bundler). Harmless in ESM bundlers.
 if (typeof window !== 'undefined') {
   window.OpenGPAThreePlugin = OpenGPAThreePlugin;
 }

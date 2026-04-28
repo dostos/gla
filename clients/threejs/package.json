@@ -9,5 +9,6 @@
   "scripts": {
     "test": "node --test test.js"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "engines": { "node": ">=18" }
 }

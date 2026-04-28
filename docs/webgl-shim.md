@@ -81,7 +81,7 @@ The following was verified with Node.js v20.19.5 / npm 10.8.2 on Linux:
 | `interceptor.js` | Node syntax check | PASS |
 | `content.js` | Node syntax check | PASS |
 | `background.js` | Node syntax check | PASS |
-| `gpa-threejs-plugin.js` | Node syntax check | PASS |
+| `gpa-threejs-plugin.js` (copy of `clients/threejs/index.js`) | Node syntax check | PASS |
 | `bridge/package.json` | `npm install` (`ws` dep) | PASS — 0 vulnerabilities |
 | Bridge startup | `node bridge.js` | PASS — WebSocket server binds on `ws://127.0.0.1:18081` |
 | Bridge engine connection | Unix socket connect | EXPECTED FAIL — engine not running; bridge retries every 3 s cleanly |

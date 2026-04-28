@@ -1,5 +1,7 @@
 // COPY of clients/threejs/index.js — kept here for the Chrome extension's <script>-tag loader.
-// Edit clients/threejs/index.js, then re-copy.
+// Edit clients/threejs/index.js (lines 1–112), then re-copy those lines only.
+// The export block below (module.exports / window) intentionally differs from
+// clients/threejs/index.js and must NOT be overwritten during re-sync.
 /**
  * OpenGPA Three.js Plugin
  *

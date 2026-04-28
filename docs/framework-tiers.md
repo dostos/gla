@@ -117,7 +117,7 @@ Content-Type: application/json
 **Additional MCP tools**: 4 new (query_object, explain_pixel, list_render_passes, query_material). Total: 10.
 
 **Available plugins**:
-- Three.js: `gpa-threejs-plugin.js` (120 LOC)
+- Three.js: `clients/threejs/index.js` (120 LOC, also published as `@opengpa/threejs-sidecar`)
 - Unity: planned (~50 LOC C#)
 - Python frameworks: planned (~20 LOC)
 - Generic: POST the JSON manually from any language
