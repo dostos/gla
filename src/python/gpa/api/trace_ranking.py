@@ -34,7 +34,7 @@ _TIER_ORDER = {"high": 0, "medium": 1, "low": 2}
 def _hop_count(path: str) -> int:
     """Return the number of hops from the declared root.
 
-    ``"map"`` → 0 hops. ``"map._transform._maxZoom"`` → 2 hops. Bracket
+    ``"foo"`` → 0 hops. ``"foo.bar.baz"`` → 2 hops. Bracket
     indexing (``foo[0].bar``) counts as a hop.
     """
     if not path:
