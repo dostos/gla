@@ -280,8 +280,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_trace = sub.add_parser(
         "trace",
         help=(
-            "Reverse-lookup a captured value → app-level JS fields that hold it. "
-            "Requires the WebGL shim (gpa-trace.js) to be enabled in the target."
+            "Reverse-lookup a captured value → app-level fields that hold it. "
+            "Requires a value scanner (native DWARF symbols or WebGL Tier-3 "
+            "SDK) to be active in the target."
         ),
     )
     _add_session_arg(p_trace)
