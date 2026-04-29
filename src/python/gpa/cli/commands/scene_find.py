@@ -79,8 +79,9 @@ def _format_human(payload: Dict[str, Any]) -> str:
         lines.append("")
         if not payload.get("annotation_present"):
             lines.append(
-                "(no scene-graph annotation found — install a Tier-3 plugin "
-                "such as src/python/gpa/framework/threejs_link_plugin.js)"
+                "(no scene-graph annotation found — install a Tier-3 plugin; "
+                "see docs/superpowers/specs/"
+                "2026-04-18-framework-integration-design.md)"
             )
         else:
             lines.append("(no nodes matched)")
@@ -180,7 +181,8 @@ def run(
         print(
             f"[gpa] no scene-graph annotation for frame {payload.get('frame_id')}"
             " — need a Tier-3 plugin. See "
-            "src/python/gpa/framework/threejs_link_plugin.js for a sketch.",
+            "docs/superpowers/specs/"
+            "2026-04-18-framework-integration-design.md.",
             file=sys.stderr,
         )
         return 1
