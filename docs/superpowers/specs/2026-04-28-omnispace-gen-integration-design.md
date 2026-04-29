@@ -149,3 +149,13 @@ Agent: same MCP queries; same joint names; same diagnostic logic.
 ## Open questions
 
 None at design time. Open questions surfaced during implementation should be raised back to spec rather than resolved silently.
+
+## Phase 1 findings
+
+### Coordinate frame (empirical, from smoke test `test_joint_pelvis_transform_present`)
+
+- **Y-up confirmed.** The workbench emits joint positions in Three.js / react-three-fiber's default Y-up right-handed frame: X = right, Y = up, Z = toward camera.
+- **Empirical pelvis position:** `joint_pelvis` world position = `[0.000, 0.900, 0.000]` (frame 27, HumanML3D-22 mock motion). Pelvis at 0.9 m above origin is consistent with Y-up and a standing person.
+- **No floor-Y lift applied.** `JointMarkers.tsx` is mounted at Canvas root level, outside the `MotionAnchor` group in `Viewer3D.tsx`. World positions the sidecar captures are therefore motion-native HumanML3D coordinates — no scene-floor offset is added.
+- **Match to source data:** `__motionDebug.skeleton` (wire-mode cross-check) was not available during the smoke run (workbench was in avatar render mode). A direct per-frame comparison between `MotionData.positions` and engine-returned positions is TBD for Phase 2.
+- **Phase 2 (Open3D) contract:** must emit joint world positions in Y-up, using the same motion-native HumanML3D coordinate convention, with no additional floor offset. Any floor lift applied by the Open3D renderer must be subtracted before posting to the engine so MCP queries are consistent across renderers.
