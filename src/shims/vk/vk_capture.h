@@ -99,14 +99,23 @@ void gpa_capture_bind_pipeline(VkCommandBuffer cmd_buf,
 void gpa_capture_begin_render_pass(VkCommandBuffer cmd_buf);
 void gpa_capture_end_render_pass(VkCommandBuffer cmd_buf);
 
-/* Called on vkQueuePresentKHR — perform readback and IPC send. */
+/* Called on vkQueuePresentKHR — perform readback and IPC send.
+ *
+ * If `skip_pixel_readback` is non-zero, the pixel-copy GPU readback is
+ * skipped entirely and only metadata (extent, format, draw counts) is
+ * forwarded to the engine. This is the right call for emulated
+ * (in-layer) headless swapchains — their VkImages contain whatever the
+ * compositor left behind, the pre-present layout is non-standard, and
+ * waiting on a fence for our staging copy can take seconds in
+ * compositor-style apps (chromium). */
 void gpa_capture_on_present(VkQueue           queue,
                              VkDevice          device,
                              VkSwapchainKHR    swapchain,
                              uint32_t          image_index,
                              VkImage           swapchain_image,
                              VkExtent2D        extent,
-                             VkFormat          image_format);
+                             VkFormat          image_format,
+                             int               skip_pixel_readback);
 
 /* Accumulate draw calls from submitted command buffers into the frame buffer.
  * Called from vkQueueSubmit so we can harvest metadata even before present. */

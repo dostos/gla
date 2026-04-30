@@ -303,7 +303,17 @@ gpa_CreateDevice(VkPhysicalDevice             physicalDevice,
     disp.CmdPipelineBarrier    = GDPA(CmdPipelineBarrier);
     disp.CreateCommandPool     = GDPA(CreateCommandPool);
     disp.DestroyCommandPool    = GDPA(DestroyCommandPool);
+    disp.GetDeviceQueue        = GDPA(GetDeviceQueue);
 #undef GDPA
+
+    /* Record the queue family the app used so the readback path can submit
+     * to a queue from the same family (instead of guessing family 0, which
+     * is wrong on multi-queue-family devices like NVIDIA where compute and
+     * graphics live in different families). */
+    disp.readback_queue_family = 0;
+    if (pCreateInfo->queueCreateInfoCount > 0)
+        disp.readback_queue_family =
+            pCreateInfo->pQueueCreateInfos[0].queueFamilyIndex;
 
     gpa_device_dispatch_store(*pDevice, &disp);
     return VK_SUCCESS;
@@ -363,10 +373,12 @@ gpa_QueuePresentKHR(VkQueue                 queue,
      * VkSwapchainKHR handles). */
     int all_headless = pPresentInfo->swapchainCount > 0;
     int any_headless = 0;
-    for (uint32_t i = 0; i < pPresentInfo->swapchainCount; i++) {
+    int per_sc_headless[16] = {0};
+    for (uint32_t i = 0; i < pPresentInfo->swapchainCount && i < 16; i++) {
         pthread_mutex_lock(&g_headless_mutex);
         int is_headless = find_headless_swapchain(pPresentInfo->pSwapchains[i]) != NULL;
         pthread_mutex_unlock(&g_headless_mutex);
+        per_sc_headless[i] = is_headless;
         if (is_headless) any_headless = 1;
         else all_headless = 0;
     }
@@ -386,7 +398,8 @@ gpa_QueuePresentKHR(VkQueue                 queue,
                     idx,
                     sc_info->images[idx],
                     sc_info->extent,
-                    sc_info->format);
+                    sc_info->format,
+                    /*skip_pixel_readback=*/(i < 16) ? per_sc_headless[i] : 0);
             }
         }
     }

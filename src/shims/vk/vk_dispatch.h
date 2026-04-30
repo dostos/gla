@@ -103,6 +103,14 @@ typedef struct GpaDeviceDispatch {
 
     /* Physical device handle needed for memory type queries */
     VkPhysicalDevice              physical_device;
+
+    /* Queue family used by readback path (first family from CreateDevice's
+     * pQueueCreateInfos — the same family the app submits its presents on
+     * for single-queue apps). Avoids hardcoding family 0, which causes
+     * vkQueueSubmit to silently stall on devices where the present queue
+     * is a different family (eg. NVIDIA's compute-only queue). */
+    uint32_t                      readback_queue_family;
+    PFN_vkGetDeviceQueue          GetDeviceQueue;
 } GpaDeviceDispatch;
 
 /* -------------------------------------------------------------------------

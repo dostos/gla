@@ -259,7 +259,8 @@ void gpa_capture_on_present(VkQueue        queue,
                              uint32_t       image_index,
                              VkImage        swapchain_image,
                              VkExtent2D     extent,
-                             VkFormat       image_format) {
+                             VkFormat       image_format,
+                             int            skip_pixel_readback) {
     (void)swapchain;     /* used for context only */
     (void)image_index;
     (void)image_format;
@@ -309,6 +310,19 @@ void gpa_capture_on_present(VkQueue        queue,
     hdr_words[0] = width;
     hdr_words[1] = height;
     ptr += 8;
+
+    /* For emulated headless swapchains we skip the GPU readback path —
+     * pixel content is unreliable (the layout/usage we control doesn't
+     * match what the app produced), and the fence can wait for seconds
+     * in compositor-style apps. Frame metadata (extent + draw counts)
+     * still flows. */
+    if (skip_pixel_readback) {
+        /* Zero-fill the pixel slot so the engine sees a deterministic
+         * (blank) image rather than uninitialised SHM bytes. */
+        memset(ptr, 0, (size_t)pixel_bytes);
+        ptr += (size_t)pixel_bytes;
+        goto write_metadata_only;
+    }
 
     /* Allocate staging buffer */
     VkBuffer       staging_buf = VK_NULL_HANDLE;
@@ -398,12 +412,15 @@ void gpa_capture_on_present(VkQueue        queue,
     VkCommandPool   cmd_pool = VK_NULL_HANDLE;
     VkCommandBuffer cmd_buf  = VK_NULL_HANDLE;
 
-    /* Get the queue family index.  For M5 MVP we use family 0 (safe default
-     * for single-queue apps; production code would track the queue family). */
+    /* Use the queue family the app recorded at vkCreateDevice. Hardcoding 0
+     * stalls the readback fence indefinitely on devices where the
+     * graphics+present queue is a different family (NVIDIA: family 0 is
+     * graphics+compute, family 1 is compute-only — submitting a graphics
+     * cmd buffer to a compute queue silently never advances). */
     VkCommandPoolCreateInfo pool_info = {0};
     pool_info.sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     pool_info.flags            = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-    pool_info.queueFamilyIndex = 0;
+    pool_info.queueFamilyIndex = dev_disp->readback_queue_family;
 
     res = dev_disp->CreateCommandPool(device, &pool_info, NULL, &cmd_pool);
     if (res != VK_SUCCESS) {
