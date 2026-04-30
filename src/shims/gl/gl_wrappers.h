@@ -82,4 +82,19 @@ extern GpaRealGlFuncs gpa_real_gl;
 // Initialize dispatch table (called from constructor)
 void gpa_wrappers_init(void);
 
+/* Programmatic frame trigger.
+ *
+ * Equivalent to the body of glXSwapBuffers(): captures the current frame
+ * (draw calls + framebuffer), notifies the engine via IPC, then advances
+ * shadow state to the next frame. Lazy-initializes the shim and IPC on
+ * first call.
+ *
+ * Use case: offscreen GL contexts (headless-gl, EGL pbuffer, FBO-only
+ * pipelines) that never call glXSwapBuffers and therefore would otherwise
+ * never emit a frame. The host process dlopen()s the shim, dlsym()s
+ * gpa_emit_frame, and calls it once per logical frame.
+ *
+ * Safe to call from any thread that owns the current GL context. */
+void gpa_emit_frame(void);
+
 #endif // GPA_GL_WRAPPERS_H

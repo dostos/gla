@@ -363,6 +363,24 @@ void glXSwapBuffers(Display* dpy, GLXDrawable drawable) {
     gpa_real_gl.glXSwapBuffers(dpy, drawable);
 }
 
+/* --------------------------------------------------------------------------
+ * Programmatic frame trigger
+ *
+ * For offscreen GL contexts (headless-gl, EGL pbuffer, FBO-only pipelines)
+ * that never call glXSwapBuffers. Mirrors the body of glXSwapBuffers
+ * exactly except for the (omitted) real swap. The host process loads the
+ * shim under LD_PRELOAD, dlsym()s this symbol, and calls it once per
+ * logical frame.
+ * -------------------------------------------------------------------------- */
+
+__attribute__((visibility("default")))
+void gpa_emit_frame(void) {
+    gpa_init();
+    gpa_frame_on_swap();             /* capture: draw calls + framebuffer + IPC notify */
+    gpa_frame_reset_draw_calls();    /* clear per-frame buffer for next frame */
+    gpa_shadow_new_frame(&gpa_shadow);
+}
+
 /* Map function names to our wrapper addresses so that apps using
  * glXGetProcAddress get our interceptors, not the real GL functions. */
 static __GLXextFuncPtr gpa_resolve_wrapper(const char* name) {
