@@ -545,6 +545,21 @@ gpa_vkGetInstanceProcAddr(VkInstance instance, const char *pName) {
  * vkNegotiateLoaderLayerInterfaceVersion — required by the loader
  * -------------------------------------------------------------------------- */
 
+/* Plain-name aliases for layer-interface-version-0 / legacy loaders that
+ * look up vkGetInstanceProcAddr / vkGetDeviceProcAddr by exact symbol name
+ * instead of going through vkNegotiateLoaderLayerInterfaceVersion. Loaders
+ * dlopen the layer .so with handle-scoped dlsym, so plain names here do
+ * not interpose globally. */
+VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
+vkGetInstanceProcAddr(VkInstance instance, const char *pName) {
+    return gpa_vkGetInstanceProcAddr(instance, pName);
+}
+
+VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
+vkGetDeviceProcAddr(VkDevice device, const char *pName) {
+    return gpa_vkGetDeviceProcAddr(device, pName);
+}
+
 VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL
 vkNegotiateLoaderLayerInterfaceVersion(VkNegotiateLayerInterface *pVersionStruct) {
     if (pVersionStruct == NULL ||
