@@ -511,11 +511,77 @@ gpa_vkGetDeviceProcAddr(VkDevice device, const char *pName) {
  * vkGetInstanceProcAddr — return our intercepts or chain down
  * -------------------------------------------------------------------------- */
 
+/* --------------------------------------------------------------------------
+ * VK_EXT_headless_surface support (loader-validation unblock for chromium)
+ *
+ * Chromium's --use-angle=vulkan path requests VK_EXT_headless_surface as
+ * an instance extension when --headless=new is set. If no ICD reports
+ * support, the loader's loader_validate_instance_extensions() rejects the
+ * vkCreateInstance call with VK_ERROR_EXTENSION_NOT_PRESENT.
+ *
+ * Our layer advertises VK_EXT_headless_surface via vkEnumerateInstance-
+ * ExtensionProperties("VK_LAYER_GPA_capture", ...) so the loader sees it
+ * as supplied by an enabled layer and validation passes. The actual
+ * vkCreateHeadlessSurfaceEXT entrypoint chains down — modern Vulkan
+ * loaders provide a built-in implementation for any headless surface.
+ * -------------------------------------------------------------------------- */
+
+static VKAPI_ATTR VkResult VKAPI_CALL
+gpa_vkEnumerateInstanceExtensionProperties(const char *pLayerName,
+                                            uint32_t *pPropertyCount,
+                                            VkExtensionProperties *pProperties) {
+    if (pLayerName == NULL || strcmp(pLayerName, "VK_LAYER_GPA_capture") != 0) {
+        /* Not our layer query. With our layer-interface-v2, the loader
+         * resolves these globally and calls the next layer / ICD. Returning
+         * VK_SUCCESS with 0 properties is safe — the loader merges with
+         * other sources. */
+        if (pPropertyCount) *pPropertyCount = 0;
+        return VK_SUCCESS;
+    }
+
+    /* Extensions provided by our layer */
+    static const VkExtensionProperties gpa_layer_exts[] = {
+        { "VK_EXT_headless_surface", 1 },
+    };
+    const uint32_t n = (uint32_t)(sizeof(gpa_layer_exts) / sizeof(gpa_layer_exts[0]));
+
+    if (pProperties == NULL) {
+        *pPropertyCount = n;
+        return VK_SUCCESS;
+    }
+    uint32_t copy = (*pPropertyCount < n) ? *pPropertyCount : n;
+    if (copy > 0) memcpy(pProperties, gpa_layer_exts, copy * sizeof(VkExtensionProperties));
+    *pPropertyCount = copy;
+    return (copy < n) ? VK_INCOMPLETE : VK_SUCCESS;
+}
+
+static VKAPI_ATTR VkResult VKAPI_CALL
+gpa_vkCreateHeadlessSurfaceEXT(VkInstance instance,
+                                const VkHeadlessSurfaceCreateInfoEXT *pCreateInfo,
+                                const VkAllocationCallbacks *pAllocator,
+                                VkSurfaceKHR *pSurface) {
+    GpaInstanceDispatch *disp = gpa_instance_dispatch_get(instance);
+    if (!disp || !disp->GetInstanceProcAddr) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    PFN_vkCreateHeadlessSurfaceEXT next_fn =
+        (PFN_vkCreateHeadlessSurfaceEXT)
+        disp->GetInstanceProcAddr(instance, "vkCreateHeadlessSurfaceEXT");
+    if (!next_fn) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return next_fn(instance, pCreateInfo, pAllocator, pSurface);
+}
+
 VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 gpa_vkGetInstanceProcAddr(VkInstance instance, const char *pName) {
     /* Layer negotiation */
     if (strcmp(pName, "vkNegotiateLoaderLayerInterfaceVersion") == 0)
         return (PFN_vkVoidFunction)vkNegotiateLoaderLayerInterfaceVersion;
+
+    /* Pre-instance / global functions (instance == VK_NULL_HANDLE) */
+    if (strcmp(pName, "vkEnumerateInstanceExtensionProperties") == 0)
+        return (PFN_vkVoidFunction)gpa_vkEnumerateInstanceExtensionProperties;
+
+    /* Extension entrypoints we provide */
+    if (strcmp(pName, "vkCreateHeadlessSurfaceEXT") == 0)
+        return (PFN_vkVoidFunction)gpa_vkCreateHeadlessSurfaceEXT;
 
     /* Instance-level intercepts */
 #define INTERCEPT(fn) \
