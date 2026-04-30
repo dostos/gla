@@ -1,6 +1,10 @@
 # Path 2 — chromium-headless capture harness (BLOCKED)
 
-*Investigation: 2026-04-30. Goal: verify chromium-headless under Xvfb
+*Investigation: 2026-04-30. Re-verified after `eglSwapBuffers` wrapper
+added: still blocked. See "Follow-up" section below for the GPU-process
+maps showing chromium loads its **bundled** ANGLE EGL stack, not the
+system libEGL — so eglSwapBuffers interception bypasses chromium for
+the same reason glXSwapBuffers did. Goal: verify chromium-headless under Xvfb
 captures frames via the OpenGPA OpenGL shim (LD_PRELOAD libgpa_gl.so),
 then build a minimal three.js harness for R13 maintainer-framing
 scenarios (r1, r3, r6).*
@@ -270,3 +274,50 @@ effort:
   used for this investigation.
 - `/data3/p2-poc/*.log` — chromium console captures, probe dumps, and
   engine logs. Not committed (large, host-specific, ephemeral).
+
+## 2026-04-30 follow-up: eglSwapBuffers wrapper added; chromium still blocked
+
+Added `eglSwapBuffers` interception to the shim (`src/shims/gl/gl_wrappers.c`)
+on the hypothesis that chromium might call `eglSwapBuffers` via the normal
+dynamic-link path. It doesn't. Re-running the harness after the change:
+`frames_before = 0`, `frames_after = 0`. Same as before.
+
+Why: the GPU process maps show chromium loads its own **bundled** EGL stack
+from `chrome-linux64/libEGL.so` and `chrome-linux64/libGLESv2.so` (ANGLE),
+not the system `/usr/lib/x86_64-linux-gnu/libEGL.so.1`. Chromium's GPU code
+calls `eglSwapBuffers` against the bundled libEGL handle it dlopened —
+bypassing global symbol resolution exactly like the desktop GL calls.
+
+GPU process maps (filtered) at the moment of attempted capture:
+```
+/home/jingyulee/.cache/ms-playwright/chromium-1208/chrome-linux64/libEGL.so
+/home/jingyulee/.cache/ms-playwright/chromium-1208/chrome-linux64/libGLESv2.so
+/tmp/libgpa_gl_p2.so
+/usr/lib/x86_64-linux-gnu/libGL.so.1.7.0
+/usr/lib/x86_64-linux-gnu/libGLX_mesa.so.0.0.0
+/usr/lib/x86_64-linux-gnu/libGLX.so.0.0.0
+```
+
+The system `libGL.so.1.7.0` is loaded (so ANGLE's desktop-GL backend can
+dlopen it for actual rasterization), but chromium itself never makes
+direct GL calls into the global symbol space.
+
+The eglSwapBuffers wrapper is preserved because it's a free win for any
+pure-EGL app (Wayland compositors, embedded EGL stacks, headless pbuffer
+demos that link libEGL via DT_NEEDED rather than dlopen). It just doesn't
+help chromium.
+
+**Verdict update: chromium capture is fundamentally blocked at the
+OpenGPA-shim layer.** Reaching real chromium GL calls requires either:
+
+- Building chromium with a non-bundled, non-ANGLE GL backend (not a
+  supported chromium build configuration on Linux as of 2026).
+- Patching ANGLE itself to route through global symbols (vendored ANGLE,
+  large change, has to be re-done each chromium update).
+- A different capture stratum: hook ANGLE's swap path *inside* chromium
+  via a chromium-specific instrumentation (e.g. an extension or a custom
+  build with capture hooks). Not LD_PRELOAD scope.
+
+For the three.js eval cluster, **stick with Path 1 (Node + headless-gl +
+gpa_emit_frame)** for what it can capture, and accept that per-draw GL
+state from headless-gl is similarly invisible (same ANGLE bypass).

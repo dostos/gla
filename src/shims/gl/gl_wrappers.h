@@ -74,6 +74,9 @@ typedef struct {
     // GLX
     void (*glXSwapBuffers)(Display* dpy, GLXDrawable drawable);
     __GLXextFuncPtr (*glXGetProcAddressARB)(const unsigned char* procName);
+
+    // EGL (chromium / Wayland / Android-style stacks; opaque void* avoids EGL headers)
+    unsigned int (*eglSwapBuffers)(void* dpy, void* surface);
 } GpaRealGlFuncs;
 
 // Global dispatch table (defined in gl_shim.c)

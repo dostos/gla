@@ -77,6 +77,8 @@ void gpa_wrappers_init(void) {
 
     gpa_real_gl.glXSwapBuffers        = dlsym(RTLD_NEXT, "glXSwapBuffers");
     gpa_real_gl.glXGetProcAddressARB  = dlsym(RTLD_NEXT, "glXGetProcAddressARB");
+
+    gpa_real_gl.eglSwapBuffers        = dlsym(RTLD_NEXT, "eglSwapBuffers");
 }
 
 /* --------------------------------------------------------------------------
@@ -361,6 +363,19 @@ void glXSwapBuffers(Display* dpy, GLXDrawable drawable) {
     gpa_frame_reset_draw_calls();    /* clear per-frame buffer for next frame */
     gpa_shadow_new_frame(&gpa_shadow);
     gpa_real_gl.glXSwapBuffers(dpy, drawable);
+}
+
+/* EGL swap path — same shape as glXSwapBuffers. Triggers on chromium /
+ * Wayland / Android-style stacks where libEGL is the swap entrypoint. */
+unsigned int eglSwapBuffers(void* dpy, void* surface) {
+    gpa_init();
+    gpa_frame_on_swap();
+    gpa_frame_reset_draw_calls();
+    gpa_shadow_new_frame(&gpa_shadow);
+    if (gpa_real_gl.eglSwapBuffers) {
+        return gpa_real_gl.eglSwapBuffers(dpy, surface);
+    }
+    return 1;  /* EGL_TRUE */
 }
 
 /* --------------------------------------------------------------------------
