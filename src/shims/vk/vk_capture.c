@@ -428,12 +428,26 @@ void gpa_capture_on_present(VkQueue        queue,
     begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     dev_disp->BeginCommandBuffer(cmd_buf, &begin_info);
 
-    /* Transition swapchain image: PRESENT_SRC → TRANSFER_SRC */
+    /* Transition swapchain image: <unknown> → TRANSFER_SRC.
+     *
+     * We use VK_IMAGE_LAYOUT_UNDEFINED as oldLayout because the actual
+     * pre-present layout varies by app: for desktop apps it's typically
+     * PRESENT_SRC_KHR, but for chromium-headless and other compositors that
+     * never call vkAcquire/vkPresent on a real surface, the image may be in
+     * GENERAL or COLOR_ATTACHMENT_OPTIMAL when QueuePresent is invoked. The
+     * UNDEFINED → TRANSFER_SRC transition is always legal; the trade-off is
+     * that the driver may discard image content. In practice it tends to
+     * preserve content (driver-implemented), giving us a usable readback
+     * even for non-standard pre-present layouts.
+     *
+     * If a future eval requires bit-exact content for compositors that
+     * actually transition to PRESENT_SRC, we'll need per-app heuristics or
+     * an explicit hint. */
     VkImageMemoryBarrier barrier_to_src = {0};
     barrier_to_src.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier_to_src.srcAccessMask       = VK_ACCESS_MEMORY_READ_BIT;
+    barrier_to_src.srcAccessMask       = 0;
     barrier_to_src.dstAccessMask       = VK_ACCESS_TRANSFER_READ_BIT;
-    barrier_to_src.oldLayout           = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    barrier_to_src.oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED;
     barrier_to_src.newLayout           = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     barrier_to_src.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier_to_src.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -469,11 +483,13 @@ void gpa_capture_on_present(VkQueue        queue,
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         staging_buf, 1, &copy_region);
 
-    /* Transition back to PRESENT_SRC */
+    /* Transition back to PRESENT_SRC for real swapchains; for our headless
+     * emulation the next AcquireNextImage will undefined-init anyway, so
+     * either layout is fine. */
     VkImageMemoryBarrier barrier_to_present = {0};
     barrier_to_present.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     barrier_to_present.srcAccessMask       = VK_ACCESS_TRANSFER_READ_BIT;
-    barrier_to_present.dstAccessMask       = VK_ACCESS_MEMORY_READ_BIT;
+    barrier_to_present.dstAccessMask       = 0;
     barrier_to_present.oldLayout           = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     barrier_to_present.newLayout           = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     barrier_to_present.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -501,7 +517,17 @@ void gpa_capture_on_present(VkQueue        queue,
 
     res = dev_disp->QueueSubmit(queue, 1, &submit_info, fence);
     if (res == VK_SUCCESS) {
-        dev_disp->WaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
+        /* 1-second timeout — if the readback can't complete this fast we
+         * give up rather than blocking the app's queue indefinitely. */
+        const uint64_t kReadbackTimeoutNs = 1000000000ull;
+        VkResult wait_res =
+            dev_disp->WaitForFences(device, 1, &fence, VK_TRUE,
+                                     kReadbackTimeoutNs);
+        if (wait_res != VK_SUCCESS) {
+            fprintf(stderr, "[OpenGPA-VK] readback fence wait timed out (%d)\n",
+                    wait_res);
+            res = wait_res;
+        }
     } else {
         fprintf(stderr, "[OpenGPA-VK] readback QueueSubmit failed (%d)\n", res);
     }

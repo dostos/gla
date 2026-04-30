@@ -627,7 +627,9 @@ gpa_CreateSwapchainKHR(VkDevice                        device,
         ici.arrayLayers = 1;
         ici.samples = VK_SAMPLE_COUNT_1_BIT;
         ici.tiling = VK_IMAGE_TILING_OPTIMAL;
-        ici.usage = pCreateInfo->imageUsage;
+        /* Force TRANSFER_SRC so our readback path can copy these images, in
+         * addition to whatever the app requested. */
+        ici.usage = pCreateInfo->imageUsage | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
         ici.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -876,21 +878,9 @@ gpa_vkCreateHeadlessSurfaceEXT(VkInstance instance,
                                 const VkAllocationCallbacks *pAllocator,
                                 VkSurfaceKHR *pSurface) {
     (void)pCreateInfo; (void)pAllocator;
-
-    /* Try chaining down first — if some ICD or upstream layer implements
-     * VK_EXT_headless_surface, prefer that. */
-    GpaInstanceDispatch *disp = gpa_instance_dispatch_get(instance);
-    if (disp && disp->GetInstanceProcAddr) {
-        PFN_vkCreateHeadlessSurfaceEXT next_fn = (PFN_vkCreateHeadlessSurfaceEXT)
-            disp->GetInstanceProcAddr(instance, "vkCreateHeadlessSurfaceEXT");
-        if (next_fn) {
-            VkResult r = next_fn(instance, pCreateInfo, pAllocator, pSurface);
-            if (r == VK_SUCCESS) return r;
-            /* Fall through to in-layer emulation on failure */
-        }
-    }
-
-    /* In-layer emulation */
+    /* In-layer emulation — we do NOT chain down here, because no Linux ICDs
+     * we target ship VK_EXT_headless_surface, and the loader trampoline
+     * would route the lookup through our own GIPA again (recursion). */
     pthread_mutex_lock(&g_headless_mutex);
     GpaHeadlessSurface *slot = NULL;
     for (int i = 0; i < GPA_MAX_HEADLESS_SURFACES; i++) {
