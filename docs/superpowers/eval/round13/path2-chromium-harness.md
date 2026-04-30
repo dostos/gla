@@ -321,3 +321,94 @@ OpenGPA-shim layer.** Reaching real chromium GL calls requires either:
 For the three.js eval cluster, **stick with Path 1 (Node + headless-gl +
 gpa_emit_frame)** for what it can capture, and accept that per-draw GL
 state from headless-gl is similarly invisible (same ANGLE bypass).
+
+## 2026-04-30 follow-up #2: Vulkan path attempted, blocked by `VK_EXT_headless_surface`
+
+Tried the suggestion in the user's "How to fix ANGLE layer?" question:
+route chromium WebGL via `--use-angle=vulkan` and capture through our
+Vulkan layer (which is independent of LD_PRELOAD and immune to
+ANGLE's handle-scoped dlsym trick). Two interlocking issues found.
+
+### Issue A: our Vulkan layer wasn't actually loadable
+
+Vulkan loader debug output:
+```
+[Vulkan Loader] ERROR: /tmp/gpa-vk-layer/libVkLayer_gpa_capture.so:
+                       undefined symbol: vkGetInstanceProcAddr
+[Vulkan Loader] INFO: Requested layer "VK_LAYER_GPA_capture" failed to load.
+```
+
+The layer exported `gpa_vkGetInstanceProcAddr` (prefixed) and
+`vkNegotiateLoaderLayerInterfaceVersion` correctly, but the manifest
+declared `file_format_version: 1.0.0` + `api_version: 1.0.0`, which
+modern loaders treat as pre-negotiation legacy mode requiring plain
+unprefixed symbols. **B's earlier "5 frames captured" smoke test
+(`880afee`) didn't actually validate end-to-end loader integration —
+it must have been a lower-level path that bypasses the loader's
+extension validation.**
+
+Fixed in `cc05e19`:
+- Added plain `vkGetInstanceProcAddr` / `vkGetDeviceProcAddr` aliases
+  that thunk to the prefixed implementations (handle-scoped dlsym
+  means no global interposition risk).
+- Bumped manifest to `file_format_version: 1.2.0` +
+  `api_version: 1.3.250` so the loader picks the v2 negotiation path.
+
+Verified working with `/tmp/vk_present_test`:
+```
+[OpenGPA-VK] IPC connected: shm=/gpa_vk socket=/tmp/gpa_vk.sock
+LAYER | INFO: Insert instance layer VK_LAYER_GPA_capture
+[vk_test] presented frame 0..3 → engine reports 5 frames, 320x240
+```
+
+### Issue B: chromium-Vulkan blocked at the system layer
+
+Even with the layer fix, chromium's GPU process fails to create a
+Vulkan instance:
+
+```
+[ERROR:gpu/vulkan/vulkan_instance.cc:200] vkCreateInstance() failed: -7
+[Vulkan Loader] ERROR: loader_validate_instance_extensions:
+   Instance extension VK_EXT_headless_surface not supported by
+   available ICDs or enabled layers.
+```
+
+`-7` is `VK_ERROR_EXTENSION_NOT_PRESENT`. Chromium 1208's bundled
+Vulkan loader requires `VK_EXT_headless_surface` for `--headless=new`
+mode. None of the system ICDs (NVIDIA proprietary, lavapipe, virtio,
+radeon, intel) expose it, so loader validation rejects the instance
+creation before our layer ever gets a chance to intercept.
+
+This is independent of our shim — it'd be the same on any vanilla
+Linux box without a Vulkan driver that ships `VK_EXT_headless_surface`.
+
+### Workarounds to fully unblock chromium-via-Vulkan
+
+In rough order of effort:
+
+1. **Implement `VK_EXT_headless_surface` in our Vulkan layer.** Layers
+   can advertise instance extensions; our layer would handle
+   `vkCreateHeadlessSurfaceEXT` itself (simple stub returning a fake
+   surface handle) and the loader validation passes. Probably ~50 LoC
+   in `gpa_layer.c`. **Recommended.**
+
+2. **Run chromium in non-headless mode under Xvfb.** Drop
+   `--headless=new`; let chromium use real X11 + `VK_KHR_xlib_surface`
+   (which lavapipe and NVIDIA both expose). Adds harness complexity
+   (window management, virtual time budget can't be used the same way)
+   but no shim changes.
+
+3. **Update the system Vulkan loader** to one that injects
+   `VK_EXT_headless_surface` itself (newer LunarG SDK loaders do this).
+   System-wide change; not portable.
+
+### What this means for R13 three.js eval
+
+- **The Vulkan layer fix lands a real capability win** for the 5 Bevy
+  scenarios mined in `880afee` and any other native Vulkan workload.
+  These can now actually run under our layer.
+- **Chromium-WebGL capture remains blocked** at the system Vulkan
+  layer pending workaround #1 (or non-headless mode).
+- Path 1 (Node + headless-gl + `gpa_emit_frame`) is still the only
+  *currently working* route to capture three.js, and only at frame-
+  boundary granularity (per-draw state still hidden by ANGLE bypass).
