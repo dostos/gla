@@ -35,6 +35,27 @@ proceed end-to-end (extract + commit, no agent eval), drop the
 `--max-phase` flag. To run the agent-eval measurement loop, add
 `--evaluate`.
 
+## Generating new queries
+
+To explore scope NOT covered by previous runs, use `gen_queries` —
+it reads the cross-run `scope-log.jsonl` and asks an LLM to propose
+queries that bias toward unexplored repos:
+
+```bash
+PYTHONPATH=src/python python3 -m gpa.eval.curation.gen_queries \
+  --instruction "WebGPU compute shader artifacts" \
+  --scope-log .eval-pipeline/scope-log.jsonl \
+  --out /tmp/new_queries.yaml \
+  --max-queries 10 \
+  --llm-backend claude-cli
+```
+
+Output is a draft YAML — duplicates against scope-log are filtered
+out programmatically before the file is written, but near-duplicates
+(same repo, similar keywords) still need a human eye. Pipe the
+output into `gpa.eval.curation.run --queries ...` to mine the new
+scope and append to scope-log.
+
 ## Rule Surface
 
 The default rule file supports:

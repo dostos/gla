@@ -87,7 +87,32 @@ PYTHONPATH=src/python python3 -m gpa.eval.curation.run \
 Outputs:
 - `runs/<id>/journey.jsonl` — one row per discovered candidate
 - `runs/<id>/summary.md` — auto-generated rollup (terminal_reason histogram, taxonomy_cell histogram, total tokens)
+- `scope-log.jsonl` — appended cross-run; one row per `(run_id, query)`
+  pair with yielded/selected/extracted/committed counts
+
+## Post-smoke additions
+
+After the smoke-test landed, two pieces of tooling were added that
+complete the mining loop:
+
+- **`scope-log.jsonl`** — `<workdir>/scope-log.jsonl` is now appended
+  at the end of every run. Each row carries `{run_id, ts, source,
+  query, repos[], yielded, selected, extracted, committed}`.
+  Cross-run analysis: `cat scope-log.jsonl | jq ...`.
+
+- **`gpa.eval.curation.gen_queries`** — a small LLM-using CLI that
+  takes a free-form instruction + the scope-log and proposes new
+  GitHub Search queries probing unexplored scope. Deterministic
+  dedup is applied AFTER the LLM responds. Verified end-to-end on
+  2026-05-01: instruction "WebGPU compute shader bugs..." yielded
+  8 net-new queries across 6 net-new repos (gfx-rs/wgpu, gpuweb,
+  webgpu/webgpu-samples, tensorflow/tfjs, toji/webgpu-test); 0 of
+  the 8 collided with scope-log.
 
 ## Bottom line
 
-The single-path mining pipeline is correct and ready to ship. `extract_draft` is reliable (100% on the candidates that reach it). The triage gates work but lean strict — a documented follow-up to the triage-side text source is the right next step, not a relaxation of the extractor.
+The single-path mining pipeline is correct and ready to ship.
+`extract_draft` is reliable (100% on the candidates that reach it).
+The triage gates work but lean strict — partly mitigated by the
+sidebar-PR fix in `64d1def`, with the remaining gap a triage-tuning
+question for a future round.

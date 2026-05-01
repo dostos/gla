@@ -33,14 +33,22 @@ the rules file. Nothing waits for human review. To run cheaply, set
 `stratified_select` caps candidate count, and the only LLM step is
 `evaluate`, which is opt-in via `--evaluate`.
 
-### P3 — LLMs only for judging, CLI/rules for everything else
+### P3 — LLMs only for judging and query generation; CLI/rules for everything else
 
-Mining (querying, filtering, extracting) is deterministic. The only
-stage that calls an LLM is `evaluate` (the agent eval) — and that's
-opt-in via `--evaluate`. Today's `triage` is folded into stricter
-rules in `classify_score`; today's `draft` is replaced with
-`extract_draft` (deterministic field extraction from issue body + fix
-PR diff, template fill).
+Mining (querying, filtering, extracting) is deterministic. Two
+LLM-using paths exist, both narrowly scoped and opt-in:
+
+- `evaluate` (the agent eval) — opt-in via `--evaluate` flag on
+  `gpa.eval.curation.run`. Default off.
+- `gen_queries` (the query proposer) — its own CLI
+  `gpa.eval.curation.gen_queries`. Takes a free-form instruction +
+  the cross-run scope log, asks an LLM to propose new GitHub Search
+  queries probing unexplored scope, and deterministically dedupes
+  the result against `scope-log.jsonl` before writing the YAML.
+
+Today's `triage` is folded into stricter rules in `classify_score`;
+today's `draft` is replaced with `extract_draft` (deterministic field
+extraction from issue body + fix PR diff, template fill).
 
 `classify_helps` is a deterministic function of `with_gla_score
 - code_only_score`, not an LLM call.
@@ -48,11 +56,13 @@ PR diff, template fill).
 ### P4 — Per-run output dir; queryable journey JSONL is the source of truth
 
 ```
-.eval-pipeline/runs/<run_id>/
-  config.yaml        # frozen copy of queries + rules used
-  journey.jsonl      # one row per discovered candidate
-  issues/<id>/       # per-sub-step IO cache (replay)
-  summary.md         # human rollup
+.eval-pipeline/
+  scope-log.jsonl                         # cross-run, append-only
+  runs/<run_id>/
+    config.yaml                           # frozen copy of queries + rules used
+    journey.jsonl                         # one row per discovered candidate
+    issues/<id>/                          # per-sub-step IO cache (replay)
+    summary.md                            # human rollup
 ```
 
 Journey row schema (skipped phases are `null`):
@@ -91,6 +101,31 @@ expected loop: run the pipeline → query failures → add rules to
 `mining_rules.yaml` → re-run. The journey is the only feedback channel
 we maintain — if information about a failure isn't in `journey.jsonl`,
 it's not steering data.
+
+### P7 — Cross-run scope tracking; new queries dedupe against history
+
+Each run aggregates its journey rows by `discovery_query` and appends
+one row per unique query to `<workdir>/scope-log.jsonl` — a persistent
+cross-run record of which queries have been mined, with which yield.
+
+`gen_queries` is the only mining-side LLM caller besides `evaluate`.
+It reads scope-log, sends the existing queries + repo histogram to the
+LLM as context with the user's free-form instruction, and the LLM is
+asked to propose queries probing scope NOT already covered. After the
+LLM responds, `gen_queries` deterministically filters the proposals
+against the scope log so duplicates never reach the YAML output.
+
+The expected loop:
+```
+gen_queries --instruction "X" --scope-log .eval-pipeline/scope-log.jsonl
+            --out new_queries.yaml
+                       ↓
+gpa.eval.curation.run --queries new_queries.yaml ...
+                       ↓
+new rows append to scope-log.jsonl
+                       ↓
+next gen_queries call sees them and biases away from re-mined repos
+```
 
 ## Open points (decide iteratively)
 

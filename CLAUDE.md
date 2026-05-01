@@ -61,6 +61,33 @@ curl -H "Authorization: Bearer TOKEN" localhost:18080/api/v1/frames/current/over
 
 Eval scenarios live in `tests/eval/`. Each has a `.c` file (GL app) and `.md` file (description). Source files must NOT contain hint comments (// BUG, // should be, etc.)
 
+### Mining (single-path pipeline)
+
+```bash
+# 1. Generate new queries from an instruction (LLM, deduped against scope-log)
+PYTHONPATH=src/python python3 -m gpa.eval.curation.gen_queries \
+  --instruction "WebGPU compute shader artifacts" \
+  --scope-log .eval-pipeline/scope-log.jsonl \
+  --out /tmp/new_queries.yaml \
+  --max-queries 10 --llm-backend claude-cli
+
+# 2. Mine those queries (or any existing query pack)
+PYTHONPATH=src/python python3 -m gpa.eval.curation.run \
+  --queries /tmp/new_queries.yaml \
+  --rules src/python/gpa/eval/curation/mining_rules.yaml \
+  --workdir .eval-pipeline \
+  --batch-quota 30
+  # --max-phase {select,produce,judge}: select skips LLM/commit; judge default
+  # --evaluate: opt-in, runs agent eval; needs configured harness
+```
+
+Outputs: per-run `journey.jsonl` + `summary.md` + cross-run
+`scope-log.jsonl`. The scope log is the persistent source of truth
+for "what's already been mined" — `gen_queries` reads it on every
+call so future LLM proposals avoid re-mined queries/repos.
+
+Spec: `docs/superpowers/specs/2026-05-01-single-path-mining-design.md`.
+
 ## Adding a New GL Function to Intercept
 
 1. `src/shims/gl/gl_wrappers.h` — add function pointer to `GpaRealGlFuncs`
