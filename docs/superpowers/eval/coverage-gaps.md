@@ -1,11 +1,11 @@
 # OpenGPA Coverage Gaps
 
-*Regenerated: 2026-05-01T15:28:19.622854+00:00*
+*Regenerated: 2026-05-01T15:42:36.167741+00:00*
 
 ## Summary
-- Issues reviewed: 677
-- Scenarios committed: 105
-- Rejected: 572
+- Issues reviewed: 685
+- Scenarios committed: 106
+- Rejected: 579
 
 ## Helpfulness Distribution
 - observed_helps=yes: 0
@@ -13,7 +13,7 @@
 - observed_helps=ambiguous: 101
 
 ## Rejection Breakdown
-- out_of_scope_not_rendering_bug: 489
+- out_of_scope_not_rendering_bug: 496
 - not_reproducible: 52
 - out_of_scope_compile_error: 12
 - fix_not_framework_internal: 12
