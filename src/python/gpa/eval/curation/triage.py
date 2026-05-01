@@ -298,7 +298,16 @@ def fetch_issue_thread(url: str) -> IssueThread:
     body = issue.get("body", "") or ""
     comment_bodies = [c.get("body", "") for c in comments]
 
-    # NEW: extract and fetch linked PRs/issues/commits
+    # GitHub's "linked PRs" sidebar exposes closing-PR refs only via GraphQL,
+    # not via the REST issue body or comments. Fetch them so triage's
+    # fix_pr_linked rule sees the link even when the body has no "Closes #N"
+    # text. Best-effort: any failure is logged and skipped.
+    closing_pr_refs = _fetch_closing_pr_refs(owner, repo, number)
+    if closing_pr_refs:
+        body = body.rstrip() + "\n\n" + "\n".join(
+            f"Closes #{pr['number']} ({pr['url']})" for pr in closing_pr_refs
+        )
+
     all_text = "\n".join([body] + comment_bodies)
     refs = _extract_pr_refs(all_text, default_owner=owner, default_repo=repo)
     # Skip references to the current issue itself
@@ -313,6 +322,38 @@ def fetch_issue_thread(url: str) -> IssueThread:
         body=body,
         comments=comment_bodies + linked_blocks,
     )
+
+
+def _fetch_closing_pr_refs(owner: str, repo: str, number: str) -> list[dict]:
+    """Pull GitHub's sidebar `closedByPullRequestsReferences` via GraphQL.
+
+    Returns a list of {"number": int, "url": str} dicts; empty on any
+    failure (gh missing, auth failure, repo not found, network error).
+    Best-effort by design — the caller falls back to body/comment text.
+    """
+    query = (
+        "query($owner:String!,$repo:String!,$number:Int!){"
+        "repository(owner:$owner,name:$repo){"
+        "issue(number:$number){"
+        "closedByPullRequestsReferences(first:5,includeClosedPrs:true){"
+        "nodes{number url}}}}}"
+    )
+    try:
+        proc = subprocess.run(
+            ["gh", "api", "graphql",
+             "-f", f"query={query}",
+             "-F", f"owner={owner}", "-F", f"repo={repo}",
+             "-F", f"number={number}"],
+            capture_output=True, text=True, check=True,
+        )
+        data = json.loads(proc.stdout)
+        nodes = (
+            data.get("data", {}).get("repository", {}).get("issue", {})
+                .get("closedByPullRequestsReferences", {}).get("nodes", [])
+        )
+        return [{"number": n["number"], "url": n["url"]} for n in (nodes or [])]
+    except Exception:  # noqa: BLE001 — defensive: any failure falls back
+        return []
 
 
 def fetch_commit_thread(url: str) -> IssueThread:

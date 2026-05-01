@@ -62,16 +62,61 @@ def test_triage_respects_compile_error_rejection():
 def test_fetch_issue_thread_calls_gh_api():
     issue_json = '{"title":"x","body":"b","number":42}'
     comments_json = '[{"body":"c1"},{"body":"c2"}]'
+    graphql_empty = '{"data":{"repository":{"issue":{"closedByPullRequestsReferences":{"nodes":[]}}}}}'
     with patch("subprocess.run") as mock_run:
         mock_run.side_effect = [
             MagicMock(stdout=issue_json, returncode=0),
             MagicMock(stdout=comments_json, returncode=0),
+            MagicMock(stdout=graphql_empty, returncode=0),
         ]
         thread = fetch_issue_thread("https://github.com/owner/repo/issues/42")
 
     assert thread.title == "x"
     assert thread.body == "b"
     assert thread.comments == ["c1", "c2"]
+
+
+def test_fetch_issue_thread_appends_sidebar_closing_prs_to_body():
+    """closedByPullRequestsReferences (GitHub sidebar) gets folded into body
+    so triage's fix_pr_linked rule sees the link even when neither body nor
+    comments mention "Closes #N" textually."""
+    issue_json = '{"title":"x","body":"original body text","number":42}'
+    comments_json = "[]"
+    graphql_with_pr = (
+        '{"data":{"repository":{"issue":{"closedByPullRequestsReferences":'
+        '{"nodes":[{"number":99,"url":"https://github.com/owner/repo/pull/99"}]}}}}}'
+    )
+    pr_json = json.dumps({"title": "fix", "body": "the fix", "number": 99})
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            MagicMock(stdout=issue_json, returncode=0),
+            MagicMock(stdout=comments_json, returncode=0),
+            MagicMock(stdout=graphql_with_pr, returncode=0),
+            # The Closes-#99 we just appended is also picked up by
+            # _extract_pr_refs and fed into _fetch_linked_context.
+            MagicMock(stdout=pr_json, returncode=0),
+        ]
+        thread = fetch_issue_thread("https://github.com/owner/repo/issues/42")
+
+    assert "original body text" in thread.body
+    assert "Closes #99" in thread.body
+    assert "https://github.com/owner/repo/pull/99" in thread.body
+
+
+def test_fetch_issue_thread_tolerates_graphql_failure():
+    """If the GraphQL probe fails (auth, network, gh missing), thread fetching
+    still succeeds — the body simply lacks sidebar PR refs."""
+    issue_json = '{"title":"x","body":"b","number":42}'
+    comments_json = "[]"
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            MagicMock(stdout=issue_json, returncode=0),
+            MagicMock(stdout=comments_json, returncode=0),
+            Exception("graphql failed"),
+        ]
+        thread = fetch_issue_thread("https://github.com/owner/repo/issues/42")
+
+    assert thread.body == "b"  # unchanged, no sidebar appendix
 
 
 def test_triage_rejects_invalid_fingerprint_category():
@@ -180,12 +225,13 @@ def test_fetch_issue_thread_follows_pr_reference():
         "body": "Root cause: depth precision collapses when far/near > 1e6.",
     })
 
+    graphql_empty = '{"data":{"repository":{"issue":{"closedByPullRequestsReferences":{"nodes":[]}}}}}'
     with patch("subprocess.run") as mock_run:
-        # fetch_issue_thread makes 2 calls (issue + comments) then
-        # _fetch_linked_context makes 1 (PR) → 3 total.
+        # fetch_issue_thread: issue + comments + graphql + linked-PR = 4 calls.
         mock_run.side_effect = [
             MagicMock(stdout=issue_json, returncode=0),
             MagicMock(stdout=comments_json, returncode=0),
+            MagicMock(stdout=graphql_empty, returncode=0),
             MagicMock(stdout=pr_json, returncode=0),
         ]
         thread = fetch_issue_thread("https://github.com/owner/repo/issues/42")
@@ -204,10 +250,12 @@ def test_fetch_issue_thread_swallows_broken_links(caplog):
     })
     comments_json = json.dumps([])
 
+    graphql_empty = '{"data":{"repository":{"issue":{"closedByPullRequestsReferences":{"nodes":[]}}}}}'
     with patch("subprocess.run") as mock_run:
         mock_run.side_effect = [
             MagicMock(stdout=issue_json, returncode=0),
             MagicMock(stdout=comments_json, returncode=0),
+            MagicMock(stdout=graphql_empty, returncode=0),
             # PR fetch: returncode != 0 (404 from gh)
             MagicMock(stdout="", returncode=1),
             # Issue fallback fetch: also fails
@@ -229,15 +277,17 @@ def test_fetch_issue_thread_skips_self_reference():
     })
     comments_json = json.dumps([])
 
+    graphql_empty = '{"data":{"repository":{"issue":{"closedByPullRequestsReferences":{"nodes":[]}}}}}'
     with patch("subprocess.run") as mock_run:
         mock_run.side_effect = [
             MagicMock(stdout=issue_json, returncode=0),
             MagicMock(stdout=comments_json, returncode=0),
+            MagicMock(stdout=graphql_empty, returncode=0),
         ]
         thread = fetch_issue_thread("https://github.com/owner/repo/issues/42")
 
-    # Only 2 gh calls (issue + comments), no self-fetch
-    assert mock_run.call_count == 2
+    # 3 gh calls (issue + comments + graphql probe), no self-fetch.
+    assert mock_run.call_count == 3
 
 
 def test_fetch_pr_thread_calls_pulls_endpoint():
