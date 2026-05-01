@@ -116,13 +116,6 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         help="In JUDGE phase, run the eval harness before committing.",
     )
     p.add_argument(
-        "--budget-tokens", type=int, default=0,
-        help=(
-            "Total LLM token budget across the run. 0 = no cap. "
-            "(This module makes no LLM calls; flag reserved for future use.)"
-        ),
-    )
-    p.add_argument(
         "--batch-quota", type=int, default=20,
         help="Total candidates to discover. Default: 20",
     )

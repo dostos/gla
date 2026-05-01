@@ -31,8 +31,6 @@ class TerminalReason(str, Enum):
     EVALUATE_ERROR = "evaluate_error"
     NOT_HELPFUL = "not_helpful"  # helps_verdict=no
     COMMITTED = "committed"
-    # global
-    BUDGET_EXHAUSTED = "budget_exhausted"
 
 
 @dataclass
