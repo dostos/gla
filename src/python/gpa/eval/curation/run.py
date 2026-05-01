@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import logging
 import re
 import subprocess
 import sys
@@ -77,6 +78,9 @@ __all__ = [
     "fetch_thread",
     "commit_scenario",
 ]
+
+
+_LOG = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -248,6 +252,12 @@ def _fetch_fix_pr_metadata(thread: IssueThread, url: str) -> dict:
     on success, or raises an exception which the caller catches and
     records as ``terminal_reason=extraction_failed``.
 
+    On ``gh api`` failure, emits a WARNING-level log line including
+    ``CalledProcessError.stderr`` so operators debugging a failed run can
+    see the underlying API error rather than only "extraction failed".
+    The journey-row schema does not admit a free-form failure-detail
+    field (per Task 1), so the log is the surfacing mechanism.
+
     Tests monkeypatch this seam.
     """
     body_text = thread.body or ""
@@ -278,17 +288,26 @@ def _fetch_fix_pr_metadata(thread: IssueThread, url: str) -> dict:
             raise ValueError(f"no PR reference found in thread {url}")
         owner_pr, repo_pr, num = owner, repo, short_m.group(1)
 
-    proc = subprocess.run(
-        ["gh", "api", f"repos/{owner_pr}/{repo_pr}/pulls/{num}"],
-        capture_output=True, text=True, check=True,
-    )
-    pr = json.loads(proc.stdout)
+    try:
+        proc = subprocess.run(
+            ["gh", "api", f"repos/{owner_pr}/{repo_pr}/pulls/{num}"],
+            capture_output=True, text=True, check=True,
+        )
+        pr = json.loads(proc.stdout)
 
-    files_proc = subprocess.run(
-        ["gh", "api", f"repos/{owner_pr}/{repo_pr}/pulls/{num}/files"],
-        capture_output=True, text=True, check=True,
-    )
-    files = json.loads(files_proc.stdout)
+        files_proc = subprocess.run(
+            ["gh", "api", f"repos/{owner_pr}/{repo_pr}/pulls/{num}/files"],
+            capture_output=True, text=True, check=True,
+        )
+        files = json.loads(files_proc.stdout)
+    except subprocess.CalledProcessError as exc:
+        # Surface gh stderr so operators can see the underlying failure
+        # (rate limit, 404, auth, etc.) rather than only "extraction failed".
+        _LOG.warning(
+            "gh api failed for %s (PR %s/%s#%s): %s",
+            url, owner_pr, repo_pr, num, (exc.stderr or "").strip(),
+        )
+        raise
 
     return {
         "url": pr.get("html_url") or f"https://github.com/{owner_pr}/{repo_pr}/pull/{num}",
@@ -327,6 +346,17 @@ def _make_row(
         cache_hit=cache_hit,
         terminal_phase=terminal_phase,
         terminal_reason=terminal_reason,
+    )
+
+
+def _select_outcome_for(rec: Any, *, selected: bool) -> SelectOutcome:
+    """Build a SelectOutcome from a scored MiningPlanRecord."""
+    return SelectOutcome(
+        deduped=False, fetched=True,
+        taxonomy_cell=rec.taxonomy_cell,
+        score=rec.score,
+        score_reasons=list(rec.score_reasons),
+        selected=selected,
     )
 
 
@@ -371,11 +401,6 @@ def _draft_to_files(draft: DraftResult) -> dict[str, str]:
     return {"scenario.md": "\n".join(md_lines)}
 
 
-# ---------------------------------------------------------------------------
-# main
-# ---------------------------------------------------------------------------
-
-
 def _load_queries(queries_path: Path) -> dict:
     """Normalise queries.yaml into the {issue, commit, stackoverflow} shape."""
     raw = yaml.safe_load(queries_path.read_text(encoding="utf-8")) or {}
@@ -413,37 +438,26 @@ def _resolve_selection_thresholds(
     return min_score, per_cell_cap
 
 
-def main(argv: Optional[list[str]] = None) -> int:
-    args = parse_args(argv)
+# ---------------------------------------------------------------------------
+# Phase helpers (one per phase). Each is independently readable and only
+# touches its own slice of journey rows + return value. ``main`` is the
+# orchestration glue that wires them together.
+# ---------------------------------------------------------------------------
 
-    queries_path = Path(args.queries)
-    rules_path = Path(args.rules)
 
-    cfg_payload = (
-        queries_path.read_text(encoding="utf-8")
-        + "\n# ---\n"
-        + rules_path.read_text(encoding="utf-8")
-    )
-    run_id = args.run_id or generate_run_id(config_text=cfg_payload)
-    rd = RunDir.create(
-        root=Path(args.workdir), run_id=run_id, config_payload=cfg_payload
-    )
-    writer = JourneyWriter(rd.journey_path)
+def _run_select(
+    *, candidates: list[Any], coverage: CoverageLog, rules: MiningRules,
+    min_score: int, per_cell_cap: int, batch_quota: int,
+    run_id: str, discovered_at: str, writer: JourneyWriter,
+) -> list[tuple[Any, IssueThread, Any]]:
+    """Run dedup -> fetch -> score -> stratified-select.
 
-    queries = _load_queries(queries_path)
-    rules: MiningRules = load_rules(rules_path)
-    min_score, per_cell_cap = _resolve_selection_thresholds(rules_path, args)
-
-    coverage = CoverageLog(args.coverage_log)
-    discoverer = build_discoverer(queries, coverage, args.batch_quota)
-    candidates = list(discoverer.run())
-    discovered_at = datetime.now(timezone.utc).isoformat()
-
-    # ----------------------------- SELECT -----------------------------
-    # Per-candidate: dedup -> fetch -> score (with triage gates) -> rank.
-    selected_records: list[tuple[Any, IssueThread, Any]] = []
-    # Pending rows we may write later (so we can mark "selected" vs "not_selected"
-    # only after select_stratified runs).
+    Writes a journey row at SELECT terminal for every dropped candidate
+    (DUPLICATE_URL, FETCH_FAILED, TRIAGE_REJECTED, BELOW_MIN_SCORE,
+    NOT_SELECTED). Returns the list of selected ``(cand, thread, rec)``
+    triples. Does NOT write rows for selected candidates -- the caller
+    decides their terminal_phase/reason based on max-phase.
+    """
     eligible: list[tuple[Any, IssueThread, Any]] = []
 
     for cand in candidates:
@@ -480,16 +494,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         # 3. score (triage_required/triage_reject gates run inside).
         rec = score_candidate(cand, thread=thread, rules=rules)
         if rec.terminal_reason == "triage_rejected":
-            select = SelectOutcome(
-                deduped=False, fetched=True,
-                taxonomy_cell=rec.taxonomy_cell,
-                score=rec.score,
-                score_reasons=list(rec.score_reasons),
-                selected=False,
-            )
             writer.append(_make_row(
                 cand, run_id=run_id, discovered_at=discovered_at,
-                select=select,
+                select=_select_outcome_for(rec, selected=False),
                 terminal_phase="select",
                 terminal_reason=TerminalReason.TRIAGE_REJECTED.value,
             ))
@@ -497,16 +504,9 @@ def main(argv: Optional[list[str]] = None) -> int:
 
         # 4. min-score gate
         if rec.score < min_score:
-            select = SelectOutcome(
-                deduped=False, fetched=True,
-                taxonomy_cell=rec.taxonomy_cell,
-                score=rec.score,
-                score_reasons=list(rec.score_reasons),
-                selected=False,
-            )
             writer.append(_make_row(
                 cand, run_id=run_id, discovered_at=discovered_at,
-                select=select,
+                select=_select_outcome_for(rec, selected=False),
                 terminal_phase="select",
                 terminal_reason=TerminalReason.BELOW_MIN_SCORE.value,
             ))
@@ -515,62 +515,45 @@ def main(argv: Optional[list[str]] = None) -> int:
         eligible.append((cand, thread, rec))
 
     # 5. stratified selection across eligible records.
-    if eligible:
-        records_for_strat = [rec for (_c, _t, rec) in eligible]
-        selected_recs = select_stratified(
-            records_for_strat,
-            top_k=args.batch_quota,
-            min_score=min_score,
-            per_cell_cap=per_cell_cap,
-        )
-        selected_urls = {r.url for r in selected_recs}
-        for cand, thread, rec in eligible:
-            if rec.url in selected_urls:
-                selected_records.append((cand, thread, rec))
-            else:
-                # Ranked-out: write a NOT_SELECTED row at SELECT terminal.
-                select = SelectOutcome(
-                    deduped=False, fetched=True,
-                    taxonomy_cell=rec.taxonomy_cell,
-                    score=rec.score,
-                    score_reasons=list(rec.score_reasons),
-                    selected=False,
-                )
-                writer.append(_make_row(
-                    cand, run_id=run_id, discovered_at=discovered_at,
-                    select=select,
-                    terminal_phase="select",
-                    terminal_reason=TerminalReason.NOT_SELECTED.value,
-                ))
+    selected_records: list[tuple[Any, IssueThread, Any]] = []
+    if not eligible:
+        return selected_records
 
-    # If max-phase is select, write rows for selected candidates and stop.
-    if args.max_phase == "select":
-        for cand, _thread, rec in selected_records:
-            select = SelectOutcome(
-                deduped=False, fetched=True,
-                taxonomy_cell=rec.taxonomy_cell,
-                score=rec.score,
-                score_reasons=list(rec.score_reasons),
-                selected=True,
-            )
+    selected_recs = select_stratified(
+        [rec for (_c, _t, rec) in eligible],
+        top_k=batch_quota,
+        min_score=min_score,
+        per_cell_cap=per_cell_cap,
+    )
+    selected_urls = {r.url for r in selected_recs}
+    for cand, thread, rec in eligible:
+        if rec.url in selected_urls:
+            selected_records.append((cand, thread, rec))
+        else:
             writer.append(_make_row(
                 cand, run_id=run_id, discovered_at=discovered_at,
-                select=select,
+                select=_select_outcome_for(rec, selected=False),
                 terminal_phase="select",
                 terminal_reason=TerminalReason.NOT_SELECTED.value,
             ))
-        return 0
+    return selected_records
 
-    # ----------------------------- PRODUCE -----------------------------
+
+def _run_produce(
+    *, selected: list[tuple[Any, IssueThread, Any]],
+    eval_dir: Path,
+    run_id: str, discovered_at: str, writer: JourneyWriter,
+) -> list[tuple[Any, IssueThread, Any, DraftResult, dict]]:
+    """Run extract_draft + validate on each selected candidate.
+
+    Writes a journey row at PRODUCE terminal for each failure
+    (EXTRACTION_FAILED on fix-PR fetch, EXTRACTION_FAILED on extract
+    raise, VALIDATION_FAILED on validator ok=False). Returns the list of
+    successfully drafted ``(cand, thread, rec, draft, fix_pr)`` tuples.
+    """
     drafted: list[tuple[Any, IssueThread, Any, DraftResult, dict]] = []
-    for cand, thread, rec in selected_records:
-        select = SelectOutcome(
-            deduped=False, fetched=True,
-            taxonomy_cell=rec.taxonomy_cell,
-            score=rec.score,
-            score_reasons=list(rec.score_reasons),
-            selected=True,
-        )
+    for cand, thread, rec in selected:
+        select = _select_outcome_for(rec, selected=True)
 
         # 1. Fetch fix-PR metadata
         try:
@@ -603,7 +586,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             continue
 
         # 3. validate (test seam)
-        result = _validate_draft(draft, Path(args.eval_dir))
+        result = _validate_draft(draft, eval_dir)
         if not getattr(result, "ok", False):
             writer.append(_make_row(
                 cand, run_id=run_id, discovered_at=discovered_at,
@@ -615,55 +598,42 @@ def main(argv: Optional[list[str]] = None) -> int:
             continue
 
         drafted.append((cand, thread, rec, draft, fix_pr))
+    return drafted
 
-    if args.max_phase == "produce":
-        for cand, _thread, rec, _draft, _fix_pr in drafted:
-            select = SelectOutcome(
-                deduped=False, fetched=True,
-                taxonomy_cell=rec.taxonomy_cell,
-                score=rec.score,
-                score_reasons=list(rec.score_reasons),
-                selected=True,
-            )
-            writer.append(_make_row(
-                cand, run_id=run_id, discovered_at=discovered_at,
-                select=select,
-                produce=ProduceOutcome(extracted=True, validated=True),
-                terminal_phase="produce",
-                terminal_reason=TerminalReason.PRODUCE_DONE.value,
-            ))
-        return 0
 
-    # ----------------------------- JUDGE -----------------------------
+def _run_judge(
+    *, drafted: list[tuple[Any, IssueThread, Any, DraftResult, dict]],
+    eval_dir: Path, summary_path: Path, backend: str, evaluate: bool,
+    coverage: CoverageLog, run_id: str, discovered_at: str,
+    writer: JourneyWriter,
+) -> None:
+    """Run optional eval, classify helpfulness, then commit.
+
+    For each drafted candidate: optionally run_eval + classify, then commit
+    (unless verdict=='no'). Writes a journey row at JUDGE terminal for
+    every outcome (EVALUATE_ERROR, NOT_HELPFUL, COMMITTED).
+    """
     for cand, thread, rec, draft, fix_pr in drafted:
-        select = SelectOutcome(
-            deduped=False, fetched=True,
-            taxonomy_cell=rec.taxonomy_cell,
-            score=rec.score,
-            score_reasons=list(rec.score_reasons),
-            selected=True,
-        )
+        select = _select_outcome_for(rec, selected=True)
         produce = ProduceOutcome(extracted=True, validated=True)
         scenario_id = _make_scenario_id(rec, cand, run_id=run_id)
-        judge = JudgeOutcome()
 
         with_gla_score: Optional[float] = None
         code_only_score: Optional[float] = None
         verdict: Optional[str] = None
         eval_summary: Optional[dict] = None
 
-        if args.evaluate:
+        if evaluate:
             try:
                 ev = run_eval(
                     scenario_id=scenario_id,
-                    eval_dir=Path(args.eval_dir),
-                    backend=args.backend,
+                    eval_dir=eval_dir,
+                    backend=backend,
                 )
             except Exception:
                 writer.append(_make_row(
                     cand, run_id=run_id, discovered_at=discovered_at,
-                    select=select, produce=produce,
-                    judge=judge,
+                    select=select, produce=produce, judge=JudgeOutcome(),
                     terminal_phase="judge",
                     terminal_reason=TerminalReason.EVALUATE_ERROR.value,
                 ))
@@ -700,11 +670,11 @@ def main(argv: Optional[list[str]] = None) -> int:
 
         # Commit the scenario into tests/eval/.
         commit_scenario(
-            eval_dir=Path(args.eval_dir),
+            eval_dir=eval_dir,
             scenario_id=scenario_id,
             files=_draft_to_files(draft),
             coverage_log=coverage,
-            summary_path=Path(args.summary_path),
+            summary_path=summary_path,
             issue_url=cand.url,
             source_type=getattr(cand, "source_type", "issue"),
             triage_verdict="in_scope",
@@ -716,19 +686,110 @@ def main(argv: Optional[list[str]] = None) -> int:
             eval_summary=eval_summary,
         )
 
-        judge = JudgeOutcome(
-            with_gla_score=with_gla_score,
-            code_only_score=code_only_score,
-            helps_verdict=verdict,
-            committed_as=scenario_id,
-        )
         writer.append(_make_row(
             cand, run_id=run_id, discovered_at=discovered_at,
-            select=select, produce=produce, judge=judge,
+            select=select, produce=produce,
+            judge=JudgeOutcome(
+                with_gla_score=with_gla_score,
+                code_only_score=code_only_score,
+                helps_verdict=verdict,
+                committed_as=scenario_id,
+            ),
             terminal_phase="judge",
             terminal_reason=TerminalReason.COMMITTED.value,
         ))
 
+
+def _write_select_terminal_rows(
+    selected: list[tuple[Any, IssueThread, Any]],
+    *, run_id: str, discovered_at: str, writer: JourneyWriter,
+) -> None:
+    """Write SELECT_DONE rows for candidates that successfully selected
+    when --max-phase=select halts the run."""
+    for cand, _thread, rec in selected:
+        writer.append(_make_row(
+            cand, run_id=run_id, discovered_at=discovered_at,
+            select=_select_outcome_for(rec, selected=True),
+            terminal_phase="select",
+            terminal_reason=TerminalReason.SELECT_DONE.value,
+        ))
+
+
+def _write_produce_terminal_rows(
+    drafted: list[tuple[Any, IssueThread, Any, DraftResult, dict]],
+    *, run_id: str, discovered_at: str, writer: JourneyWriter,
+) -> None:
+    """Write PRODUCE_DONE rows for candidates that successfully drafted
+    when --max-phase=produce halts the run."""
+    for cand, _thread, rec, _draft, _fix_pr in drafted:
+        writer.append(_make_row(
+            cand, run_id=run_id, discovered_at=discovered_at,
+            select=_select_outcome_for(rec, selected=True),
+            produce=ProduceOutcome(extracted=True, validated=True),
+            terminal_phase="produce",
+            terminal_reason=TerminalReason.PRODUCE_DONE.value,
+        ))
+
+
+# ---------------------------------------------------------------------------
+# main (orchestration glue)
+# ---------------------------------------------------------------------------
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    args = parse_args(argv)
+
+    queries_path = Path(args.queries)
+    rules_path = Path(args.rules)
+    cfg_payload = (
+        queries_path.read_text(encoding="utf-8")
+        + "\n# ---\n"
+        + rules_path.read_text(encoding="utf-8")
+    )
+    run_id = args.run_id or generate_run_id(config_text=cfg_payload)
+    rd = RunDir.create(
+        root=Path(args.workdir), run_id=run_id, config_payload=cfg_payload
+    )
+    writer = JourneyWriter(rd.journey_path)
+
+    queries = _load_queries(queries_path)
+    rules: MiningRules = load_rules(rules_path)
+    min_score, per_cell_cap = _resolve_selection_thresholds(rules_path, args)
+
+    coverage = CoverageLog(args.coverage_log)
+    discoverer = build_discoverer(queries, coverage, args.batch_quota)
+    candidates = list(discoverer.run())
+    discovered_at = datetime.now(timezone.utc).isoformat()
+
+    selected = _run_select(
+        candidates=candidates, coverage=coverage, rules=rules,
+        min_score=min_score, per_cell_cap=per_cell_cap,
+        batch_quota=args.batch_quota,
+        run_id=run_id, discovered_at=discovered_at, writer=writer,
+    )
+    if args.max_phase == "select":
+        _write_select_terminal_rows(
+            selected, run_id=run_id, discovered_at=discovered_at, writer=writer,
+        )
+        return 0
+
+    drafted = _run_produce(
+        selected=selected, eval_dir=Path(args.eval_dir),
+        run_id=run_id, discovered_at=discovered_at, writer=writer,
+    )
+    if args.max_phase == "produce":
+        _write_produce_terminal_rows(
+            drafted, run_id=run_id, discovered_at=discovered_at, writer=writer,
+        )
+        return 0
+
+    _run_judge(
+        drafted=drafted, eval_dir=Path(args.eval_dir),
+        summary_path=Path(args.summary_path),
+        backend=args.backend, evaluate=args.evaluate,
+        coverage=coverage,
+        run_id=run_id, discovered_at=discovered_at, writer=writer,
+    )
     return 0
 
 

@@ -19,6 +19,8 @@ class TerminalReason(str, Enum):
     BELOW_MIN_SCORE = "below_min_score"
     NOT_SELECTED = "not_selected"  # ranked too low for top_k / per_cell_cap
     TRIAGE_REJECTED = "triage_rejected"  # caught by classify_score reject rules
+    # Used when --max-phase=select stops the pipeline at a successful selection.
+    SELECT_DONE = "select_done"
     # PRODUCE terminal reasons
     EXTRACTION_FAILED = "extraction_failed"
     VALIDATION_FAILED = "validation_failed"

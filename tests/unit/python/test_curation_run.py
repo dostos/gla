@@ -153,8 +153,12 @@ def test_run_max_phase_select_writes_journey_no_llm(
     assert len(journey_lines) == 1
     row = json.loads(journey_lines[0])
     assert row["select"]["fetched"] is True
+    assert row["select"]["selected"] is True
     assert row["produce"] is None
     assert row["tokens"]["total"] == 0
+    # Selected at SELECT terminal: terminal_reason must align with selected=True.
+    assert row["terminal_phase"] == "select"
+    assert row["terminal_reason"] == "select_done"
 
 
 # ---------------------------------------------------------------------------
@@ -266,3 +270,175 @@ def test_run_judge_commits_without_evaluate_when_flag_not_set(
     kwargs = commit_calls[0]
     assert kwargs["scenario_id"] == row["judge"]["committed_as"]
     assert kwargs["issue_url"] == "https://github.com/x/y/issues/1"
+
+
+# ---------------------------------------------------------------------------
+# SELECT-phase failure-mode tests (parametrized).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "case_id, body_override, fetch_thread_raises, coverage_contains_url, "
+    "min_score_override, expected_terminal_reason",
+    [
+        # DUPLICATE_URL: coverage.contains_url(cand.url) -> True.
+        (
+            "duplicate_url", None, False, True, None, "duplicate_url",
+        ),
+        # FETCH_FAILED: fetch_thread raises.
+        (
+            "fetch_failed", None, True, False, None, "fetch_failed",
+        ),
+        # TRIAGE_REJECTED: body has no visual keyword (and no closing PR ref)
+        # so the triage_required gates drop the candidate.
+        (
+            "triage_rejected",
+            "Routine refactor; nothing visual here. Tracking general cleanup.",
+            False, False, None, "triage_rejected",
+        ),
+        # BELOW_MIN_SCORE: real triage_required pass, but min-score is set
+        # absurdly high so the scored record falls below the gate.
+        (
+            "below_min_score", None, False, False, 9999, "below_min_score",
+        ),
+    ],
+)
+def test_run_select_failure_modes(
+    case_id, body_override, fetch_thread_raises,
+    coverage_contains_url, min_score_override, expected_terminal_reason,
+    tmp_path, queries_path, rules_path, fake_cand, monkeypatch,
+):
+    """Each parametrized case stubs exactly one seam to force one terminal_reason."""
+    from gpa.eval.curation import run as run_mod
+
+    if body_override is not None:
+        fake_cand.body = body_override
+        fake_cand.metadata["body"] = body_override
+
+    monkeypatch.setattr(
+        run_mod, "build_discoverer",
+        lambda *a, **kw: FakeDiscoverer([fake_cand]),
+    )
+
+    if fetch_thread_raises:
+        def _raise(_url):
+            raise RuntimeError("simulated network failure")
+        monkeypatch.setattr(run_mod, "fetch_thread", _raise)
+    else:
+        monkeypatch.setattr(
+            run_mod, "fetch_thread",
+            lambda url: _make_fake_thread(
+                url=fake_cand.url, title=fake_cand.title, body=fake_cand.body,
+            ),
+        )
+
+    if coverage_contains_url:
+        # Patch CoverageLog.contains_url at class level so the empty/temp
+        # coverage log behaves as if the URL is already known.
+        monkeypatch.setattr(
+            "gpa.eval.curation.run.CoverageLog.contains_url",
+            lambda self, url: True,
+        )
+
+    argv = [
+        "--queries", str(queries_path),
+        "--rules", str(rules_path),
+        "--workdir", str(tmp_path / "wd"),
+        "--max-phase", "select",
+    ]
+    if min_score_override is not None:
+        argv += ["--min-score", str(min_score_override)]
+
+    rc = run_mod.main(argv)
+    assert rc == 0
+
+    runs = list((tmp_path / "wd" / "runs").iterdir())
+    assert len(runs) == 1
+    journey_lines = (runs[0] / "journey.jsonl").read_text().splitlines()
+    assert len(journey_lines) == 1
+    row = json.loads(journey_lines[0])
+    assert row["terminal_phase"] == "select"
+    assert row["terminal_reason"] == expected_terminal_reason
+    # Failure rows never have produce/judge populated.
+    assert row["produce"] is None
+    assert row["judge"] is None
+
+
+# ---------------------------------------------------------------------------
+# PRODUCE-phase failure-mode tests (parametrized).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "case_id, extract_raises, validate_ok, expected_terminal_reason, "
+    "expected_extracted, expected_validated",
+    [
+        # EXTRACTION_FAILED: extract_draft raises ExtractionFailure.
+        (
+            "extraction_failed", True, None,
+            "extraction_failed", False, False,
+        ),
+        # VALIDATION_FAILED: extract succeeds but validator returns ok=False.
+        (
+            "validation_failed", False, False,
+            "validation_failed", True, False,
+        ),
+    ],
+)
+def test_run_produce_failure_modes(
+    case_id, extract_raises, validate_ok,
+    expected_terminal_reason, expected_extracted, expected_validated,
+    tmp_path, queries_path, rules_path, patch_select_seams, monkeypatch,
+):
+    from gpa.eval.curation import run as run_mod
+    from gpa.eval.curation.extract_draft import ExtractionFailure
+
+    monkeypatch.setattr(
+        run_mod, "_fetch_fix_pr_metadata",
+        lambda thread, url: {
+            "url": "https://github.com/x/y/pull/2",
+            "commit_sha": "abc1234",
+            "files_changed": ["src/lib.rs"],
+        },
+    )
+
+    if extract_raises:
+        def _raise_extract(*args, **kwargs):
+            raise ExtractionFailure("simulated extraction failure")
+        monkeypatch.setattr(run_mod, "extract_draft", _raise_extract)
+    # else: real extract_draft runs against the fake thread/fix_pr.
+
+    if validate_ok is False:
+        monkeypatch.setattr(
+            run_mod, "_validate_draft",
+            lambda draft, eval_dir: _FakeValidationResult(
+                ok=False, reason="simulated validator rejection",
+            ),
+        )
+    elif validate_ok is True:
+        monkeypatch.setattr(
+            run_mod, "_validate_draft",
+            lambda draft, eval_dir: _FakeValidationResult(ok=True),
+        )
+
+    rc = run_mod.main([
+        "--queries", str(queries_path),
+        "--rules", str(rules_path),
+        "--workdir", str(tmp_path / "wd"),
+        "--max-phase", "produce",
+    ])
+    assert rc == 0
+
+    runs = list((tmp_path / "wd" / "runs").iterdir())
+    assert len(runs) == 1
+    journey_lines = (runs[0] / "journey.jsonl").read_text().splitlines()
+    assert len(journey_lines) == 1
+    row = json.loads(journey_lines[0])
+    assert row["terminal_phase"] == "produce"
+    assert row["terminal_reason"] == expected_terminal_reason
+    assert row["produce"] is not None
+    assert row["produce"]["extracted"] is expected_extracted
+    assert row["produce"]["validated"] is expected_validated
+    # Selected upstream, so the SELECT outcome is populated.
+    assert row["select"]["selected"] is True
+    assert row["judge"] is None
