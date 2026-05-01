@@ -116,3 +116,37 @@ The single-path mining pipeline is correct and ready to ship.
 The triage gates work but lean strict — partly mitigated by the
 sidebar-PR fix in `64d1def`, with the remaining gap a triage-tuning
 question for a future round.
+
+## Rejection-rate analysis & fixes (2026-05-01, post-Godot mining)
+
+After running mining against `godotengine/godot` we sampled the 80%
+triage-rejection rate observed across 4 mining runs (100 candidates).
+Four structural fixes landed:
+
+| Fix | File | Before | After |
+|---|---|---|---|
+| Visual-keyword regex expanded | `mining_rules.yaml` | 4/6 sampled rejections were false (deck.gl, maplibre, pixijs, playcanvas — used "incorrect"/"regression"/"breaks"/"failing") | covers `incorrect`, `broken`, `fails`, `regression`, `crash`, `corrupted`, `garbled`, `distortion` |
+| PR URL auto-passes `fix_pr_linked` | `rules.py` | A merged PR was rejected if its body had no closing-PR ref to itself (~25% of `fix_pr_linked` rejections in 8-URL sample) | `_run_triage_gates` now includes `cand.url`, so `.../pull/<n>` URLs satisfy the regex |
+| Godot-style issue headers + structured-body fallback | `extract_draft.py` | Long bodies without explicit Expected/Actual sections raised `ExtractionFailure` (Godot uses `### Issue description`) | accepted `Issue description`, `Description`, `Steps to reproduce`, `What happened`, `Bug description`; long bodies with any `## ...` markdown header are now accepted as user_report |
+| PR-as-candidate metadata extraction | `run.py:_fetch_fix_pr_metadata` | When cand was a PR, the function searched the body for another PR ref and 404'd on `pulls/<issue-num>` | when cand URL is `.../pull/<n>`, use the PR itself directly |
+
+Re-running the same Godot query pack with all four fixes:
+
+| Metric | Before | After |
+|---|---|---|
+| Triage rejection rate | 58% (14/24) | 30% (6/20) |
+| `extraction_failed` | 12.5% (3/24) | 0% (0/20) |
+| `produce_done` (reaches extract+validate) | 4% (1/24) | 20% (4/20) |
+| Pipeline errors logged to stderr | 1 | 0 |
+
+The remaining 6 triage-rejected are now mostly correct rejections:
+true non-graphics PRs (e.g. `Fix acceleration structure barriers in
+Vulkan pipelines` is a maintenance-internal change with no visible
+user symptom). Closer to the design intent of the gates.
+
+Tests added to lock in each fix:
+- `test_visual_keyword_accepts_expanded_terms`
+- `test_pr_url_auto_satisfies_fix_pr_linked` /
+  `test_issue_url_does_not_auto_satisfy_fix_pr_linked`
+- `test_extract_godot_style_issue_body`
+- `test_fetch_fix_pr_metadata_uses_pr_self_for_pr_candidates`

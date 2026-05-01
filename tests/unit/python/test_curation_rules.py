@@ -152,3 +152,67 @@ def test_classify_score_drops_feature_request_via_reject_rule():
     rec = score_candidate(cand, thread=None, rules=rules)
     assert rec.terminal_reason == "triage_rejected"
     assert "feature_request" in rec.score_reasons
+
+
+def test_visual_keyword_accepts_expanded_terms():
+    """Bodies using 'incorrect', 'broken', 'fails', 'regression', 'crash',
+    'corrupted', 'distortion' should now satisfy the visual_keyword_present
+    gate (previously rejected as 'missing_visual_keyword_present')."""
+    from gpa.eval.curation.rules import score_candidate, load_rules
+    rules = load_rules()
+    expanded_terms = [
+        "Rendering is incorrect when alpha blending is on.",
+        "The shader is broken on Metal backend.",
+        "Texture upload fails for compressed formats.",
+        "This is a regression from 4.2 — colors are off.",
+        "WebGL2 crashes when uploading large textures.",
+        "Output texture is corrupted on AMD GPUs.",
+        "Heavy distortion in fragment output near edges.",
+    ]
+    for body in expanded_terms:
+        cand = make_synthetic_candidate(
+            body=body,
+            url="https://github.com/x/y/issues/1",
+            has_fix_pr_linked=True,
+        )
+        rec = score_candidate(cand, thread=None, rules=rules)
+        assert rec.terminal_reason != "triage_rejected", (
+            f"body {body!r} should pass visual_keyword_present "
+            f"but was rejected: {rec.score_reasons}"
+        )
+
+
+def test_pr_url_auto_satisfies_fix_pr_linked():
+    """A merged PR URL on the candidate should auto-satisfy fix_pr_linked
+    even when the body has no explicit 'Closes #N' reference. A merged PR
+    is itself the fix; requiring a separate referencing PR rejects valid
+    candidates (~25% of fix_pr_linked rejections in the smoke-test sample)."""
+    from gpa.eval.curation.rules import score_candidate, load_rules
+    rules = load_rules()
+    cand = DiscoveryCandidate(
+        url="https://github.com/foo/bar/pull/12345",
+        source_type="pr",
+        title="fix: shadow camera bounds wrong on resize",
+        labels=[],
+        metadata={
+            "body": "This PR fixes the shadow camera which was rendering "
+                    "incorrect bounds after window resize.",
+        },
+    )
+    rec = score_candidate(cand, thread=None, rules=rules)
+    assert rec.terminal_reason != "triage_rejected", rec.score_reasons
+
+
+def test_issue_url_does_not_auto_satisfy_fix_pr_linked():
+    """An issue URL (.../issues/<n>) without a closing-PR reference must
+    still fail fix_pr_linked. Confirms the URL match is PR-specific."""
+    from gpa.eval.curation.rules import score_candidate, load_rules
+    rules = load_rules()
+    cand = make_synthetic_candidate(
+        body="Rendering is broken on Metal.",
+        url="https://github.com/x/y/issues/77",
+        has_fix_pr_linked=False,
+    )
+    rec = score_candidate(cand, thread=None, rules=rules)
+    assert rec.terminal_reason == "triage_rejected"
+    assert "missing_fix_pr_linked" in rec.score_reasons

@@ -273,6 +273,25 @@ def test_run_judge_commits_without_evaluate_when_flag_not_set(
     assert kwargs["issue_url"] == "https://github.com/x/y/issues/1"
 
 
+def test_draft_to_files_preserves_maintainer_bug_class():
+    from gpa.eval.curation.extract_draft import DraftResult
+    from gpa.eval.curation.run import _draft_to_files
+
+    draft = DraftResult(
+        user_report="transparent material stays opaque",
+        expected_section="translucent",
+        actual_section="opaque",
+        fix_commit_sha="abc1234",
+        fix_pr_url="https://github.com/app/repo/pull/2",
+        expected_files=["src/render.ts"],
+        bug_signature_yaml="type: code_location\n",
+        extras={"bug_class": "user-config"},
+    )
+
+    files = _draft_to_files(draft)
+    assert "bug_class: user-config" in files["scenario.md"]
+
+
 # ---------------------------------------------------------------------------
 # JUDGE-phase --evaluate branches: verdict=yes (commits) and verdict=no
 # (NOT_HELPFUL terminal_reason, no commit).
@@ -562,3 +581,53 @@ def test_run_produce_failure_modes(
     # Selected upstream, so the SELECT outcome is populated.
     assert row["select"]["selected"] is True
     assert row["judge"] is None
+
+
+def test_fetch_fix_pr_metadata_uses_pr_self_for_pr_candidates(monkeypatch):
+    """When the candidate URL is a PR, the candidate IS the fix.
+
+    Previously _fetch_fix_pr_metadata searched the body for another PR ref
+    and 404'd because PR bodies usually reference the issue (`fixes #N`),
+    not another fix-PR — `gh api pulls/<issue-num>` then 404'd.
+
+    The fix: detect a PR candidate URL up front and skip body extraction.
+    """
+    import subprocess
+    from gpa.eval.curation import run as run_mod
+
+    captured: list[list[str]] = []
+
+    def fake_run(cmd, *, capture_output, text, check):
+        captured.append(cmd)
+        # PR endpoint returns merge_commit_sha; files endpoint returns one file.
+        if cmd[-1].endswith("/pulls/118968"):
+            stdout = json.dumps({
+                "html_url": "https://github.com/godotengine/godot/pull/118968",
+                "merge_commit_sha": "f059d64e3d0388583e877d3e13c8cd25bd884421",
+            })
+        elif cmd[-1].endswith("/pulls/118968/files"):
+            stdout = json.dumps([{"filename": "servers/rendering/foo.cpp"}])
+        else:
+            raise AssertionError(f"unexpected gh call: {cmd}")
+        return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(run_mod.subprocess, "run", fake_run)
+
+    # Body has a `Fixes #118930` ref that would have been (wrongly) picked
+    # up as the fix-PR by the old logic; the new logic ignores body refs
+    # for PR candidates.
+    thread = IssueThread(
+        url="https://github.com/godotengine/godot/pull/118968",
+        title="Fix LTC LUT generation under Vulkan validation layers",
+        body="Fixes #118930.\n\nDescription of the fix.",
+        comments=[],
+    )
+    md = run_mod._fetch_fix_pr_metadata(
+        thread, "https://github.com/godotengine/godot/pull/118968"
+    )
+    assert md["url"] == "https://github.com/godotengine/godot/pull/118968"
+    assert md["commit_sha"].startswith("f059d64e")
+    assert md["files_changed"] == ["servers/rendering/foo.cpp"]
+    # Critically: the gh calls used the PR's own number (118968), not the
+    # issue number (118930) referenced in the body.
+    assert all("/pulls/118968" in cmd[-1] for cmd in captured), captured

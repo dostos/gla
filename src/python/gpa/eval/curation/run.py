@@ -264,29 +264,41 @@ def _fetch_fix_pr_metadata(thread: IssueThread, url: str) -> dict:
     comments_text = "\n".join(thread.comments or [])
     full = body_text + "\n" + comments_text
 
-    # Owner/repo come from the issue URL; the PR refs we look for are
+    # Owner/repo come from the candidate URL; the PR refs we look for are
     # short-form (#NNN) on the same repo, or fully-qualified pull URLs.
     repo_m = re.search(r"github\.com/([^/]+)/([^/]+)/", url)
     if not repo_m:
         raise ValueError(f"not a github URL: {url}")
     owner, repo = repo_m.group(1), repo_m.group(2)
 
-    # Prefer fully-qualified pull URLs (they're unambiguous).
-    pr_url_m = re.search(
-        r"https?://github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)", full
+    # PR candidates: the candidate PR IS the fix. Use it directly rather
+    # than searching the body for another PR ref (which usually references
+    # the issue being fixed, not another fix-PR — leading to a 404 on
+    # `pulls/<issue-number>`).
+    self_pr_m = re.match(
+        r"https?://github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)", url
     )
-    if pr_url_m:
-        owner_pr, repo_pr, num = pr_url_m.group(1), pr_url_m.group(2), pr_url_m.group(3)
+    if self_pr_m:
+        owner_pr, repo_pr, num = self_pr_m.group(1), self_pr_m.group(2), self_pr_m.group(3)
     else:
-        # Fall back to short-form refs introduced by closing-keyword phrases.
-        short_m = re.search(
-            r"(?i)(?:closed by|fixed (?:in|by)|resolved by)[^#]*#(\d+)", full
+        # Issue candidate: prefer fully-qualified pull URLs in the body
+        # (they're unambiguous; the GraphQL ``closedByPullRequestsReferences``
+        # appended by ``triage.fetch_issue_thread`` shows up here).
+        pr_url_m = re.search(
+            r"https?://github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)", full
         )
-        if not short_m:
-            short_m = re.search(r"#(\d+)", full)
-        if not short_m:
-            raise ValueError(f"no PR reference found in thread {url}")
-        owner_pr, repo_pr, num = owner, repo, short_m.group(1)
+        if pr_url_m:
+            owner_pr, repo_pr, num = pr_url_m.group(1), pr_url_m.group(2), pr_url_m.group(3)
+        else:
+            # Fall back to short-form refs introduced by closing-keyword phrases.
+            short_m = re.search(
+                r"(?i)(?:closed by|fixed (?:in|by)|resolved by)[^#]*#(\d+)", full
+            )
+            if not short_m:
+                short_m = re.search(r"#(\d+)", full)
+            if not short_m:
+                raise ValueError(f"no PR reference found in thread {url}")
+            owner_pr, repo_pr, num = owner, repo, short_m.group(1)
 
     try:
         proc = subprocess.run(
@@ -371,6 +383,10 @@ def _draft_to_files(draft: DraftResult) -> dict[str, str]:
     For maintainer-framing scenarios (no .c source), commit only scenario.md
     (the validator already enforced that the structural fields are present).
     """
+    bug_class = str(draft.extras.get("bug_class") or "framework-internal")
+    if bug_class not in {"framework-internal", "consumer-misuse", "user-config"}:
+        bug_class = "framework-internal"
+
     md_lines = [
         "## User Report",
         "",
@@ -391,7 +407,7 @@ def _draft_to_files(draft: DraftResult) -> dict[str, str]:
         "```yaml",
         f"fix_pr_url: {draft.fix_pr_url}",
         f"fix_sha: {draft.fix_commit_sha}",
-        f"bug_class: framework-internal",
+        f"bug_class: {bug_class}",
         f"files:",
     ]
     for f in draft.expected_files:
@@ -575,6 +591,7 @@ def _run_produce(
                 fix_pr=fix_pr,
                 taxonomy_cell=rec.taxonomy_cell,
             )
+            draft.extras["bug_class"] = rec.bug_class_guess
         except ExtractionFailure:
             writer.append(_make_row(
                 cand, run_id=run_id, discovered_at=discovered_at,

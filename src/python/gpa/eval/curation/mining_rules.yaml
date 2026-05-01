@@ -109,8 +109,15 @@ triage_required:
       - "(?i)fixed (in|by) .*?#\\d+"
       - "(?i)pull/\\d+"
   visual_keyword_present:
+    # Expanded after smoke-test analysis: 4/6 sampled missing_visual_keyword_present
+    # rejections (deck.gl, maplibre, pixijs, playcanvas) were false rejections —
+    # the bodies described real visual bugs using "incorrect", "regression",
+    # "breaks", "failing" which the original 8-term list missed.
     patterns:
-      - "(?i)\\b(invisible|disappear|flicker|glitch|black|wrong|missing|leak)\\b"
+      - "(?i)\\b(invisible|disappear(s|ed|ing)?|flicker(s|ed|ing)?|glitch(es|ed|ing)?|black|wrong|missing|leak)\\b"
+      - "(?i)\\b(incorrect(ly)?|broken|breaks?|fails?|failing|regression)\\b"
+      - "(?i)\\b(crash(es|ed|ing)?|artifact(s)?|corrupt(ed|ion)?|garbled|distort(ed|ion)?)\\b"
+      - "(?i)\\b(rendering (issue|error|bug|problem)|visual (issue|error|bug|glitch|artifact))\\b"
 
 triage_reject:
   feature_request:

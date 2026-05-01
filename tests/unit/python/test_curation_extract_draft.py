@@ -38,15 +38,11 @@ def test_extract_well_structured_issue():
 
 
 def test_extract_unparseable_raises():
-    """A long body (>1500 chars) without Expected/Actual sections must raise
-    ExtractionFailure (the 'too long to use raw' path)."""
-    # Pad a code-fence body well past the 1500-char short-body threshold.
-    code_dump = (
-        "```\n"
-        "undefined is not a function\n"
-        "  at foo (bar.js:10)\n"
-        "```\n"
-    )
+    """A long, completely unstructured body (no Expected/Actual sections AND
+    no markdown headers) must raise ExtractionFailure."""
+    # Pad a code-fence body well past the 1500-char short-body threshold,
+    # with NO markdown headers — pure unstructured text.
+    code_dump = "undefined is not a function\n  at foo (bar.js:10)\n"
     long_body = code_dump + ("filler line with no structure\n" * 80)
     assert len(long_body) > 1500
     thread = {
@@ -66,7 +62,42 @@ def test_extract_unparseable_raises():
         assert False, "expected ExtractionFailure"
     except ExtractionFailure as e:
         msg = str(e).lower()
-        assert "expected" in msg or "actual" in msg or "too long" in msg
+        assert "no section structure" in msg or "too long" in msg
+
+
+def test_extract_godot_style_issue_body():
+    """Godot's issue template uses '### Issue description' / '### Steps to
+    reproduce' rather than Expected/Actual. Such bodies were previously
+    rejected as 'issue body lacks Expected/Actual sections...'.
+
+    With the expanded section recognition, these now extract: either
+    matching the new headers, or accepted via the structured-body
+    fallback (any `## ...` header is enough for a long body)."""
+    body = (
+        "### Tested versions\n4.5\n\n"
+        "### System information\nLinux Vulkan\n\n"
+        "### Issue description\n"
+        "Cube renders with corruption when validation layers run.\n"
+        "We see massive distortion across the texture.\n\n"
+        "### Steps to reproduce\n1. Open project\n2. Run with --gpu-validation\n\n"
+    ) + ("Stack trace:\n" + "frame at 0x123\n" * 200)
+    assert len(body) > 1500
+    thread = {
+        "title": "Cube has corruption with validation layers",
+        "body": body,
+        "comments": [],
+    }
+    fix_pr = {
+        "url": "https://github.com/godotengine/godot/pull/118968",
+        "commit_sha": "f059d64",
+        "files_changed": ["servers/rendering/renderer_rd/foo.cpp"],
+    }
+    result = extract_draft(
+        thread=thread, fix_pr=fix_pr,
+        taxonomy_cell="framework-maintenance.native-engine.godot",
+    )
+    assert result.user_report.strip() != ""
+    assert result.fix_commit_sha == "f059d64"
 
 
 def test_filter_source_files_drops_tests_docs_examples():
@@ -77,9 +108,15 @@ def test_filter_source_files_drops_tests_docs_examples():
     raw = [
         "crates/bevy_pbr/src/render/mesh.rs",
         "crates/bevy_pbr/src/render/mesh_test.rs",
+        "src/mobjects/three-d/Sphere.test.ts",
+        "src/mobjects/three-d/Sphere.spec.ts",
         "tests/integration/render.rs",
+        "__tests__/render.ts",
         "examples/3d/repro.rs",
         "docs/changelog.md",
         "CHANGELOG.md",
+        "package.json",
+        "package-lock.json",
+        "pnpm-lock.yaml",
     ]
     assert _filter_source_files(raw) == ["crates/bevy_pbr/src/render/mesh.rs"]

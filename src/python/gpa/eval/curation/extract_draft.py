@@ -35,8 +35,17 @@ _SECTION_HEADERS = {
         r"^\*\*Actual",
         r"^Actual\s+(behaviou?r|output|result)",
         r"^What actually",
+        # Godot-style and other common trackers that describe symptoms under
+        # a generic header instead of an Expected/Actual split.
+        r"^#+\s*Issue description",
+        r"^#+\s*Description",
+        r"^#+\s*Steps to reproduce",
+        r"^#+\s*What happen(ed|s)",
+        r"^#+\s*Bug description",
     ],
 }
+
+_STRUCTURED_BODY_RE = re.compile(r"^#{2,}\s+\S", flags=re.MULTILINE)
 
 
 class ExtractionFailure(Exception):
@@ -114,9 +123,20 @@ def _filter_source_files(files: list[str]) -> list[str]:
     excluded_segments = {
         "tests",
         "test",
+        "__tests__",
         "docs",
         "examples",
         "example",
+        "fixtures",
+        "fixture",
+    }
+    excluded_basenames = {
+        "package.json",
+        "package-lock.json",
+        "npm-shrinkwrap.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "bun.lockb",
     }
     keep: list[str] = []
     for f in files:
@@ -131,8 +151,15 @@ def _filter_source_files(files: list[str]) -> list[str]:
             continue
         # Basename-level test heuristics: `mesh_test.rs`, `test_foo.py`, etc.
         base = os.path.basename(low)
+        if base in excluded_basenames:
+            continue
         stem, _, _ext = base.partition(".")
-        if stem.endswith("_test") or stem.startswith("test_"):
+        if (
+            stem.endswith("_test")
+            or stem.startswith("test_")
+            or ".test." in base
+            or ".spec." in base
+        ):
             continue
         keep.append(f)
     return keep
@@ -155,11 +182,15 @@ def extract_draft(
     expected = _extract_section(body, "expected")
     actual = _extract_section(body, "actual")
     if not expected and not actual:
-        # Heuristic fallback: short bodies (<1500 chars) without sections are
-        # acceptable as the whole user_report; longer ones must have structure.
-        if len(body) > 1500:
+        # Short bodies (<1500 chars) without sections are acceptable as the
+        # whole user_report. Longer bodies are accepted if they have ANY
+        # recognizable section structure (`## ...` markdown headers) — the
+        # body itself becomes the user_report. Only reject long unstructured
+        # walls of text where we have nothing to anchor on.
+        if len(body) > 1500 and not _STRUCTURED_BODY_RE.search(body):
             raise ExtractionFailure(
-                "issue body lacks Expected/Actual sections and is too long to use raw"
+                "issue body lacks Expected/Actual sections and has no "
+                "section structure, too long to use raw"
             )
 
     expected_files = _filter_source_files(fix_pr.get("files_changed") or [])

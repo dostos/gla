@@ -416,8 +416,18 @@ def _run_triage_gates(
     one pattern, otherwise the candidate is dropped with reason
     ``missing_<group>``. Then reject gates: any matched reject group
     drops the candidate with reason ``<group>``.
+
+    The candidate URL is included in the matched text. For PR URLs
+    (``.../pull/<n>``), this auto-satisfies the ``fix_pr_linked``
+    required gate — a merged PR is itself the fix and doesn't need a
+    separate referencing PR. For issue URLs (``.../issues/<n>``), no
+    required pattern matches, so behavior is unchanged.
     """
-    text = _norm_text(getattr(cand, "title", "") or "", _candidate_body(cand, thread))
+    text = _norm_text(
+        getattr(cand, "url", "") or "",
+        getattr(cand, "title", "") or "",
+        _candidate_body(cand, thread),
+    )
     for group_name, patterns in (rules.triage_required or {}).items():
         if not _match_any_pattern(patterns, text):
             return _triage_rejected_record(cand, f"missing_{group_name}", text)
