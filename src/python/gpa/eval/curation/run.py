@@ -213,6 +213,9 @@ def run_eval(*, scenario_id: str, eval_dir: Path, backend: str) -> Any:
     )
 
 
+run_eval._is_default = True  # cleared when callers replace the seam
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -734,6 +737,15 @@ def _write_produce_terminal_rows(
 
 def main(argv: Optional[list[str]] = None) -> int:
     args = parse_args(argv)
+
+    if args.evaluate and getattr(run_eval, "_is_default", False):
+        sys.stderr.write(
+            "error: --evaluate requires an eval harness, but the default\n"
+            "       gpa.eval.curation.run.run_eval seam is unconfigured.\n"
+            "       Either drop --evaluate to commit without scoring, or\n"
+            "       wire a harness by replacing run.run_eval before calling main().\n"
+        )
+        return 2
 
     queries_path = Path(args.queries)
     rules_path = Path(args.rules)
