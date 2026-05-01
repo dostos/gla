@@ -67,9 +67,18 @@ typedef struct GpaDeviceDispatch {
 
     /* Command buffer recording */
     PFN_vkQueueSubmit             QueueSubmit;
+    PFN_vkQueueSubmit2            QueueSubmit2KHR;  /* used for both _KHR and core 1.3 */
     PFN_vkCmdDraw                 CmdDraw;
     PFN_vkCmdDrawIndexed          CmdDrawIndexed;
+    PFN_vkCmdDrawIndirect         CmdDrawIndirect;
+    PFN_vkCmdDrawIndexedIndirect  CmdDrawIndexedIndirect;
+    PFN_vkCmdDrawIndirectCount    CmdDrawIndirectCount;
+    PFN_vkCmdDrawIndexedIndirectCount CmdDrawIndexedIndirectCount;
+    PFN_vkCmdBeginRendering       CmdBeginRendering;
+    PFN_vkCmdEndRendering         CmdEndRendering;
     PFN_vkCmdBindPipeline         CmdBindPipeline;
+    PFN_vkCmdDispatch             CmdDispatch;
+    PFN_vkCmdExecuteCommands      CmdExecuteCommands;
     PFN_vkCmdBindDescriptorSets   CmdBindDescriptorSets;
     PFN_vkCmdBeginRenderPass      CmdBeginRenderPass;
     PFN_vkCmdEndRenderPass        CmdEndRenderPass;
@@ -86,7 +95,8 @@ typedef struct GpaDeviceDispatch {
     PFN_vkFreeCommandBuffers      FreeCommandBuffers;
     PFN_vkBeginCommandBuffer      BeginCommandBuffer;
     PFN_vkEndCommandBuffer        EndCommandBuffer;
-    PFN_vkQueueSubmit             QueueSubmit2;  /* alias, unused */
+    /* (older alias slot — left as-is; QueueSubmit2KHR above carries the
+     * real vkQueueSubmit2 entrypoint.) */
     PFN_vkCreateBuffer            CreateBuffer;
     PFN_vkDestroyBuffer           DestroyBuffer;
     PFN_vkAllocateMemory          AllocateMemory;

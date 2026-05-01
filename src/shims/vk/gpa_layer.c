@@ -276,9 +276,22 @@ gpa_CreateDevice(VkPhysicalDevice             physicalDevice,
     disp.GetDeviceProcAddr     = GDPA(GetDeviceProcAddr);
     disp.DestroyDevice         = GDPA(DestroyDevice);
     disp.QueueSubmit           = GDPA(QueueSubmit);
+    /* Vulkan 1.3 promoted vkQueueSubmit2 from VK_KHR_synchronization2; the
+     * KHR alias still resolves to the same dispatch entry. */
+    disp.QueueSubmit2KHR       = (PFN_vkQueueSubmit2)next_gdpa(*pDevice, "vkQueueSubmit2");
+    if (!disp.QueueSubmit2KHR)
+        disp.QueueSubmit2KHR   = (PFN_vkQueueSubmit2)next_gdpa(*pDevice, "vkQueueSubmit2KHR");
     disp.CmdDraw               = GDPA(CmdDraw);
     disp.CmdDrawIndexed        = GDPA(CmdDrawIndexed);
+    disp.CmdDrawIndirect       = GDPA(CmdDrawIndirect);
+    disp.CmdDrawIndexedIndirect = GDPA(CmdDrawIndexedIndirect);
+    disp.CmdDrawIndirectCount  = GDPA(CmdDrawIndirectCount);
+    disp.CmdDrawIndexedIndirectCount = GDPA(CmdDrawIndexedIndirectCount);
+    disp.CmdBeginRendering     = GDPA(CmdBeginRendering);
+    disp.CmdEndRendering       = GDPA(CmdEndRendering);
     disp.CmdBindPipeline       = GDPA(CmdBindPipeline);
+    disp.CmdDispatch           = GDPA(CmdDispatch);
+    disp.CmdExecuteCommands    = GDPA(CmdExecuteCommands);
     disp.CmdBindDescriptorSets = GDPA(CmdBindDescriptorSets);
     disp.CmdBeginRenderPass    = GDPA(CmdBeginRenderPass);
     disp.CmdEndRenderPass      = GDPA(CmdEndRenderPass);
@@ -357,6 +370,34 @@ gpa_QueueSubmit(VkQueue             queue,
     return disp->QueueSubmit(queue, submitCount, pSubmits, fence);
 }
 
+static VKAPI_ATTR VkResult VKAPI_CALL
+gpa_QueueSubmit2KHR(VkQueue              queue,
+                     uint32_t             submitCount,
+                     const VkSubmitInfo2 *pSubmits,
+                     VkFence              fence) {
+    /* Pull command buffers out of VkCommandBufferSubmitInfo[] and harvest. */
+    for (uint32_t s = 0; s < submitCount; s++) {
+        const VkSubmitInfo2 *si = &pSubmits[s];
+        if (si->commandBufferInfoCount == 0) continue;
+        VkCommandBuffer cbs_local[64];
+        VkCommandBuffer *cbs = cbs_local;
+        VkCommandBuffer *cbs_heap = NULL;
+        if (si->commandBufferInfoCount > 64) {
+            cbs_heap = malloc(sizeof(VkCommandBuffer) * si->commandBufferInfoCount);
+            cbs = cbs_heap;
+        }
+        for (uint32_t i = 0; i < si->commandBufferInfoCount; i++) {
+            cbs[i] = si->pCommandBufferInfos[i].commandBuffer;
+        }
+        gpa_capture_queue_submit(si->commandBufferInfoCount, cbs);
+        free(cbs_heap);
+    }
+
+    GpaDeviceDispatch *disp = gpa_device_dispatch_get((VkDevice)queue);
+    if (!disp || !disp->QueueSubmit2KHR) return VK_ERROR_DEVICE_LOST;
+    return disp->QueueSubmit2KHR(queue, submitCount, pSubmits, fence);
+}
+
 /* --------------------------------------------------------------------------
  * vkQueuePresentKHR — frame boundary: trigger capture
  * -------------------------------------------------------------------------- */
@@ -419,6 +460,16 @@ gpa_QueuePresentKHR(VkQueue                 queue,
  * Command buffer recording intercepts
  * -------------------------------------------------------------------------- */
 
+static VKAPI_ATTR VkResult VKAPI_CALL
+gpa_BeginCommandBuffer(VkCommandBuffer commandBuffer,
+                       const VkCommandBufferBeginInfo *pBeginInfo) {
+    gpa_capture_cmd_buf_begin(commandBuffer);
+    GpaDeviceDispatch *disp =
+        gpa_device_dispatch_get((VkDevice)commandBuffer);
+    if (!disp || !disp->BeginCommandBuffer) return VK_ERROR_INITIALIZATION_FAILED;
+    return disp->BeginCommandBuffer(commandBuffer, pBeginInfo);
+}
+
 static VKAPI_ATTR void VKAPI_CALL
 gpa_CmdDraw(VkCommandBuffer commandBuffer,
             uint32_t        vertexCount,
@@ -450,6 +501,109 @@ gpa_CmdDrawIndexed(VkCommandBuffer commandBuffer,
     if (disp && disp->CmdDrawIndexed)
         disp->CmdDrawIndexed(commandBuffer, indexCount, instanceCount,
                              firstIndex, vertexOffset, firstInstance);
+}
+
+static VKAPI_ATTR void VKAPI_CALL
+gpa_CmdDrawIndirect(VkCommandBuffer commandBuffer,
+                    VkBuffer        buffer,
+                    VkDeviceSize    offset,
+                    uint32_t        drawCount,
+                    uint32_t        stride) {
+    gpa_capture_record_indirect_draw(commandBuffer, drawCount, 0);
+    GpaDeviceDispatch *disp =
+        gpa_device_dispatch_get((VkDevice)commandBuffer);
+    if (disp && disp->CmdDrawIndirect)
+        disp->CmdDrawIndirect(commandBuffer, buffer, offset, drawCount, stride);
+}
+
+static VKAPI_ATTR void VKAPI_CALL
+gpa_CmdDrawIndexedIndirect(VkCommandBuffer commandBuffer,
+                            VkBuffer        buffer,
+                            VkDeviceSize    offset,
+                            uint32_t        drawCount,
+                            uint32_t        stride) {
+    gpa_capture_record_indirect_draw(commandBuffer, drawCount, 1);
+    GpaDeviceDispatch *disp =
+        gpa_device_dispatch_get((VkDevice)commandBuffer);
+    if (disp && disp->CmdDrawIndexedIndirect)
+        disp->CmdDrawIndexedIndirect(commandBuffer, buffer, offset, drawCount, stride);
+}
+
+static VKAPI_ATTR void VKAPI_CALL
+gpa_CmdDrawIndirectCount(VkCommandBuffer commandBuffer,
+                          VkBuffer        buffer,
+                          VkDeviceSize    offset,
+                          VkBuffer        countBuffer,
+                          VkDeviceSize    countBufferOffset,
+                          uint32_t        maxDrawCount,
+                          uint32_t        stride) {
+    /* drawCount is GPU-resident in countBuffer; record maxDrawCount as
+     * upper-bound. */
+    gpa_capture_record_indirect_draw(commandBuffer, maxDrawCount, 0);
+    GpaDeviceDispatch *disp =
+        gpa_device_dispatch_get((VkDevice)commandBuffer);
+    if (disp && disp->CmdDrawIndirectCount)
+        disp->CmdDrawIndirectCount(commandBuffer, buffer, offset,
+                                    countBuffer, countBufferOffset,
+                                    maxDrawCount, stride);
+}
+
+static VKAPI_ATTR void VKAPI_CALL
+gpa_CmdDrawIndexedIndirectCount(VkCommandBuffer commandBuffer,
+                                 VkBuffer        buffer,
+                                 VkDeviceSize    offset,
+                                 VkBuffer        countBuffer,
+                                 VkDeviceSize    countBufferOffset,
+                                 uint32_t        maxDrawCount,
+                                 uint32_t        stride) {
+    gpa_capture_record_indirect_draw(commandBuffer, maxDrawCount, 1);
+    GpaDeviceDispatch *disp =
+        gpa_device_dispatch_get((VkDevice)commandBuffer);
+    if (disp && disp->CmdDrawIndexedIndirectCount)
+        disp->CmdDrawIndexedIndirectCount(commandBuffer, buffer, offset,
+                                           countBuffer, countBufferOffset,
+                                           maxDrawCount, stride);
+}
+
+static VKAPI_ATTR void VKAPI_CALL
+gpa_CmdBeginRendering(VkCommandBuffer            commandBuffer,
+                       const VkRenderingInfo *   pRenderingInfo) {
+    gpa_capture_begin_render_pass(commandBuffer);
+    GpaDeviceDispatch *disp =
+        gpa_device_dispatch_get((VkDevice)commandBuffer);
+    if (disp && disp->CmdBeginRendering)
+        disp->CmdBeginRendering(commandBuffer, pRenderingInfo);
+}
+
+static VKAPI_ATTR void VKAPI_CALL
+gpa_CmdDispatch(VkCommandBuffer commandBuffer,
+                uint32_t        gx, uint32_t gy, uint32_t gz) {
+    GpaDeviceDispatch *disp =
+        gpa_device_dispatch_get((VkDevice)commandBuffer);
+    if (disp && disp->CmdDispatch)
+        disp->CmdDispatch(commandBuffer, gx, gy, gz);
+}
+
+static VKAPI_ATTR void VKAPI_CALL
+gpa_CmdExecuteCommands(VkCommandBuffer        commandBuffer,
+                        uint32_t              cbCount,
+                        const VkCommandBuffer *pCmds) {
+    /* Harvest draws recorded into the secondary cmd buffers — they ran
+     * as part of this primary's submission, so they belong to this frame. */
+    gpa_capture_queue_submit(cbCount, pCmds);
+    GpaDeviceDispatch *disp =
+        gpa_device_dispatch_get((VkDevice)commandBuffer);
+    if (disp && disp->CmdExecuteCommands)
+        disp->CmdExecuteCommands(commandBuffer, cbCount, pCmds);
+}
+
+static VKAPI_ATTR void VKAPI_CALL
+gpa_CmdEndRendering(VkCommandBuffer commandBuffer) {
+    gpa_capture_end_render_pass(commandBuffer);
+    GpaDeviceDispatch *disp =
+        gpa_device_dispatch_get((VkDevice)commandBuffer);
+    if (disp && disp->CmdEndRendering)
+        disp->CmdEndRendering(commandBuffer);
 }
 
 static VKAPI_ATTR void VKAPI_CALL
@@ -818,8 +972,33 @@ gpa_vkGetDeviceProcAddr(VkDevice device, const char *pName) {
     INTERCEPT(DestroyDevice);
     INTERCEPT(QueueSubmit);
     INTERCEPT(QueuePresentKHR);
+    INTERCEPT(BeginCommandBuffer);
+    if (strcmp(pName, "vkQueueSubmit2") == 0) return (PFN_vkVoidFunction)gpa_QueueSubmit2KHR;
+    if (strcmp(pName, "vkQueueSubmit2KHR") == 0) return (PFN_vkVoidFunction)gpa_QueueSubmit2KHR;
+
+    /* Wrap the KHR/AMD aliases for the indirect-count and dynamic-rendering
+     * entry points. wgpu loads VK_KHR_draw_indirect_count via the *_KHR
+     * function pointer table and never touches the promoted core name. */
+    if (strcmp(pName, "vkCmdDrawIndexedIndirectCountKHR") == 0
+        || strcmp(pName, "vkCmdDrawIndexedIndirectCountAMD") == 0)
+        return (PFN_vkVoidFunction)gpa_CmdDrawIndexedIndirectCount;
+    if (strcmp(pName, "vkCmdDrawIndirectCountKHR") == 0
+        || strcmp(pName, "vkCmdDrawIndirectCountAMD") == 0)
+        return (PFN_vkVoidFunction)gpa_CmdDrawIndirectCount;
+    if (strcmp(pName, "vkCmdBeginRenderingKHR") == 0)
+        return (PFN_vkVoidFunction)gpa_CmdBeginRendering;
+    if (strcmp(pName, "vkCmdEndRenderingKHR") == 0)
+        return (PFN_vkVoidFunction)gpa_CmdEndRendering;
     INTERCEPT(CmdDraw);
     INTERCEPT(CmdDrawIndexed);
+    INTERCEPT(CmdDrawIndirect);
+    INTERCEPT(CmdDrawIndexedIndirect);
+    INTERCEPT(CmdDrawIndirectCount);
+    INTERCEPT(CmdDrawIndexedIndirectCount);
+    INTERCEPT(CmdBeginRendering);
+    INTERCEPT(CmdEndRendering);
+    INTERCEPT(CmdDispatch);
+    INTERCEPT(CmdExecuteCommands);
     INTERCEPT(CmdBindPipeline);
     INTERCEPT(CmdBindDescriptorSets);
     INTERCEPT(CmdBeginRenderPass);

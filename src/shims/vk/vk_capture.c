@@ -152,6 +152,33 @@ void gpa_capture_record_draw_indexed(VkCommandBuffer cmd_buf,
     pthread_mutex_unlock(&g_cmd_mutex);
 }
 
+void gpa_capture_record_indirect_draw(VkCommandBuffer cmd_buf,
+                                       uint32_t draw_count,
+                                       int      indexed) {
+    pthread_mutex_lock(&g_cmd_mutex);
+    GpaVkCmdBufState *s = cmd_table_get_locked(cmd_buf);
+    if (s) {
+        uint32_t recorded = 0;
+        while (recorded < draw_count
+               && s->draw_count < GPA_VK_MAX_DRAW_CALLS) {
+            GpaVkDrawCall *d   = &s->draws[s->draw_count];
+            d->id              = s->draw_count;
+            d->vertex_count    = indexed ? 0 : 0;
+            d->index_count     = indexed ? 0 : 0;
+            d->instance_count  = 1;
+            d->first_vertex    = 0;
+            d->first_index     = 0;
+            d->first_instance  = 0;
+            d->pipeline        = s->current_pipeline;
+            d->bind_point      = s->current_bind_point;
+            d->subpass         = s->current_subpass;
+            s->draw_count++;
+            recorded++;
+        }
+    }
+    pthread_mutex_unlock(&g_cmd_mutex);
+}
+
 void gpa_capture_bind_pipeline(VkCommandBuffer     cmd_buf,
                                 VkPipelineBindPoint bind_point,
                                 VkPipeline          pipeline) {
@@ -183,6 +210,7 @@ void gpa_capture_queue_submit(uint32_t               cmd_buf_count,
     pthread_mutex_lock(&g_cmd_mutex);
     pthread_mutex_lock(&g_frame_mutex);
 
+    uint32_t harvested = 0;
     for (uint32_t b = 0; b < cmd_buf_count; b++) {
         GpaVkCmdBufState *s = cmd_table_get_locked(cmd_bufs[b]);
         if (!s) continue;
@@ -192,8 +220,14 @@ void gpa_capture_queue_submit(uint32_t               cmd_buf_count,
             g_frame_draws[g_frame_draw_count]     = s->draws[d];
             g_frame_draws[g_frame_draw_count].id  = g_frame_draw_count;
             g_frame_draw_count++;
+            harvested++;
         }
+        /* Reset per-cmd-buffer count so re-submitted cmd buffers don't
+         * double-count. (Vulkan command buffers can be re-recorded after
+         * vkResetCommandBuffer / re-Begin.) */
+        s->draw_count = 0;
     }
+    (void)harvested; /* counter for diagnostics; not exposed */
 
     pthread_mutex_unlock(&g_frame_mutex);
     pthread_mutex_unlock(&g_cmd_mutex);
@@ -220,6 +254,12 @@ void gpa_capture_queue_submit(uint32_t               cmd_buf_count,
 static size_t serialise_vk_draw_calls(uint8_t *buf, size_t buf_max,
                                        const GpaVkDrawCall *draws,
                                        uint32_t count) {
+    /* Engine parses GL-shape draw calls (~104 bytes minimum each). Emit
+     * the same wire format from Vulkan: meaningful fields go in the
+     * matching slots, the rest stay zero. The shader_program_id slot
+     * carries the lower 32 bits of the VkPipeline handle so the agent
+     * can still bucket by pipeline identity. texture_count and
+     * param_count are zero. */
     uint8_t *p   = buf;
     uint8_t *end = buf + buf_max;
 
@@ -227,24 +267,53 @@ static size_t serialise_vk_draw_calls(uint8_t *buf, size_t buf_max,
     memcpy(p, &count, 4);
     p += 4;
 
+    /* Per-call payload size for an empty-textures, empty-params draw:
+     *   6 u32 (id, prim, vc, ic, inst, prog)        = 24
+     *   4 i32 viewport + 4 i32 scissor              = 32
+     *   4 u8 (scissor_en, depth_test, depth_w, pad) = 4
+     *   1 u32 depth_func                            = 4
+     *   1 u8 + 3 pad + 2 u32 (blend)                = 12
+     *   1 u8 + 3 pad + 2 u32 (cull, front_face)     = 12
+     *   1 u32 texture_count (= 0)                   = 4
+     *   1 u32 param_count   (= 0)                   = 4
+     * Total                                          = 96 bytes */
+    const size_t kPerCallBytes = 96;
+
     for (uint32_t i = 0; i < count; i++) {
-        if (p + 44 > end) break; /* 9*uint32 + 1*uint64 = 44 bytes */
+        if (p + kPerCallBytes > end) break;
         const GpaVkDrawCall *d = &draws[i];
 
-        memcpy(p, &d->id,             4); p += 4;
-        memcpy(p, &d->vertex_count,   4); p += 4;
-        memcpy(p, &d->index_count,    4); p += 4;
-        memcpy(p, &d->instance_count, 4); p += 4;
-        memcpy(p, &d->first_vertex,   4); p += 4;
-        memcpy(p, &d->first_index,    4); p += 4;
-        memcpy(p, &d->first_instance, 4); p += 4;
-
         uint64_t pipeline_u64 = (uint64_t)(uintptr_t)d->pipeline;
-        memcpy(p, &pipeline_u64,      8); p += 8;
+        uint32_t prog         = (uint32_t)(pipeline_u64 & 0xFFFFFFFFu);
+        uint32_t prim         = 4u; /* GL_TRIANGLES — placeholder */
 
-        uint32_t bind_point = (uint32_t)d->bind_point;
-        memcpy(p, &bind_point,        4); p += 4;
-        memcpy(p, &d->subpass,        4); p += 4;
+        /* Header */
+        memcpy(p, &d->id,            4); p += 4;
+        memcpy(p, &prim,             4); p += 4;
+        memcpy(p, &d->vertex_count,  4); p += 4;
+        memcpy(p, &d->index_count,   4); p += 4;
+        memcpy(p, &d->instance_count,4); p += 4;
+        memcpy(p, &prog,             4); p += 4;
+
+        /* viewport[4], scissor[4] */
+        memset(p, 0, 32); p += 32;
+
+        /* scissor_en, depth_test, depth_write, pad */
+        memset(p, 0, 4); p += 4;
+
+        /* depth_func */
+        memset(p, 0, 4); p += 4;
+
+        /* blend (1u8 + 3 pad + 2 u32) */
+        memset(p, 0, 12); p += 12;
+
+        /* cull (1u8 + 3 pad + 2 u32) */
+        memset(p, 0, 12); p += 12;
+
+        /* texture_count = 0, param_count = 0 */
+        uint32_t zero = 0;
+        memcpy(p, &zero, 4); p += 4;
+        memcpy(p, &zero, 4); p += 4;
     }
     return (size_t)(p - buf);
 }
@@ -573,6 +642,15 @@ cleanup_mem:
         dev_disp->DestroyBuffer(device, staging_buf, NULL);
 
 write_metadata_only:
+    /* GL slot layout includes a depth section (4 bytes/pixel float32) after
+     * the color section. Vulkan capture doesn't readback depth yet — emit
+     * zeros so the engine's parser advances to the draw-call section at the
+     * correct offset. */
+    {
+        VkDeviceSize depth_bytes = (VkDeviceSize)width * height * 4u;
+        memset(ptr, 0, (size_t)depth_bytes);
+        ptr += (size_t)depth_bytes;
+    }
     /* Serialise accumulated draw call metadata into the remaining slot space */
     {
         const size_t kDrawCallBudget = 8u * 1024u * 1024u;

@@ -90,6 +90,17 @@ void gpa_capture_record_draw_indexed(VkCommandBuffer cmd_buf,
                                       int32_t  vertex_offset,
                                       uint32_t first_instance);
 
+/* Record an indirect draw. The actual per-instance counts live in a
+ * GPU buffer the layer doesn't read back; we record one slot per
+ * indirect-draw call with draw_count copies (so the aggregate count
+ * reflects the application's intended dispatch count).
+ *   `draw_count` is the number of indirect commands in the buffer
+ *   (or `maxDrawCount` for the *Count variants).
+ *   `indexed` is non-zero for the indexed variants. */
+void gpa_capture_record_indirect_draw(VkCommandBuffer cmd_buf,
+                                       uint32_t draw_count,
+                                       int      indexed);
+
 /* Track pipeline bind. */
 void gpa_capture_bind_pipeline(VkCommandBuffer cmd_buf,
                                 VkPipelineBindPoint bind_point,
