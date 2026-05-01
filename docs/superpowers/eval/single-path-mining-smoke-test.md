@@ -46,14 +46,24 @@ The link exists; it's only in the GraphQL sidebar metadata, not in REST body/com
 | reached `produce_done` | 3 | 5% |
 | `select_done` (no produce phase run) | 1 | 2% |
 
-### Recommended follow-up (NOT in this PR)
+### Follow-up landed in commit `64d1def`
 
-Extend `triage.py.fetch_thread` to also fetch `closedByPullRequestsReferences` via `gh api graphql` and merge into the matched text used by triage. Once that lands, re-run this smoke test against the same 15-URL sample; expect ≥70% pass-through to PRODUCE.
+`triage.py.fetch_issue_thread` now probes `closedByPullRequestsReferences`
+via `gh api graphql` and appends "Closes #<n> (<url>)" to the body
+before triage runs. Re-running the 15-URL sample after the fix:
 
-This is filed as a separate concern from O1 because:
-- O1 gates `extract_draft` (the deterministic extractor) — it works correctly when it gets data
-- The triage strictness is a TRIAGE-side finding, not an extraction-side one
-- Fixing it in this PR would expand scope; it's worth its own measurement loop
+| Sample | Pre-fix pass-through | Post-fix pass-through |
+|---|---|---|
+| 15 historically-committed URLs | 0/15 (0%) | 4/15 (27%) |
+
+The remaining 11 rejections (8 `missing_fix_pr_linked`, 3
+`missing_visual_keyword_present`) are scenarios the older LLM-triage
+path accepted via signals the strict-CLI rules don't yet cover (e.g.
+"fixes #N" / "addresses #N" / non-standard merge-without-keyword). The
+sidebar-data gap (the original concern) is closed.
+
+Orthogonal to O1: O1 gates `extract_draft`, not triage. The remaining
+triage-tuning is its own future iteration.
 
 ## Reproducibility
 
