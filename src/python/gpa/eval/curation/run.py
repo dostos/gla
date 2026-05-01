@@ -68,6 +68,7 @@ from gpa.eval.curation.mine_hard_cases import (
     select_stratified,
 )
 from gpa.eval.curation.run_dir import RunDir, generate_run_id
+from gpa.eval.curation.summary import write_summary
 from gpa.eval.curation.triage import IssueThread, fetch_thread
 from gpa.eval.curation.validate import Validator
 
@@ -771,25 +772,27 @@ def main(argv: Optional[list[str]] = None) -> int:
         _write_select_terminal_rows(
             selected, run_id=run_id, discovered_at=discovered_at, writer=writer,
         )
-        return 0
-
-    drafted = _run_produce(
-        selected=selected, eval_dir=Path(args.eval_dir),
-        run_id=run_id, discovered_at=discovered_at, writer=writer,
-    )
-    if args.max_phase == "produce":
-        _write_produce_terminal_rows(
-            drafted, run_id=run_id, discovered_at=discovered_at, writer=writer,
+    else:
+        drafted = _run_produce(
+            selected=selected, eval_dir=Path(args.eval_dir),
+            run_id=run_id, discovered_at=discovered_at, writer=writer,
         )
-        return 0
+        if args.max_phase == "produce":
+            _write_produce_terminal_rows(
+                drafted, run_id=run_id, discovered_at=discovered_at, writer=writer,
+            )
+        else:
+            _run_judge(
+                drafted=drafted, eval_dir=Path(args.eval_dir),
+                summary_path=Path(args.summary_path),
+                backend=args.backend, evaluate=args.evaluate,
+                coverage=coverage,
+                run_id=run_id, discovered_at=discovered_at, writer=writer,
+            )
 
-    _run_judge(
-        drafted=drafted, eval_dir=Path(args.eval_dir),
-        summary_path=Path(args.summary_path),
-        backend=args.backend, evaluate=args.evaluate,
-        coverage=coverage,
-        run_id=run_id, discovered_at=discovered_at, writer=writer,
-    )
+    # Roll up journey.jsonl into the per-run summary.md regardless of
+    # which phase halted the run.
+    write_summary(journey_path=rd.journey_path, summary_path=rd.summary_path)
     return 0
 
 
