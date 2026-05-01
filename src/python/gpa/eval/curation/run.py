@@ -68,6 +68,7 @@ from gpa.eval.curation.rules import (
     select_stratified,
 )
 from gpa.eval.curation.run_dir import RunDir, generate_run_id
+from gpa.eval.curation.scope_log import aggregate_scope, append_scope_rows
 from gpa.eval.curation.summary import write_summary
 from gpa.eval.curation.triage import IssueThread, fetch_thread
 
@@ -800,6 +801,17 @@ def main(argv: Optional[list[str]] = None) -> int:
     # Roll up journey.jsonl into the per-run summary.md regardless of
     # which phase halted the run.
     write_summary(journey_path=rd.journey_path, summary_path=rd.summary_path)
+
+    # Append per-query scope rows to the cross-run scope log so future
+    # runs can see what's been mined and find unexplored queries.
+    scope_rows = aggregate_scope(
+        journey_path=rd.journey_path, run_id=run_id,
+        ts=discovered_at,
+    )
+    append_scope_rows(
+        scope_log_path=Path(args.workdir) / "scope-log.jsonl",
+        rows=scope_rows,
+    )
     return 0
 
 
