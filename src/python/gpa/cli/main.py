@@ -24,6 +24,7 @@ from typing import List, Optional, Sequence
 from gpa.cli import __version__
 from gpa.cli.commands import check as check_cmd
 from gpa.cli.commands import check_config as check_config_cmd
+from gpa.cli.commands import diff as diff_cmd
 from gpa.cli.commands import diff_draws as diff_draws_cmd
 from gpa.cli.commands import drawcalls as drawcalls_cmd
 from gpa.cli.commands import dump as dump_cmd
@@ -274,6 +275,9 @@ def build_parser() -> argparse.ArgumentParser:
     # ---- check-config -----------------------------------------------------
     check_config_cmd.add_subparser(sub)
 
+    # ---- diff -------------------------------------------------------------
+    diff_cmd.add_subparser(sub)
+
     # ---- bidirectional narrow scene↔GL queries ----------------------------
     explain_draw_cmd.add_subparser(sub)
     diff_draws_cmd.add_subparser(sub)
@@ -398,6 +402,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             y=args.y,
             fmt=args.fmt,
         )
+    if args.cmd == "diff":
+        return diff_cmd.run(args)
     if args.cmd == "frames":
         return frames_cmd.run(args)
     if args.cmd == "drawcalls":
