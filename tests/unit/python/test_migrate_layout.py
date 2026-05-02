@@ -171,3 +171,80 @@ def test_resolve_taxonomy_unresolved():
     cat, fw, bc = resolve_taxonomy(p, src, ctx, original_name="r3_nothing")
     assert cat is None
     assert fw is None
+
+
+def test_build_slug_github_issue():
+    from gpa.eval.migrate_layout import build_slug, ParsedName
+    from gpa.eval.scenario_metadata import Source
+    p = ParsedName(round="r96fdc7", category_hint=None, framework_hint=None,
+                   bug_class_hint=None, suffix="world_environment_glow_eff",
+                   kind="recent-mined")
+    src = Source(type="github_issue", repo="godotengine/godot", issue_id=86493)
+    assert build_slug(p, src) == "godot_86493_world_environment_glow_eff"
+
+
+def test_build_slug_normalizes_repo_name():
+    from gpa.eval.migrate_layout import build_slug, ParsedName
+    from gpa.eval.scenario_metadata import Source
+    p = ParsedName(round="r1", category_hint=None, framework_hint=None,
+                   bug_class_hint=None, suffix="x", kind="early-mined")
+    src = Source(type="github_issue", repo="mrdoob/three.js", issue_id=29841)
+    assert build_slug(p, src) == "threejs_29841_x"
+
+
+def test_build_slug_pull():
+    from gpa.eval.migrate_layout import build_slug, ParsedName
+    from gpa.eval.scenario_metadata import Source
+    p = ParsedName(round="r1", category_hint=None, framework_hint=None,
+                   bug_class_hint=None, suffix="z", kind="early-mined")
+    src = Source(type="github_pull", repo="google/filament", issue_id=9857)
+    assert build_slug(p, src) == "filament_pull_9857_z"
+
+
+def test_build_slug_stackoverflow():
+    from gpa.eval.migrate_layout import build_slug, ParsedName
+    from gpa.eval.scenario_metadata import Source
+    p = ParsedName(round="r0", category_hint=None, framework_hint=None,
+                   bug_class_hint=None, suffix="effectcomposer_resize",
+                   kind="early-mined")
+    src = Source(type="stackoverflow", repo=None, issue_id="23460040")
+    assert build_slug(p, src) == "so_23460040_effectcomposer_resize"
+
+
+def test_build_slug_synthetic():
+    from gpa.eval.migrate_layout import build_slug, ParsedName
+    from gpa.eval.scenario_metadata import Source
+    p = ParsedName(round="e1", category_hint=None, framework_hint=None,
+                   bug_class_hint=None, suffix="state_leak", kind="synthetic")
+    src = Source(type="synthetic")
+    assert build_slug(p, src) == "e1_state_leak"
+
+
+def test_build_slug_legacy():
+    from gpa.eval.migrate_layout import build_slug, ParsedName
+    from gpa.eval.scenario_metadata import Source
+    p = ParsedName(round="r3", category_hint=None, framework_hint=None,
+                   bug_class_hint=None, suffix="black_screen", kind="early-mined")
+    src = Source(type="legacy")
+    assert build_slug(p, src) == "legacy_r3_black_screen"
+
+
+def test_synthetic_topic_bucket():
+    from gpa.eval.migrate_layout import synthetic_topic
+    assert synthetic_topic("state_leak_xxx") == "state-leak"
+    assert synthetic_topic("uniform_value_leaked") == "uniform"
+    assert synthetic_topic("depth_test") == "depth"
+    assert synthetic_topic("reversed_z_etc") == "depth"
+    assert synthetic_topic("culling_x") == "culling"
+    assert synthetic_topic("stencil_y") == "stencil"
+    assert synthetic_topic("nan_propagation") == "nan"
+    assert synthetic_topic("compensating_vp") == "misc"
+    assert synthetic_topic("scissor_not_reset") == "misc"
+
+
+def test_parse_synthetic_topic_buckets_misc_safely():
+    # 'depth' as a non-prefix substring shouldn't accidentally bucket as depth/.
+    from gpa.eval.migrate_layout import synthetic_topic
+    # only true if the rule splits on '_'; misc bucket otherwise.
+    assert synthetic_topic("compensating_vp") == "misc"
+    assert synthetic_topic("scissor_not_reset") == "misc"

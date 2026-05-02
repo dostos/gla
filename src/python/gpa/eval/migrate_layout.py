@@ -151,3 +151,47 @@ def load_resolve_context(
         with open(overrides_yaml) as f:
             overrides = _yaml.safe_load(f) or {}
     return ResolveContext(rules=rules, overrides=overrides)
+
+
+_REPO_NORMALIZE_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _normalize_repo(repo_basename: str) -> str:
+    """Lowercase + collapse non-alphanum to single underscore for Bazel target safety."""
+    s = _REPO_NORMALIZE_RE.sub("_", repo_basename.lower()).strip("_")
+    # Special-case: collapse three.js -> threejs, mapbox-gl-js -> mapbox_gl_js (already done).
+    if s == "three_js":
+        s = "threejs"
+    return s
+
+
+def build_slug(parsed: ParsedName, source: Source) -> str:
+    if parsed.kind == "synthetic" or source.type == "synthetic":
+        return f"{parsed.round}_{parsed.suffix}"
+    if source.type == "legacy" or source.repo is None and source.type != "stackoverflow":
+        return f"legacy_{parsed.round}_{parsed.suffix}"
+    if source.type == "stackoverflow":
+        return f"so_{source.issue_id}_{parsed.suffix}"
+    repo_basename = source.repo.split("/", 1)[1] if "/" in source.repo else source.repo
+    repo_norm = _normalize_repo(repo_basename)
+    if source.type == "github_pull":
+        return f"{repo_norm}_pull_{source.issue_id}_{parsed.suffix}"
+    return f"{repo_norm}_{source.issue_id}_{parsed.suffix}"
+
+
+_SYNTHETIC_BUCKETS = [
+    ("state-leak", ("state_leak", "state-leak")),
+    ("uniform", ("uniform_",)),
+    ("depth", ("depth_", "reversed_z", "gldepthrange")),
+    ("culling", ("culling_",)),
+    ("stencil", ("stencil_",)),
+    ("nan", ("nan_propagation",)),
+]
+
+
+def synthetic_topic(suffix: str) -> str:
+    for topic, prefixes in _SYNTHETIC_BUCKETS:
+        for p in prefixes:
+            if suffix.startswith(p) or p in suffix.split("_"):
+                return topic
+    return "misc"
