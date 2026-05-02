@@ -167,3 +167,28 @@ def load_scenario_yaml(path: Path) -> Scenario:
         tags=list(d.get("tags") or []),
         notes=d.get("notes", "") or "",
     )
+
+
+def iter_scenarios(root: Path) -> Iterator[Scenario]:
+    """Yield Scenario for every leaf containing scenario.yaml under root."""
+    for yaml_path in sorted(root.rglob("scenario.yaml")):
+        yield load_scenario_yaml(yaml_path)
+
+
+def validate_all(root: Path) -> list[str]:
+    """Walk root, return a flat list of validation error strings."""
+    errors: list[str] = []
+    for yaml_path in sorted(root.rglob("scenario.yaml")):
+        leaf = yaml_path.parent
+        try:
+            s = load_scenario_yaml(yaml_path)
+        except Exception as e:
+            errors.append(f"{leaf}: failed to load: {e}")
+            continue
+        if s.slug != leaf.name:
+            errors.append(f"{leaf}: slug={s.slug!r} but folder name={leaf.name!r}")
+        if not (leaf / "scenario.md").exists():
+            errors.append(f"{leaf}: missing scenario.md")
+        for e in validate_scenario(s):
+            errors.append(f"{leaf}: {e}")
+    return errors

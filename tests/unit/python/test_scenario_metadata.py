@@ -92,3 +92,37 @@ def test_scenario_yaml_load_missing_file_raises(tmp_path):
     import pytest
     with pytest.raises(FileNotFoundError):
         load_scenario_yaml(tmp_path / "nope.yaml")
+
+
+def _make_scenario_at(dir_path, slug, category, framework):
+    """Helper: write minimum scenario.md + scenario.yaml in dir_path."""
+    from gpa.eval.scenario_metadata import (
+        Scenario, Source, Taxonomy, Backend, dump_scenario_yaml,
+    )
+    dir_path.mkdir(parents=True)
+    (dir_path / "scenario.md").write_text("# fixture\n")
+    s = Scenario(
+        path=dir_path, slug=slug, round="r1", mined_at="2026-01-01",
+        source=Source(type="synthetic"),
+        taxonomy=Taxonomy(category=category, framework=framework, bug_class="synthetic"),
+        backend=Backend(),
+        status="drafted",
+    )
+    dump_scenario_yaml(s, dir_path / "scenario.yaml")
+
+
+def test_iter_scenarios_finds_all(tmp_path):
+    from gpa.eval.scenario_metadata import iter_scenarios
+    _make_scenario_at(tmp_path / "synthetic" / "uniform" / "e1_x", "e1_x", "synthetic", "synthetic")
+    _make_scenario_at(tmp_path / "synthetic" / "depth" / "e2_y", "e2_y", "synthetic", "synthetic")
+    found = list(iter_scenarios(tmp_path))
+    assert len(found) == 2
+    assert {s.slug for s in found} == {"e1_x", "e2_y"}
+
+
+def test_validate_all_reports_slug_mismatch(tmp_path):
+    from gpa.eval.scenario_metadata import validate_all
+    _make_scenario_at(tmp_path / "synthetic" / "x" / "actually_named_this",
+                      "but_yaml_says_this", "synthetic", "synthetic")
+    errors = validate_all(tmp_path)
+    assert any("slug" in e.lower() for e in errors)
