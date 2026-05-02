@@ -15,7 +15,8 @@ examples/vulkan/minimal_app
 node_modules/
 core.*
 # Curation pipeline workdir — per-issue LLM caches + intermediate state
-.eval-pipeline/
+# Glob covers .eval-pipeline/, .eval-pipeline-codex/, etc.
+.eval-pipeline*/
 
 # Per-agent / superpowers git worktrees
 .claude/worktrees/
