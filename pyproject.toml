@@ -30,3 +30,6 @@ gpa-eval = "gpa.eval.index_cli:main"
 filterwarnings = [
     "ignore::DeprecationWarning:gpa.eval.llm_agent",
 ]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
