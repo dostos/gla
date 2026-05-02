@@ -41,7 +41,7 @@ Adopt the codex `cli-creator` shape: every data command is `gpa <noun> [<sub-nou
 | Data nouns | `frames`, `drawcalls`, `pixel`, `scene`, `diff`, `trace`, `passes`, `annotations`, `control`, `source`, `upstream` | The agent's main surface |
 | Escape hatch | `request` *(deferred — not in this iteration)* | YAGNI for now |
 
-**Frame addressing:** keep the existing `--frame N` int flag (default = latest). Don't switch to positional `<frame>`. Also accept `--frame latest` as a no-op for clarity.
+**Frame addressing:** keep the existing `--frame N` int flag (default = latest). Don't switch to positional `<frame>`. Also accept `--frame latest` as a no-op for clarity. When `GPA_FRAME_ID` is set in the environment and `--frame` is omitted, the CLI uses `GPA_FRAME_ID` as the default *before* falling back to "latest". The eval harness uses this so a scenario's agent always pins to its captured frame without one resolution call per command. Explicit `--frame N` always wins over the env var.
 
 **Renames (old → new, with one-release deprecation aliases):**
 
@@ -98,9 +98,9 @@ gpa upstream grep PATTERN [--subdir P] [--glob G] [--max-matches N]
 
 Backed by `GPA_SOURCE_ROOT` and `GPA_UPSTREAM_ROOT` env vars set per-scenario by the eval harness. Both have hard caps (default `--max-bytes 200000`, `--max-matches 50`, hard `--max-matches` cap 500), reject absolute paths and `..` traversal, return JSON: `{"path": ..., "bytes": N, "text": ...}` for reads, `{"matches": [{path, line, text}], "truncated": bool}` for grep, `{"subdir": ..., "entries": [{name, type}]}` for list.
 
-**JSON policy:**
+**JSON policy (decided):**
 
-- All data commands take `--json` and currently mostly default to plain text. The new commands default to **JSON output with `--text` to opt out**, since the primary user is an LLM agent and JSON-by-default eliminates one flag per call.
+- All data commands take `--json` and currently mostly default to plain text. The new commands default to **JSON output with `--text` to opt out**, since the primary user is an LLM agent and JSON-by-default eliminates one flag per call. This is a binding decision, not tentative.
 - Existing `--json` commands keep their current default for backward compatibility but are documented as "set `--json` for agent use."
 - REST-backed commands pass through API JSON verbatim (no `{"ok":..., "data":...}` envelope on success).
 - Errors: stable envelope only on stderr, with nonzero exit code. No envelope on stdout for successes.
@@ -133,15 +133,17 @@ class CliBackendSpec:
     name: str                  # "claude-cli" | "codex-cli"
     binary: str                # "claude" | "codex"
     base_args: list[str]       # invocation prefix (without prompt)
-    stdout_format: Literal["stream-json", "log", "plain"]
+    stdout_format: Literal["ndjson", "log", "plain"]
     parse_run: Callable[[str, str], CliRunMetrics]
     timeout_sec: int = 1800
 ```
 
+`stdout_format = "ndjson"` is the parser-side label for newline-delimited JSON events from *any* CLI. It is not the same as Anthropic's specific `claude --output-format stream-json` schema — that's a producer-side flag. Each preset's `parse_run` knows how to read its own producer's events.
+
 Two presets:
 
-- `CLAUDE_CLI_SPEC`: `claude -p --output-format stream-json --verbose`. Parser reads stream-json events: count `tool_use` blocks per assistant message, sum `usage.input_tokens` / `usage.output_tokens`, take the final `result` event's text as the diagnosis.
-- `CODEX_CLI_SPEC`: `codex exec --skip-git-repo-check --json -s read-only -C <cwd>`. Parser reads codex's structured event stream: count `local_shell_call` events whose argv starts with `gpa`, take token counts and final assistant text from the terminal events. Exact event names verified during implementation.
+- `CLAUDE_CLI_SPEC`: producer args `claude -p --output-format stream-json --verbose`; parser reads Anthropic stream-json events, counts `tool_use` blocks per assistant message, sums `usage.input_tokens` / `usage.output_tokens`, takes the final `result` event's text as the diagnosis.
+- `CODEX_CLI_SPEC`: producer args `codex exec --skip-git-repo-check --json -s read-only -C <cwd>`; parser reads codex's NDJSON event stream, counts `local_shell_call` events whose argv starts with `gpa`, takes token counts and final assistant text from the terminal events. Exact event names verified during implementation against a recorded fixture.
 
 `CliAgent.run(scenario, mode, tools)` flow:
 
@@ -235,7 +237,7 @@ Skill content (from codex's design, lightly trimmed):
 | Curation LLM client | `src/python/gpa/eval/curation/llm_client.py` (extract base, add codex client); `src/python/gpa/eval/curation/gen_queries.py` (add choice) |
 | MCP deprecation | `src/python/gpa/mcp/server.py` (header note); `src/python/gpa/mcp/README.md` (banner) |
 | Docs | `docs/cli/agent-integration.md` (new); `.codex/skills/gpa/SKILL.md`; `.claude/skills/gpa/SKILL.md` |
-| Tests | `tests/unit/python/cli/test_*.py` for each new namespace; `tests/unit/python/eval/agents/test_{factory,cli_agent}.py`; `tests/unit/python/eval/curation/test_codex_cli_client.py` |
+| Tests | `tests/unit/python/cli/test_{drawcalls,pixel,scene,diff,passes,annotations,control,frames_metadata}.py` for new REST-backed namespaces; `tests/unit/python/cli/test_local_roots.py` for `gpa source`/`gpa upstream` (path-traversal rejection, max-bytes/max-matches caps, env-var resolution); `tests/unit/python/eval/agents/test_{factory,cli_agent}.py`; `tests/unit/python/eval/curation/test_codex_cli_client.py` |
 
 ## Implementation order
 
@@ -253,9 +255,7 @@ Each step is its own commit; (1)–(2) are pure refactor and can land independen
 ## Open questions
 
 - **Backwards compatibility:** keep aliases for one release, or rip the band-aid? Current draft: aliases with stderr deprecation, removed in next release.
-- **Codex `exec` event format:** I designed against `--json` based on `codex exec --help` output. The exact event names and final-message extraction need verification on first integration. May require fallback to `--output-last-message FILE` plus stderr log parsing.
-- **`--text` / `--json` defaults on new commands:** I propose JSON-by-default for new commands with `--text` to opt out, since the agent is the primary consumer. Existing commands keep their current default. Worth confirming.
-- **Auto-resolution of "latest" in CLI:** the existing CLI defaults `--frame` to "latest" via REST. The harness will set `GPA_FRAME_ID` for scenarios so the agent can pin to one frame. Worth deciding whether `gpa` should also honour `GPA_FRAME_ID` automatically when `--frame` is omitted (saves one resolution per call).
+- **Codex `exec` event format:** designed against `--json` based on `codex exec --help` output. Exact event names and final-message extraction need verification on first integration. May require fallback to `--output-last-message FILE` plus stderr log parsing.
 - **MCP physical removal:** should the cleanup happen in 4 weeks (default) or wait until we ship CLI v1?
 - **`gpa doctor` / `gpa request`:** punt to a follow-up, or include in this iteration?
 
