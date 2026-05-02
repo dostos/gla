@@ -1,0 +1,19 @@
+schema_version: 1
+slug: godot_115075_shader_sampler_array_with_missing_textur
+round: r24
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/godotengine/godot/issues/115075
+  repo: godotengine/godot
+  issue_id: 115075
+taxonomy:
+  category: native-engine
+  framework: godot
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

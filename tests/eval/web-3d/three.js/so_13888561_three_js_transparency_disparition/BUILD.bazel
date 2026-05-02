@@ -1,0 +1,9 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+cc_binary(
+    name = "so_13888561_three_js_transparency_disparition",
+    srcs = glob(["*.c"]),
+    copts = ["-g", "-gdwarf-4", "-fno-omit-frame-pointer", "-O0"],
+    linkopts = ["-lGL", "-lX11", "-lm"],
+    visibility = ["//visibility:public"],
+)

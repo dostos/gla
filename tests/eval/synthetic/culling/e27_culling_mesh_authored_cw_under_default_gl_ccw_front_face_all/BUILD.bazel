@@ -1,0 +1,9 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+cc_binary(
+    name = "e27_culling_mesh_authored_cw_under_default_gl_ccw_front_face_all",
+    srcs = glob(["*.c"]),
+    copts = ["-g", "-gdwarf-4", "-fno-omit-frame-pointer", "-O0"],
+    linkopts = ["-lGL", "-lX11", "-lm"],
+    visibility = ["//visibility:public"],
+)

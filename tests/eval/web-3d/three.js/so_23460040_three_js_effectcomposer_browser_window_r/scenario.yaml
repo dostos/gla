@@ -1,0 +1,18 @@
+schema_version: 1
+slug: so_23460040_three_js_effectcomposer_browser_window_r
+round: r11
+mined_at: '2026-05-02'
+source:
+  type: stackoverflow
+  url: https://stackoverflow.com/questions/23460040
+  issue_id: '23460040'
+taxonomy:
+  category: web-3d
+  framework: three.js
+  bug_class: consumer-misuse
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

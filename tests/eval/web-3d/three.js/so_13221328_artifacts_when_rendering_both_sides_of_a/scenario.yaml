@@ -1,0 +1,18 @@
+schema_version: 1
+slug: so_13221328_artifacts_when_rendering_both_sides_of_a
+round: r24
+mined_at: '2026-05-02'
+source:
+  type: stackoverflow
+  url: https://stackoverflow.com/questions/13221328
+  issue_id: '13221328'
+taxonomy:
+  category: web-3d
+  framework: three.js
+  bug_class: consumer-misuse
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

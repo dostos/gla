@@ -1,0 +1,19 @@
+schema_version: 1
+slug: drei_2583_softshadows_broken_with_three_js_r182_un
+round: r213
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/pmndrs/drei/issues/2583
+  repo: pmndrs/drei
+  issue_id: 2583
+taxonomy:
+  category: web-3d
+  framework: drei
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

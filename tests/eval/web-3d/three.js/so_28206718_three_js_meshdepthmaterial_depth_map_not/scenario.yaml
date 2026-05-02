@@ -1,0 +1,18 @@
+schema_version: 1
+slug: so_28206718_three_js_meshdepthmaterial_depth_map_not
+round: r20
+mined_at: '2026-05-02'
+source:
+  type: stackoverflow
+  url: https://stackoverflow.com/questions/28206718
+  issue_id: '28206718'
+taxonomy:
+  category: web-3d
+  framework: three.js
+  bug_class: consumer-misuse
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

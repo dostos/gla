@@ -1,0 +1,9 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+cc_binary(
+    name = "godot_112167_opengl_proximity_fade_could_not_create_3",
+    srcs = glob(["*.c"]),
+    copts = ["-g", "-gdwarf-4", "-fno-omit-frame-pointer", "-O0"],
+    linkopts = ["-lGL", "-lX11", "-lm"],
+    visibility = ["//visibility:public"],
+)

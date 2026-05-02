@@ -1,0 +1,9 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+cc_binary(
+    name = "e25_gldepthrange_set_to_1_0_but_depth_test_is_gl_less_nothing_vi",
+    srcs = glob(["*.c"]),
+    copts = ["-g", "-gdwarf-4", "-fno-omit-frame-pointer", "-O0"],
+    linkopts = ["-lGL", "-lX11", "-lm"],
+    visibility = ["//visibility:public"],
+)

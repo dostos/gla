@@ -1,0 +1,9 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+cc_binary(
+    name = "threejs_33201_bug_black_squares_appear_when_rendering_",
+    srcs = glob(["*.c"]),
+    copts = ["-g", "-gdwarf-4", "-fno-omit-frame-pointer", "-O0"],
+    linkopts = ["-lGL", "-lX11", "-lm"],
+    visibility = ["//visibility:public"],
+)

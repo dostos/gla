@@ -1,0 +1,19 @@
+schema_version: 1
+slug: threejs_18569_too_dark_edges_due_to_new_ibl_multi_scat
+round: r4
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/mrdoob/three.js/issues/18569
+  repo: mrdoob/three.js
+  issue_id: 18569
+taxonomy:
+  category: web-3d
+  framework: three.js
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

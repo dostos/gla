@@ -1,0 +1,19 @@
+schema_version: 1
+slug: react_xr_205_xr_support
+round: ra21d3d
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/pmndrs/react-xr/issues/205
+  repo: pmndrs/react-xr
+  issue_id: 205
+taxonomy:
+  category: web-3d
+  framework: postprocessing
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

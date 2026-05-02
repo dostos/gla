@@ -1,0 +1,19 @@
+schema_version: 1
+slug: threejs_26767_screen_glitch_with_bloom_on_m1_mac
+round: r11
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/mrdoob/three.js/issues/26767
+  repo: mrdoob/three.js
+  issue_id: 26767
+taxonomy:
+  category: web-3d
+  framework: three.js
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

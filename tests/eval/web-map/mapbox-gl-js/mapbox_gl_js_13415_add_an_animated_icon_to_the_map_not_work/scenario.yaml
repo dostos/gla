@@ -1,0 +1,19 @@
+schema_version: 1
+slug: mapbox_gl_js_13415_add_an_animated_icon_to_the_map_not_work
+round: r29
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/mapbox/mapbox-gl-js/issues/13415
+  repo: mapbox/mapbox-gl-js
+  issue_id: 13415
+taxonomy:
+  category: web-map
+  framework: mapbox-gl-js
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

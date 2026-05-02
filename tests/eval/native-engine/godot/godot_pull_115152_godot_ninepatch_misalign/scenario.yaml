@@ -1,0 +1,19 @@
+schema_version: 1
+slug: godot_pull_115152_godot_ninepatch_misalign
+round: r14
+mined_at: '2026-05-02'
+source:
+  type: github_pull
+  url: https://github.com/godotengine/godot/pull/115152
+  repo: godotengine/godot
+  issue_id: 115152
+taxonomy:
+  category: native-engine
+  framework: godot
+  bug_class: unknown
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

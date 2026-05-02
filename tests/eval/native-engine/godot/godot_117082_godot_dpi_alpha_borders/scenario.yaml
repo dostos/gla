@@ -1,0 +1,19 @@
+schema_version: 1
+slug: godot_117082_godot_dpi_alpha_borders
+round: r14
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/godotengine/godot/issues/117082
+  repo: godotengine/godot
+  issue_id: 117082
+taxonomy:
+  category: native-engine
+  framework: godot
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

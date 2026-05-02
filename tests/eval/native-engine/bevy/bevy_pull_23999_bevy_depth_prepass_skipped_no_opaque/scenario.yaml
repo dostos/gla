@@ -1,0 +1,19 @@
+schema_version: 1
+slug: bevy_pull_23999_bevy_depth_prepass_skipped_no_opaque
+round: r13
+mined_at: '2026-05-02'
+source:
+  type: github_pull
+  url: https://github.com/bevyengine/bevy/pull/23999
+  repo: bevyengine/bevy
+  issue_id: 23999
+taxonomy:
+  category: native-engine
+  framework: bevy
+  bug_class: unknown
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

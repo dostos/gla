@@ -1,0 +1,19 @@
+schema_version: 1
+slug: godot_pull_117986_color_correction_no_longer_wor
+round: r8dd961
+mined_at: '2026-05-02'
+source:
+  type: github_pull
+  url: https://github.com/godotengine/godot/pull/117986
+  repo: godotengine/godot
+  issue_id: 117986
+taxonomy:
+  category: native-engine
+  framework: godot
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

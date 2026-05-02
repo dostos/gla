@@ -1,0 +1,19 @@
+schema_version: 1
+slug: threejs_32706_crash_if_using_scene_background_hdr_volu
+round: r28
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/mrdoob/three.js/issues/32706
+  repo: mrdoob/three.js
+  issue_id: 32706
+taxonomy:
+  category: web-3d
+  framework: three.js
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

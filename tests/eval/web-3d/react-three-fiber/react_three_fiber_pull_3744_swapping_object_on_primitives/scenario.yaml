@@ -1,0 +1,19 @@
+schema_version: 1
+slug: react_three_fiber_pull_3744_swapping_object_on_primitives
+round: ra21d3d
+mined_at: '2026-05-02'
+source:
+  type: github_pull
+  url: https://github.com/pmndrs/react-three-fiber/pull/3744
+  repo: pmndrs/react-three-fiber
+  issue_id: 3744
+taxonomy:
+  category: web-3d
+  framework: react-three-fiber
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

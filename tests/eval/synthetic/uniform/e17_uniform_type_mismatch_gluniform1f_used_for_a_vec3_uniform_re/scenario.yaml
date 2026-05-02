@@ -1,0 +1,16 @@
+schema_version: 1
+slug: e17_uniform_type_mismatch_gluniform1f_used_for_a_vec3_uniform_re
+round: e17
+mined_at: '2026-05-02'
+source:
+  type: synthetic
+taxonomy:
+  category: synthetic
+  framework: synthetic
+  bug_class: synthetic
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

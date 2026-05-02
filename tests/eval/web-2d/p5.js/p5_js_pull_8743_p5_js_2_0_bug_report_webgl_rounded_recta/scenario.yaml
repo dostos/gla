@@ -1,0 +1,19 @@
+schema_version: 1
+slug: p5_js_pull_8743_p5_js_2_0_bug_report_webgl_rounded_recta
+round: r203
+mined_at: '2026-05-02'
+source:
+  type: github_pull
+  url: https://github.com/processing/p5.js/pull/8743
+  repo: processing/p5.js
+  issue_id: 8743
+taxonomy:
+  category: web-2d
+  framework: p5.js
+  bug_class: unknown
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

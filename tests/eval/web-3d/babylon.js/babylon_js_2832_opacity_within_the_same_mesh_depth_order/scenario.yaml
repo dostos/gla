@@ -1,0 +1,19 @@
+schema_version: 1
+slug: babylon_js_2832_opacity_within_the_same_mesh_depth_order
+round: r9
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/BabylonJS/Babylon.js/issues/2832
+  repo: BabylonJS/Babylon.js
+  issue_id: 2832
+taxonomy:
+  category: web-3d
+  framework: babylon.js
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

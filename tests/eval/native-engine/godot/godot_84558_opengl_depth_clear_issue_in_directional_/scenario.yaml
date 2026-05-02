@@ -1,0 +1,19 @@
+schema_version: 1
+slug: godot_84558_opengl_depth_clear_issue_in_directional_
+round: r18
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/godotengine/godot/issues/84558
+  repo: godotengine/godot
+  issue_id: 84558
+taxonomy:
+  category: native-engine
+  framework: godot
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

@@ -1,0 +1,19 @@
+schema_version: 1
+slug: bevy_pull_9923_bevy_text_wrap_flicker_resize
+round: r14
+mined_at: '2026-05-02'
+source:
+  type: github_pull
+  url: https://github.com/bevyengine/bevy/pull/9923
+  repo: bevyengine/bevy
+  issue_id: 9923
+taxonomy:
+  category: native-engine
+  framework: bevy
+  bug_class: unknown
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

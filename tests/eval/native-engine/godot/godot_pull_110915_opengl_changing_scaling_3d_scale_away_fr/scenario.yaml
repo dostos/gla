@@ -1,0 +1,19 @@
+schema_version: 1
+slug: godot_pull_110915_opengl_changing_scaling_3d_scale_away_fr
+round: r21
+mined_at: '2026-05-02'
+source:
+  type: github_pull
+  url: https://github.com/godotengine/godot/pull/110915
+  repo: godotengine/godot
+  issue_id: 110915
+taxonomy:
+  category: native-engine
+  framework: godot
+  bug_class: unknown
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

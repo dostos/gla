@@ -1,0 +1,19 @@
+schema_version: 1
+slug: godot_pull_107902_sampling_the_radiance_in_a_sky_shader_wi
+round: r29
+mined_at: '2026-05-02'
+source:
+  type: github_pull
+  url: https://github.com/godotengine/godot/pull/107902
+  repo: godotengine/godot
+  issue_id: 107902
+taxonomy:
+  category: native-engine
+  framework: godot
+  bug_class: unknown
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

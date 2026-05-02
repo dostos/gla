@@ -1,0 +1,19 @@
+schema_version: 1
+slug: godot_pull_114957_godot_canvasgroup_tiny_black
+round: r14
+mined_at: '2026-05-02'
+source:
+  type: github_pull
+  url: https://github.com/godotengine/godot/pull/114957
+  repo: godotengine/godot
+  issue_id: 114957
+taxonomy:
+  category: native-engine
+  framework: godot
+  bug_class: unknown
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

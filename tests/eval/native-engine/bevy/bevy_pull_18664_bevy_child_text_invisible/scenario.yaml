@@ -1,0 +1,19 @@
+schema_version: 1
+slug: bevy_pull_18664_bevy_child_text_invisible
+round: r14
+mined_at: '2026-05-02'
+source:
+  type: github_pull
+  url: https://github.com/bevyengine/bevy/pull/18664
+  repo: bevyengine/bevy
+  issue_id: 18664
+taxonomy:
+  category: native-engine
+  framework: bevy
+  bug_class: unknown
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

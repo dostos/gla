@@ -1,0 +1,19 @@
+schema_version: 1
+slug: babylon_js_18151_silent_failure_with_invalid_hdr_file_mat
+round: r8
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/BabylonJS/Babylon.js/issues/18151
+  repo: BabylonJS/Babylon.js
+  issue_id: 18151
+taxonomy:
+  category: web-3d
+  framework: babylon.js
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

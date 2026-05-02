@@ -1,0 +1,18 @@
+schema_version: 1
+slug: so_37858464_material_shines_through_when_zooming_out
+round: r3
+mined_at: '2026-05-02'
+source:
+  type: stackoverflow
+  url: https://stackoverflow.com/questions/37858464
+  issue_id: '37858464'
+taxonomy:
+  category: web-3d
+  framework: three.js
+  bug_class: consumer-misuse
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

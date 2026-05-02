@@ -1,0 +1,19 @@
+schema_version: 1
+slug: postprocessing_225_incorrect_use_of_depth_texture_attachmen
+round: r205
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/pmndrs/postprocessing/issues/225
+  repo: pmndrs/postprocessing
+  issue_id: 225
+taxonomy:
+  category: web-3d
+  framework: postprocessing
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

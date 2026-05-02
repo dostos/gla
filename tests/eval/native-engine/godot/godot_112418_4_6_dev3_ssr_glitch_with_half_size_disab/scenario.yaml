@@ -1,0 +1,19 @@
+schema_version: 1
+slug: godot_112418_4_6_dev3_ssr_glitch_with_half_size_disab
+round: r44
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/godotengine/godot/issues/112418
+  repo: godotengine/godot
+  issue_id: 112418
+taxonomy:
+  category: native-engine
+  framework: godot
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

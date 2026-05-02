@@ -1,0 +1,19 @@
+schema_version: 1
+slug: pixijs_11995_using_multiple_alphamask_s_with_renderma
+round: r23
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/pixijs/pixijs/issues/11995
+  repo: pixijs/pixijs
+  issue_id: 11995
+taxonomy:
+  category: web-2d
+  framework: pixijs
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

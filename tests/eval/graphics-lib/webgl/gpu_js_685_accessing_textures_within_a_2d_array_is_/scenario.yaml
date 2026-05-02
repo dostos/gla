@@ -1,0 +1,19 @@
+schema_version: 1
+slug: gpu_js_685_accessing_textures_within_a_2d_array_is_
+round: r206
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/gpujs/gpu.js/issues/685
+  repo: gpujs/gpu.js
+  issue_id: 685
+taxonomy:
+  category: graphics-lib
+  framework: webgl
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

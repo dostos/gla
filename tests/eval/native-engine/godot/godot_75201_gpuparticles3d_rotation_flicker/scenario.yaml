@@ -1,0 +1,19 @@
+schema_version: 1
+slug: godot_75201_gpuparticles3d_rotation_flicker
+round: r18
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/godotengine/godot/issues/75201
+  repo: godotengine/godot
+  issue_id: 75201
+taxonomy:
+  category: native-engine
+  framework: godot
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

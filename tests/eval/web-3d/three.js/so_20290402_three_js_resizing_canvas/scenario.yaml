@@ -1,0 +1,18 @@
+schema_version: 1
+slug: so_20290402_three_js_resizing_canvas
+round: r8
+mined_at: '2026-05-02'
+source:
+  type: stackoverflow
+  url: https://stackoverflow.com/questions/20290402
+  issue_id: '20290402'
+taxonomy:
+  category: web-3d
+  framework: three.js
+  bug_class: consumer-misuse
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

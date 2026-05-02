@@ -1,0 +1,19 @@
+schema_version: 1
+slug: godot_79760_strange_bug_with_3_sprites_where_one_of_
+round: r35
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/godotengine/godot/issues/79760
+  repo: godotengine/godot
+  issue_id: 79760
+taxonomy:
+  category: native-engine
+  framework: godot
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

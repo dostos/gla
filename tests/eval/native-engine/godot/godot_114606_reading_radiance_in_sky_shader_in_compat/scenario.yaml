@@ -1,0 +1,19 @@
+schema_version: 1
+slug: godot_114606_reading_radiance_in_sky_shader_in_compat
+round: r30
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/godotengine/godot/issues/114606
+  repo: godotengine/godot
+  issue_id: 114606
+taxonomy:
+  category: native-engine
+  framework: godot
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

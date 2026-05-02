@@ -1,0 +1,19 @@
+schema_version: 1
+slug: itowns_2716_bug_geotiff_cog_with_planarview
+round: r210
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/iTowns/itowns/issues/2716
+  repo: iTowns/itowns
+  issue_id: 2716
+taxonomy:
+  category: web-map
+  framework: itowns
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

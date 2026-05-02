@@ -1,0 +1,18 @@
+schema_version: 1
+slug: so_13888561_three_js_transparency_disparition
+round: r25
+mined_at: '2026-05-02'
+source:
+  type: stackoverflow
+  url: https://stackoverflow.com/questions/13888561
+  issue_id: '13888561'
+taxonomy:
+  category: web-3d
+  framework: three.js
+  bug_class: consumer-misuse
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

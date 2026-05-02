@@ -1,32 +1,11 @@
-load("@rules_cc//cc:defs.bzl", "cc_binary")
-
-# Each scenario is a directory containing scenario.md + one or more .c files.
-# Discover all subdirectories that contain scenario.md, compile their .c files
-# into a single cc_binary named after the directory.
-
-# Get scenario directories: every dir that has a scenario.md in it.
-# allow_empty=False: we WANT to fail loudly if the eval dir is empty.
-_SCENARIO_MDS = glob(["*/scenario.md"], allow_empty = False)
-_SCENARIO_DIRS = [m[:-len("/scenario.md")] for m in _SCENARIO_MDS]
-
-# Debug info required for native `gpa trace` DWARF scanning (see
-# docs/gpa-trace-native-usage.md). Build with `--strip=never` so the linker
-# does not discard .debug_info sections:
-#     bazel build --strip=never //tests/eval/...
-# The `-fno-omit-frame-pointer` flag is also required for Phase 2 stack-local
-# reverse lookups (frame-pointer walking).
+# Eval scenarios live in subpackages organized by taxonomy:
+#   synthetic/<topic>/<slug>/      (hand-authored scenarios)
+#   <category>/<framework>/<slug>/ (mined real-world bugs)
 #
-# allow_empty=True on the inner globs: maintainer-framing scenarios (r200+)
-# have scenario.md but no .c file, so the glob legitimately returns empty.
-# Without this, --incompatible_disallow_empty_glob fails the build.
-[cc_binary(
-    name = d,
-    srcs = glob([d + "/*.c"], allow_empty = True),
-    copts = [
-        "-g",
-        "-gdwarf-4",
-        "-fno-omit-frame-pointer",
-        "-O0",
-    ],
-    linkopts = ["-lGL", "-lX11", "-lm"],
-) for d in _SCENARIO_DIRS if glob([d + "/*.c"], allow_empty = True)]
+# Each scenario subpackage has its own BUILD.bazel that declares a
+# cc_binary named after the leaf slug (only when *.c files are present).
+#
+# Build all runnable scenarios:
+#   bazel build //tests/eval/...
+#
+# See docs/superpowers/specs/2026-05-02-eval-scenario-taxonomy-layout-design.md.

@@ -1,0 +1,19 @@
+schema_version: 1
+slug: pixelorama_1074_omniscale_cleanedge_scaling_issues
+round: r12
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/Orama-Interactive/Pixelorama/issues/1074
+  repo: Orama-Interactive/Pixelorama
+  issue_id: 1074
+taxonomy:
+  category: native-engine
+  framework: godot
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

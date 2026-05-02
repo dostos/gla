@@ -1,0 +1,16 @@
+schema_version: 1
+slug: e25_gldepthrange_set_to_1_0_but_depth_test_is_gl_less_nothing_vi
+round: e25
+mined_at: '2026-05-02'
+source:
+  type: synthetic
+taxonomy:
+  category: synthetic
+  framework: synthetic
+  bug_class: synthetic
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

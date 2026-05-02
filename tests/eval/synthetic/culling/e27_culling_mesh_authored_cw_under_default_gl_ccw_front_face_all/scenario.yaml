@@ -1,0 +1,16 @@
+schema_version: 1
+slug: e27_culling_mesh_authored_cw_under_default_gl_ccw_front_face_all
+round: e27
+mined_at: '2026-05-02'
+source:
+  type: synthetic
+taxonomy:
+  category: synthetic
+  framework: synthetic
+  bug_class: synthetic
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

@@ -1,0 +1,19 @@
+schema_version: 1
+slug: godot_112167_opengl_proximity_fade_could_not_create_3
+round: r36
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/godotengine/godot/issues/112167
+  repo: godotengine/godot
+  issue_id: 112167
+taxonomy:
+  category: native-engine
+  framework: godot
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

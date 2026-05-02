@@ -1,0 +1,19 @@
+schema_version: 1
+slug: threejs_pull_33204_bug_renderer_setscissor_add_postprocessi
+round: r6
+mined_at: '2026-05-02'
+source:
+  type: github_pull
+  url: https://github.com/mrdoob/three.js/pull/33204
+  repo: mrdoob/three.js
+  issue_id: 33204
+taxonomy:
+  category: web-3d
+  framework: three.js
+  bug_class: unknown
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

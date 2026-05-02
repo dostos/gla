@@ -1,0 +1,19 @@
+schema_version: 1
+slug: threejs_32686_regression_logarithmicdepthbuffer_issues
+round: r7
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/mrdoob/three.js/issues/32686
+  repo: mrdoob/three.js
+  issue_id: 32686
+taxonomy:
+  category: web-3d
+  framework: three.js
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

@@ -1,0 +1,19 @@
+schema_version: 1
+slug: engine_2425_gl_invalid_operation_glblitframebufferch
+round: r211
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/playcanvas/engine/issues/2425
+  repo: playcanvas/engine
+  issue_id: 2425
+taxonomy:
+  category: web-3d
+  framework: playcanvas
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

@@ -1,0 +1,19 @@
+schema_version: 1
+slug: threejs_25648_object_with_meshphysicalmaterial_contain
+round: r20
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/mrdoob/three.js/issues/25648
+  repo: mrdoob/three.js
+  issue_id: 25648
+taxonomy:
+  category: web-3d
+  framework: three.js
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

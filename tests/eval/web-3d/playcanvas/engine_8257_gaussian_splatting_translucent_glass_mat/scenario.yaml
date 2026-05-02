@@ -1,0 +1,19 @@
+schema_version: 1
+slug: engine_8257_gaussian_splatting_translucent_glass_mat
+round: r209
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/playcanvas/engine/issues/8257
+  repo: playcanvas/engine
+  issue_id: 8257
+taxonomy:
+  category: web-3d
+  framework: playcanvas
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

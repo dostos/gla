@@ -1,0 +1,19 @@
+schema_version: 1
+slug: agent_cockpit_142_unrealbloompass_produces_no_visible_outp
+round: r15
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/daronyondem/agent-cockpit/issues/142
+  repo: daronyondem/agent-cockpit
+  issue_id: 142
+taxonomy:
+  category: web-3d
+  framework: three.js
+  bug_class: consumer-misuse
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

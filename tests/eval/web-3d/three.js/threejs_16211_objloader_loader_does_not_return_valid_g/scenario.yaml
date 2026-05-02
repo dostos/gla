@@ -1,0 +1,19 @@
+schema_version: 1
+slug: threejs_16211_objloader_loader_does_not_return_valid_g
+round: r28
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/mrdoob/three.js/issues/16211
+  repo: mrdoob/three.js
+  issue_id: 16211
+taxonomy:
+  category: web-3d
+  framework: three.js
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

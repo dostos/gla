@@ -1,0 +1,18 @@
+schema_version: 1
+slug: so_15994944_transparent_objects_in_three_js
+round: r11
+mined_at: '2026-05-02'
+source:
+  type: stackoverflow
+  url: https://stackoverflow.com/questions/15994944
+  issue_id: '15994944'
+taxonomy:
+  category: web-3d
+  framework: three.js
+  bug_class: consumer-misuse
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

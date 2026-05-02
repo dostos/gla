@@ -1,0 +1,19 @@
+schema_version: 1
+slug: qwc2_532_3d_map_black_screen
+round: r4
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/qgis/qwc2/issues/532
+  repo: qgis/qwc2
+  issue_id: 532
+taxonomy:
+  category: web-map
+  framework: qwc2
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

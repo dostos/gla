@@ -1,0 +1,19 @@
+schema_version: 1
+slug: godot_114069_godot_mobile_renderer_macos_transparent_flicker
+round: r15
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/godotengine/godot/issues/114069
+  repo: godotengine/godot
+  issue_id: 114069
+taxonomy:
+  category: native-engine
+  framework: godot
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

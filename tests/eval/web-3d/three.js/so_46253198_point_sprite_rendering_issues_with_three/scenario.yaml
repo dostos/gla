@@ -1,0 +1,18 @@
+schema_version: 1
+slug: so_46253198_point_sprite_rendering_issues_with_three
+round: r22
+mined_at: '2026-05-02'
+source:
+  type: stackoverflow
+  url: https://stackoverflow.com/questions/46253198
+  issue_id: '46253198'
+taxonomy:
+  category: web-3d
+  framework: three.js
+  bug_class: consumer-misuse
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

@@ -1,0 +1,19 @@
+schema_version: 1
+slug: aframe_5302_color_management_changes_in_three
+round: r7
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/aframevr/aframe/issues/5302
+  repo: aframevr/aframe
+  issue_id: 5302
+taxonomy:
+  category: web-3d
+  framework: a-frame
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

@@ -1,0 +1,19 @@
+schema_version: 1
+slug: 3dtilesrendererjs_1517_webgl_webgl_regression_of_3d_tiles_rendere
+round: ra21d3d
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/NASA-AMMOS/3DTilesRendererJS/issues/1517
+  repo: NASA-AMMOS/3DTilesRendererJS
+  issue_id: 1517
+taxonomy:
+  category: web-3d
+  framework: three.js
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

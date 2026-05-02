@@ -1,0 +1,19 @@
+schema_version: 1
+slug: threejs_26762_3d_model_with_transparent_material_rende
+round: r3
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/mrdoob/three.js/issues/26762
+  repo: mrdoob/three.js
+  issue_id: 26762
+taxonomy:
+  category: web-3d
+  framework: three.js
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

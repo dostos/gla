@@ -1,0 +1,16 @@
+schema_version: 1
+slug: e32_stencil_glstencilfunc_gl_never_0_0xff_set_accidentally_no_pi
+round: e32
+mined_at: '2026-05-02'
+source:
+  type: synthetic
+taxonomy:
+  category: synthetic
+  framework: synthetic
+  bug_class: synthetic
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

@@ -1,0 +1,19 @@
+schema_version: 1
+slug: engine_pull_5705_issues_with_transparency_in_glb_models
+round: r201
+mined_at: '2026-05-02'
+source:
+  type: github_pull
+  url: https://github.com/playcanvas/engine/pull/5705
+  repo: playcanvas/engine
+  issue_id: 5705
+taxonomy:
+  category: web-3d
+  framework: playcanvas
+  bug_class: unknown
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

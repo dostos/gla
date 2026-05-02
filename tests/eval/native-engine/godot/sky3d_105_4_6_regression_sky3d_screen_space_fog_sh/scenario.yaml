@@ -1,0 +1,19 @@
+schema_version: 1
+slug: sky3d_105_4_6_regression_sky3d_screen_space_fog_sh
+round: r27
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/TokisanGames/Sky3D/issues/105
+  repo: TokisanGames/Sky3D
+  issue_id: 105
+taxonomy:
+  category: native-engine
+  framework: godot
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

@@ -1,0 +1,16 @@
+schema_version: 1
+slug: e26_depth_buffer_not_cleared_between_frames_previous_frame_depth
+round: e26
+mined_at: '2026-05-02'
+source:
+  type: synthetic
+taxonomy:
+  category: synthetic
+  framework: synthetic
+  bug_class: synthetic
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

@@ -1,0 +1,19 @@
+schema_version: 1
+slug: babylon_js_pull_16459_babylon_viewer_updates
+round: ra21d3d
+mined_at: '2026-05-02'
+source:
+  type: github_pull
+  url: https://github.com/BabylonJS/Babylon.js/pull/16459
+  repo: BabylonJS/Babylon.js
+  issue_id: 16459
+taxonomy:
+  category: web-3d
+  framework: babylon.js
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

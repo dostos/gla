@@ -1,0 +1,19 @@
+schema_version: 1
+slug: godot_103629_smeary_visuals_with_taa_on_since_switchi
+round: r52
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/godotengine/godot/issues/103629
+  repo: godotengine/godot
+  issue_id: 103629
+taxonomy:
+  category: native-engine
+  framework: godot
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

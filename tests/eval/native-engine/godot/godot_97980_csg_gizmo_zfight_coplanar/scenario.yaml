@@ -1,0 +1,19 @@
+schema_version: 1
+slug: godot_97980_csg_gizmo_zfight_coplanar
+round: r22
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/godotengine/godot/issues/97980
+  repo: godotengine/godot
+  issue_id: 97980
+taxonomy:
+  category: native-engine
+  framework: godot
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

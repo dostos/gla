@@ -1,0 +1,19 @@
+schema_version: 1
+slug: babylon_js_9826_out_of_sync_vr_camera_with_lens_flares
+round: r200
+mined_at: '2026-05-02'
+source:
+  type: github_issue
+  url: https://github.com/BabylonJS/Babylon.js/issues/9826
+  repo: BabylonJS/Babylon.js
+  issue_id: 9826
+taxonomy:
+  category: web-3d
+  framework: babylon.js
+  bug_class: framework-internal
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

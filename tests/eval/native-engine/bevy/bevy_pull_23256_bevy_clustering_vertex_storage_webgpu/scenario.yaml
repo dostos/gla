@@ -1,0 +1,19 @@
+schema_version: 1
+slug: bevy_pull_23256_bevy_clustering_vertex_storage_webgpu
+round: r13
+mined_at: '2026-05-02'
+source:
+  type: github_pull
+  url: https://github.com/bevyengine/bevy/pull/23256
+  repo: bevyengine/bevy
+  issue_id: 23256
+taxonomy:
+  category: native-engine
+  framework: bevy
+  bug_class: unknown
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''

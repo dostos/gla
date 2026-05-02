@@ -1,0 +1,16 @@
+schema_version: 1
+slug: e20_uniform_never_uploaded_because_gluseprogram_was_called_after
+round: e20
+mined_at: '2026-05-02'
+source:
+  type: synthetic
+taxonomy:
+  category: synthetic
+  framework: synthetic
+  bug_class: synthetic
+backend:
+  api: unknown
+  status: not-yet-reproduced
+status: drafted
+tags: []
+notes: ''
