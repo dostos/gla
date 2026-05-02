@@ -13,6 +13,17 @@ import sys
 from pathlib import Path
 
 
+def _stub_agent(
+    scenario, mode: str, tools: dict
+) -> tuple[str, int, int, int, int, float]:
+    """Minimal stub agent used for --dry-run and tests."""
+    print(f"  [stub] scenario={scenario.id} mode={mode}")
+    source = tools["read_source"]()
+    diagnosis = f"[stub diagnosis for {scenario.id}]"
+    tokens = len(source.split())
+    return diagnosis, tokens, 50, 0, 1, 0.0
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     """Execute eval scenarios via the harness."""
     from gpa.eval.harness import EvalHarness
@@ -54,19 +65,19 @@ def _cmd_run(args: argparse.Namespace) -> int:
         scenarios = [args.scenario]
         modes = [args.mode] if args.mode else None
 
-    # Minimal stub agent used when no real agent is configured.
-    # Real usage should provide a proper agent via the Python API.
-    def _stub_agent(
-        scenario: ScenarioMetadata, mode: str, tools: dict
-    ) -> tuple[str, int, int, int, int, float]:
-        print(f"  [stub] scenario={scenario.id} mode={mode}")
-        source = tools["read_source"]()
-        diagnosis = f"[stub diagnosis for {scenario.id}]"
-        tokens = len(source.split())
-        return diagnosis, tokens, 50, 0, 1, 0.0
+    if args.dry_run:
+        agent_fn = _stub_agent
+    else:
+        from gpa.eval.agents.factory import build_agent_fn
+        import os
+        agent_fn = build_agent_fn(
+            backend=args.agent_backend,
+            model=args.agent_model,
+            api_key=os.environ.get("ANTHROPIC_API_KEY"),
+        )
 
     results = harness.run_all(
-        agent_fn=_stub_agent, scenarios=scenarios, modes=modes
+        agent_fn=agent_fn, scenarios=scenarios, modes=modes
     )
 
     output_path = args.output or "results.json"
@@ -116,6 +127,19 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--token", help="OpenGPA auth token")
     run_p.add_argument("--shim", help="Path to OpenGPA shim shared library")
     run_p.add_argument("--model", help="LLM model identifier (for metadata)")
+    run_p.add_argument(
+        "--agent-backend", default="api",
+        choices=["api", "claude-cli", "codex-cli"],
+        help="Agent backend to use (default: api)",
+    )
+    run_p.add_argument(
+        "--agent-model", default=None,
+        help="Model override for the agent backend (default: backend picks its own)",
+    )
+    run_p.add_argument(
+        "--dry-run", action="store_true",
+        help="Use the built-in stub agent instead of a real LLM backend",
+    )
 
     # --- report subcommand ---
     rep_p = sub.add_parser("report", help="Generate markdown report from results JSON")
