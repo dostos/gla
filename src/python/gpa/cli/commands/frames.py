@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from gpa.cli.frame_resolver import resolve_frame
 from gpa.cli.rest_client import RestClient, RestError
 from gpa.cli.session import Session
 
@@ -60,7 +61,7 @@ def add_subparser(subparsers) -> None:
     p_list = sub.add_parser("list", help="List captured frame ids")
     p_list.add_argument(
         "--json", dest="json_output", action="store_true",
-        help="(legacy) Force JSON output. New default is JSON.",
+        help=argparse.SUPPRESS,
     )
     p_list.add_argument(
         "--text", dest="text_output", action="store_true",
@@ -141,17 +142,13 @@ def run_list(
     if print_stream is None:
         print_stream = sys.stdout
 
-    sess = Session.discover(explicit=session_dir)
+    sess, client = _get_session_and_client(session_dir, client)
     if sess is None:
         print("[gpa] no active session found", file=sys.stderr)
         return 2
 
     if client is None:
-        try:
-            client = RestClient.from_session(sess)
-        except Exception as exc:  # noqa: BLE001
-            print(f"[gpa] failed to connect to engine: {exc}", file=sys.stderr)
-            return 1
+        return 1
 
     ids: list[int] = []
     try:
@@ -200,19 +197,14 @@ def run_overview(
     if print_stream is None:
         print_stream = sys.stdout
 
-    sess = Session.discover(explicit=session_dir)
+    sess, client = _get_session_and_client(session_dir, client)
     if sess is None:
         print("[gpa] no active session found", file=sys.stderr)
         return 2
 
     if client is None:
-        try:
-            client = RestClient.from_session(sess)
-        except Exception as exc:  # noqa: BLE001
-            print(f"[gpa] failed to connect to engine: {exc}", file=sys.stderr)
-            return 1
+        return 1
 
-    from gpa.cli.frame_resolver import resolve_frame
     try:
         fid = resolve_frame(client=client, explicit=frame)
     except Exception as exc:  # noqa: BLE001
