@@ -52,3 +52,39 @@ def test_parse_r9_is_early_mined_not_recent():
     p = parse_existing_folder_name("r9_blend_modes_not_working")
     assert p.kind == "early-mined"
     assert p.round == "r9"
+
+
+def test_extract_github_issue_url(tmp_path):
+    from gpa.eval.migrate_layout import extract_source
+    md = tmp_path / "scenario.md"
+    md.write_text("Closes https://github.com/godotengine/godot/issues/86493 yay")
+    src = extract_source(md)
+    assert src.type == "github_issue"
+    assert src.repo == "godotengine/godot"
+    assert src.issue_id == 86493
+
+
+def test_extract_github_pull(tmp_path):
+    from gpa.eval.migrate_layout import extract_source
+    md = tmp_path / "scenario.md"
+    md.write_text("see https://github.com/godotengine/godot/pull/9857 fix")
+    src = extract_source(md)
+    assert src.type == "github_pull"
+    assert src.issue_id == 9857
+
+
+def test_extract_stackoverflow(tmp_path):
+    from gpa.eval.migrate_layout import extract_source
+    md = tmp_path / "scenario.md"
+    md.write_text("see https://stackoverflow.com/questions/23460040/something")
+    src = extract_source(md)
+    assert src.type == "stackoverflow"
+    assert src.issue_id == "23460040"
+
+
+def test_extract_no_url_returns_legacy(tmp_path):
+    from gpa.eval.migrate_layout import extract_source
+    md = tmp_path / "scenario.md"
+    md.write_text("plain text with no urls\n")
+    src = extract_source(md)
+    assert src.type == "legacy"

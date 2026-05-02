@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from gpa.eval.scenario_metadata import Source
+
 
 # Known mining categories from mining_rules.yaml — used to detect taxonomy
 # segments in recent-mined folder names.
@@ -62,3 +64,28 @@ def parse_existing_folder_name(name: str) -> ParsedName:
                           bug_class_hint=None, suffix=m.group(2), kind="early-mined")
     return ParsedName(round="", category_hint=None, framework_hint=None,
                       bug_class_hint=None, suffix=name, kind="unknown")
+
+
+_RE_GH = re.compile(r"github\.com/([^/]+)/([^/]+)/(issues|pull)/(\d+)")
+_RE_SO = re.compile(r"stackoverflow\.com/questions/(\d+)")
+
+
+def extract_source(scenario_md_path: Path) -> Source:
+    text = scenario_md_path.read_text(errors="replace")
+    if (m := _RE_GH.search(text)):
+        org, repo, kind, num = m.group(1), m.group(2), m.group(3), int(m.group(4))
+        return Source(
+            type="github_issue" if kind == "issues" else "github_pull",
+            url=f"https://github.com/{org}/{repo}/{kind}/{num}",
+            repo=f"{org}/{repo}",
+            issue_id=num,
+        )
+    if (m := _RE_SO.search(text)):
+        qid = m.group(1)
+        return Source(
+            type="stackoverflow",
+            url=f"https://stackoverflow.com/questions/{qid}",
+            repo=None,
+            issue_id=qid,
+        )
+    return Source(type="legacy")
