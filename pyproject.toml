@@ -25,3 +25,8 @@ dev = [
 gpa-curate = "gpa.eval.curation.pipeline:main"
 gpa = "gpa.cli.main:main"
 gpa-eval = "gpa.eval.index_cli:main"
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::DeprecationWarning:gpa.eval.llm_agent",
+]

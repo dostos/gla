@@ -11,9 +11,6 @@ from __future__ import annotations
 
 import warnings
 
-import requests  # noqa: F401 — re-exported so external code can patch gpa.eval.llm_agent.requests
-from anthropic import Anthropic  # noqa: F401 — same reason
-
 from gpa.eval.agents.api_agent import (
     ApiAgent as EvalAgent,
     GpaToolExecutor,
