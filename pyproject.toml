@@ -24,3 +24,4 @@ dev = [
 [project.scripts]
 gpa-curate = "gpa.eval.curation.pipeline:main"
 gpa = "gpa.cli.main:main"
+gpa-eval = "gpa.eval.index_cli:main"
