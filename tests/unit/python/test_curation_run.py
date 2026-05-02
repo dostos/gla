@@ -410,12 +410,76 @@ def test_run_judge_evaluate_branches(
         assert commit_calls == []
 
 
-def test_run_judge_evaluate_friendly_error_when_harness_unconfigured(
-    tmp_path, queries_path, rules_path,
+def test_run_judge_evaluate_auto_wires_factory(
+    tmp_path, queries_path, rules_path, patch_select_seams, monkeypatch,
 ):
-    """--evaluate without a configured harness exits 2 with a clear stderr
-    message instead of running the whole pipeline only to bury the error."""
+    """--evaluate with _is_default seam auto-builds agent_fn from factory
+    (Task 27). Verify factory.build_agent_fn is called and pipeline succeeds."""
     from gpa.eval.curation import run as run_mod
+
+    factory_calls: list[str] = []
+
+    @dataclasses.dataclass
+    class _Score:
+        score: float = 0.9
+
+    @dataclasses.dataclass
+    class _EvalResult:
+        with_gla: _Score = dataclasses.field(default_factory=_Score)
+        code_only: _Score = dataclasses.field(default_factory=lambda: _Score(score=0.4))
+
+    def _fake_build_agent_fn(backend, **kwargs):
+        factory_calls.append(backend)
+        # Return an agent_fn stub. The wired run_eval calls EvalHarness.run_all
+        # which calls agent_fn; we bypass that by also stubbing run_eval after
+        # wiring. BUT: we need factory to be called so we track it here and
+        # return a simple stub.
+        def _agent(scenario, mode, tools):
+            return "[stub]", 0, 0, 0, 1, 0.0
+        return _agent
+
+    monkeypatch.setattr(
+        "gpa.eval.agents.factory.build_agent_fn",
+        _fake_build_agent_fn,
+    )
+
+    # Additional pipeline seams.
+    monkeypatch.setattr(
+        run_mod, "_fetch_fix_pr_metadata",
+        lambda thread, url: {
+            "url": "https://github.com/x/y/pull/2",
+            "commit_sha": "abc1234",
+            "files_changed": ["src/lib.rs"],
+        },
+    )
+    monkeypatch.setattr(
+        run_mod, "_validate_draft",
+        lambda draft, eval_dir: type("R", (), {"ok": True})(),
+    )
+
+    @dataclasses.dataclass
+    class _Obs:
+        verdict: str = "yes"
+
+    monkeypatch.setattr(run_mod, "classify_observed_helps", lambda wg, co: _Obs())
+    commit_calls: list = []
+    monkeypatch.setattr(run_mod, "commit_scenario", lambda **kw: commit_calls.append(kw))
+
+    # Restore run_eval to _is_default=True so main()'s wiring branch fires.
+    # The wired _factory_run_eval calls EvalHarness which we bypass by also
+    # monkeypatching run_eval on the module AFTER main() runs. But since we
+    # can't do that in a single call, we instead make the wired function work:
+    # patch EvalHarness.run_all to return a minimal result.
+    class _FakeHarness:
+        def __init__(self, config):
+            pass
+        def run_all(self, agent_fn, scenarios=None, modes=None):
+            return []
+    monkeypatch.setattr("gpa.eval.harness.EvalHarness", _FakeHarness)
+
+    # Ensure the module seam is _is_default=True before calling main().
+    original_run_eval = run_mod.run_eval
+    run_mod.run_eval = run_mod.run_eval  # no-op; keep _is_default=True
 
     rc = run_mod.main([
         "--queries", str(queries_path),
@@ -423,9 +487,13 @@ def test_run_judge_evaluate_friendly_error_when_harness_unconfigured(
         "--workdir", str(tmp_path / "wd"),
         "--evaluate",
     ])
-    assert rc == 2
-    # No run dir should have been created.
-    assert not (tmp_path / "wd" / "runs").exists()
+    # Restore original seam for isolation.
+    run_mod.run_eval = original_run_eval
+
+    assert rc == 0
+    # factory.build_agent_fn was called once (with 'api' or 'claude-cli').
+    assert len(factory_calls) == 1
+    assert factory_calls[0] in ("api", "claude-cli")
 
 
 # ---------------------------------------------------------------------------
