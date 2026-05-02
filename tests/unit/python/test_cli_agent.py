@@ -1,7 +1,7 @@
 import subprocess
 from dataclasses import dataclass
 import pytest
-from gpa.eval.agents.cli_agent import CliAgent
+from gpa.eval.agents.cli_agent import CliAgent, CLAUDE_CLI_SPEC, CODEX_CLI_SPEC
 from gpa.eval.agents.cli_spec import CliBackendSpec, CliRunMetrics
 
 
@@ -85,3 +85,16 @@ def test_pixel_first_tool_sequence_classification():
     assert result.pixel_queries == 1
     assert result.state_queries == 1
     assert result.framebuffer_first is True
+
+
+def test_claude_preset_constructible():
+    assert CLAUDE_CLI_SPEC.binary == "claude"
+    assert callable(CLAUDE_CLI_SPEC.parse_run)
+    metrics = CLAUDE_CLI_SPEC.parse_run("", "")
+    assert metrics.tool_calls == 0
+
+
+def test_codex_preset_constructible():
+    assert CODEX_CLI_SPEC.binary == "codex"
+    metrics = CODEX_CLI_SPEC.parse_run("", "")
+    assert metrics.tool_calls == 0

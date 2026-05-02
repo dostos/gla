@@ -140,3 +140,29 @@ class CliAgent(AgentBackend):
             state_queries=state_q,
             framebuffer_first=fb_first,
         )
+
+
+from gpa.eval.agents.cli_parsers import (
+    parse_claude_stream_json,
+    parse_codex_ndjson,
+)
+
+
+CLAUDE_CLI_SPEC = CliBackendSpec(
+    name="claude-cli",
+    binary="claude",
+    base_args=("-p", "--output-format", "stream-json", "--verbose"),
+    parse_run=parse_claude_stream_json,
+)
+
+CODEX_CLI_SPEC = CliBackendSpec(
+    name="codex-cli",
+    binary="codex",
+    base_args=(
+        "exec",
+        "--json",
+        "-s", "workspace-write",
+        "--skip-git-repo-check",
+    ),
+    parse_run=parse_codex_ndjson,
+)
