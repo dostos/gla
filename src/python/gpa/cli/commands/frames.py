@@ -132,24 +132,31 @@ def add_subparser(subparsers) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Subverb implementations
+# Session / client helper
 # --------------------------------------------------------------------------- #
+
+
+_INJECTED_SENTINEL = object()
 
 
 def _get_session_and_client(
     session_dir: Optional[Path],
     client: Optional[RestClient],
 ) -> tuple:
-    """Resolve session and build client. Returns (session, client) or (None, None) on error."""
+    """Resolve session and build client. Returns (session, client) or (None, None) on error.
+
+    If a client is already injected (e.g., in tests), skip session discovery.
+    """
+    if client is not None:
+        return _INJECTED_SENTINEL, client
     sess = Session.discover(explicit=session_dir)
     if sess is None:
         return None, None
-    if client is None:
-        try:
-            client = RestClient.from_session(sess)
-        except Exception as exc:  # noqa: BLE001
-            print(f"[gpa] failed to connect to engine: {exc}", file=sys.stderr)
-            return sess, None
+    try:
+        client = RestClient.from_session(sess)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[gpa] failed to connect to engine: {exc}", file=sys.stderr)
+        return sess, None
     return sess, client
 
 
