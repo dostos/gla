@@ -27,6 +27,7 @@ from gpa.cli.commands import check_config as check_config_cmd
 from gpa.cli.commands import diff_draws as diff_draws_cmd
 from gpa.cli.commands import drawcalls as drawcalls_cmd
 from gpa.cli.commands import dump as dump_cmd
+from gpa.cli.commands import pixel as pixel_cmd
 from gpa.cli.commands import env as env_cmd
 from gpa.cli.commands import explain_draw as explain_draw_cmd
 from gpa.cli.commands import frames as frames_cmd
@@ -257,6 +258,9 @@ def build_parser() -> argparse.ArgumentParser:
     # ---- drawcalls --------------------------------------------------------
     drawcalls_cmd.add_subparser(sub)
 
+    # ---- pixel ------------------------------------------------------------
+    pixel_cmd.add_subparser(sub)
+
     # ---- source -----------------------------------------------------------
     source_cmd.add_subparser(sub)
 
@@ -394,6 +398,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return frames_cmd.run(args)
     if args.cmd == "drawcalls":
         return drawcalls_cmd.run(args)
+    if args.cmd == "pixel":
+        return pixel_cmd.run(args)
     if args.cmd == "check-config":
         import sys as _sys
         print(
