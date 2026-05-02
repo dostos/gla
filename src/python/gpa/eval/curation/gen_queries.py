@@ -171,10 +171,11 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
                    help="batch_quota field written into the output yaml. "
                         "Default: 20.")
     p.add_argument("--llm-backend", default="api",
-                   choices=["api", "claude-cli"],
+                   choices=["api", "claude-cli", "codex-cli"],
                    help="LLM backend: 'api' (Anthropic SDK, needs "
-                        "ANTHROPIC_API_KEY) or 'claude-cli' (shells out to "
-                        "the `claude` CLI). Default: api.")
+                        "ANTHROPIC_API_KEY), 'claude-cli' (shells out to "
+                        "the `claude` CLI), or 'codex-cli' (shells out to "
+                        "the `codex` CLI). Default: api.")
     p.add_argument("--model", default="claude-opus-4-7",
                    help="LLM model. Default: claude-opus-4-7.")
     return p.parse_args(argv)
@@ -188,6 +189,9 @@ def _build_llm_client(backend: str, model: str) -> Any:
     if backend == "claude-cli":
         from gpa.eval.curation.llm_client import ClaudeCodeLLMClient
         return ClaudeCodeLLMClient()
+    if backend == "codex-cli":
+        from gpa.eval.curation.llm_client import CodexCliLLMClient
+        return CodexCliLLMClient()
     raise ValueError(f"unknown llm backend: {backend}")
 
 

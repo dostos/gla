@@ -194,3 +194,13 @@ def test_main_works_with_empty_scope_log(tmp_path):
     assert rc == 0
     loaded = yaml.safe_load(out.read_text())
     assert loaded["queries"]["issue"] == ["repo:foo/bar fresh"]
+
+
+# ---------- _build_llm_client ----------
+
+
+def test_build_llm_client_codex_cli():
+    from gpa.eval.curation.gen_queries import _build_llm_client
+    client = _build_llm_client("codex-cli", model="ignored")
+    from gpa.eval.curation.llm_client import CodexCliLLMClient
+    assert isinstance(client, CodexCliLLMClient)
