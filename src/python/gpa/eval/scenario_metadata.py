@@ -20,6 +20,12 @@ VALID_SOURCE_TYPES = frozenset({
 # Loaded from mining_rules.yaml at runtime; see _load_taxonomy_lists().
 _TAXONOMY_CACHE: Optional[tuple[frozenset[str], frozenset[str]]] = None
 
+# Differs intentionally from scenario.py:_VALID_BUG_CLASSES: "legacy" is
+# dropped here because it is a provenance status recorded in source.type,
+# not a bug classification. "synthetic" is added for hand-authored scenarios
+# where bug_class doesn't apply, and "unknown" for scenarios whose
+# bug_class hasn't yet been resolved. See spec
+# 2026-05-02-eval-scenario-taxonomy-layout-design.md § Non-Goals.
 VALID_BUG_CLASSES = frozenset({
     "framework-internal", "consumer-misuse", "user-config",
     "synthetic", "unknown",
