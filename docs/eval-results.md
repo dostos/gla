@@ -184,7 +184,7 @@ Per-scenario (code_only | with_gpa):
 
 4. **r15 shows OpenGPA's scope boundary.** The bug is in Godot's Metal
    backend (macOS/Metal only). OpenGPA cannot capture it — the repro in
-   `tests/eval/r15_.../main.c` just submits a black frame as a stub.
+   `tests/eval/native-engine/godot/godot_114069_godot_mobile_renderer_macos_transparent_flicker/main.c` just submits a black frame as a stub.
    Nevertheless all four r15 agents (both modes) correctly identified the
    Metal dynamic-UBO path as the culprit, each pointing at a different
    but plausible offending symbol (`command_pipeline_barrier`,

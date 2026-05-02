@@ -47,7 +47,7 @@ PYTHONPATH="src/python:bazel-bin/src/bindings" $PY311 -m gpa.launcher \
 # 4. Capture a scenario
 LD_PRELOAD=bazel-bin/src/shims/gl/libgpa_gl.so \
     GPA_SOCKET_PATH=/tmp/gpa.sock GPA_SHM_NAME=/gpa \
-    bazel-bin/tests/eval/SCENARIO_NAME
+    bazel-bin/tests/eval/synthetic/state-leak/e1_state_leak/e1_state_leak
 
 # 5. Query
 curl -H "Authorization: Bearer TOKEN" localhost:18080/api/v1/frames/current/overview

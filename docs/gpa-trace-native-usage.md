@@ -27,14 +27,14 @@ bazel build //src/shims/gl:gpa_gl
 # strips by default). `--compilation_mode=dbg` also works but is
 # heavier; `--strip=never` is sufficient and is the recommended
 # invocation for running native trace against eval targets.
-bazel build --strip=never //tests/eval/e5_uniform_collision
+bazel build --strip=never //tests/eval/synthetic/uniform/e5_uniform_collision
 
 # Run with native trace enabled.
 GPA_TRACE_NATIVE=1 \
   LD_PRELOAD=bazel-bin/src/shims/gl/libgpa_gl.so \
   GPA_SOCKET_PATH=/tmp/gpa.sock GPA_SHM_NAME=/gpa \
   GPA_TOKEN=TOKEN \
-  bazel-bin/tests/eval/e5_uniform_collision
+  bazel-bin/tests/eval/synthetic/uniform/e5_uniform_collision/e5_uniform_collision
 
 # Query — same CLI surface as the browser path. `bin/gpa` autodetects the
 # bazel-built Python 3.11 + _gpa_core.so; no manual PYTHONPATH/GPA_PYTHON
@@ -79,6 +79,6 @@ At shim init you'll see a stderr line such as:
 ```bash
 # Expect: a hash entry pointing at g_public_double whenever the app
 # calls glUniform*(..., 100.0).
-GPA_TRACE_NATIVE=1 gpa run -- bazel-bin/tests/eval/e5_uniform_collision
+GPA_TRACE_NATIVE=1 gpa run -- bazel-bin/tests/eval/synthetic/uniform/e5_uniform_collision/e5_uniform_collision
 gpa trace value 100.0 --origin dwarf-globals
 ```

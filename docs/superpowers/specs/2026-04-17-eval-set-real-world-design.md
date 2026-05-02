@@ -1,5 +1,7 @@
 # OpenGPA Real-World Evaluation Set — Design Specification
 
+> **Note (2026-05-02):** The folder-layout aspects of this spec are superseded by `docs/superpowers/specs/2026-05-02-eval-scenario-taxonomy-layout-design.md`. The mining/curation pipeline design here remains current.
+
 ## 1. Overview
 
 This document specifies an expansion of OpenGPA's evaluation set. The existing eval suite (`tests/eval/e1_state_leak.{c,md}` … `e10_compensating_vp.{c,md}`) is a hand-authored synthetic adversarial collection. It is small (10 scenarios), hand-invented (not grounded in reported bugs), and exercises only the minimal-OpenGL-C repro form.

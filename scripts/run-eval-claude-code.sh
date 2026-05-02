@@ -19,7 +19,7 @@ echo "1. Open Claude Code in this repo"
 echo "2. The .mcp.json config auto-loads OpenGPA tools"
 echo "3. Ask Claude Code to debug each scenario:"
 echo ""
-echo '   "Debug the rendering bug in tests/eval/e1_state_leak.c'
+echo '   "Debug the rendering bug in tests/eval/synthetic/state-leak/e1_state_leak/main.c'
 echo '    using the OpenGPA tools. The app should show two differently'
 echo '    colored quads but both appear the same color."'
 echo ""
