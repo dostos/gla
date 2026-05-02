@@ -33,8 +33,10 @@ each invent their own path conventions.
 1. Re-classifying or re-curating existing scenarios. Migration uses whatever
    taxonomy the existing folder name or scenario text already implies.
 2. Adding new mining sources or rewriting `mining_rules.yaml`.
-3. Defining a new bug_class taxonomy. The existing values
-   (`framework-internal | consumer-misuse | user-config`) carry over unchanged.
+3. Defining a new bug_class taxonomy. The existing mining values
+   (`framework-internal | consumer-misuse | user-config`) carry over unchanged;
+   `synthetic` and `unknown` are added only as terminal states for
+   scenarios that bug_class doesn't apply to.
 4. Reproducing scenarios that have only `scenario.md` (no `.c`).
 
 ## Folder Layout
@@ -148,6 +150,13 @@ status: drafted                             # triaged | drafted | running | pass
 tags: []
 notes: ""
 ```
+
+**Status invariant**: `status` describes the eval-pipeline lifecycle of the
+scenario; `backend.status` describes whether the bug has been reproduced as
+a runnable shim. The two are independent — a scenario can be `status:
+passing` (eval works against the markdown description) while
+`backend.status: not-yet-reproduced` (no `.c` repro yet). The validator
+checks the enums but does not enforce a relation between them.
 
 **Required**: `schema_version, slug, round, source.type, taxonomy.category,
 taxonomy.framework, status`.
@@ -336,12 +345,29 @@ codegen helpers (in `scenario_metadata.py`).
 2. Add `migrate_layout.py` and dry-run report.
 3. Operator reviews `migration_review.csv`, edits
    `migration_overrides.yaml`.
-4. Run `migrate_layout.py --apply` (commits the moves only).
-5. Add `scenario.yaml` + per-leaf `BUILD.bazel` files (one commit).
+4. Run `migrate_layout.py --apply` (commits the moves only — no content
+   edits, so `git log --follow` survives). Between this commit and step 5
+   the validator is intentionally lax: it walks the new tree but skips the
+   `scenario.yaml` requirement, gated by an internal flag the next commit
+   removes.
+5. Add `scenario.yaml` + per-leaf `BUILD.bazel` files (one commit). Flip
+   the validator flag back so the strict schema check applies from this
+   commit forward.
 6. Rewrite `tests/eval/BUILD.bazel` and `tests/eval/README.md`.
 7. Update each consumer file/script in its own commit.
 8. Update `gpa.eval.curation.draft` to emit to the new layout.
 9. CI gate: `bazel test //tests/...` and `pytest tests/unit/python/`.
+
+**Auxiliary file locations**:
+- `migration_overrides.yaml` lives at `src/python/gpa/eval/migration_overrides.yaml`
+  (committed; small, hand-edited).
+- `migration_review.csv` is generated to `/tmp/` by default and not committed.
+
+**Conflict-suffix policy**: when two scenarios produce the same slug, the
+appended `_02`, `_03`, ... becomes part of the canonical permanent slug
+(stable across re-migrations) — not a temporary alias. The migration script
+records the canonical mapping in the report so subsequent re-runs are
+deterministic.
 
 ## Open Questions
 
