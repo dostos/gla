@@ -264,7 +264,7 @@ def test_frames_falls_back_to_latest_when_no_list_route(
 ):
     monkeypatch.setenv("GPA_SESSION", str(session_dir))
     buf = io.StringIO()
-    rc = frames_cmd.run(client=injected_rest, print_stream=buf)
+    rc = frames_cmd.run_list(client=injected_rest, print_stream=buf, text_output=True, json_output=False)
     assert rc == 0
     # The app has no ``/api/v1/frames`` list route so we fall back to current.
     out = buf.getvalue().strip()

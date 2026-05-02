@@ -251,23 +251,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help=argparse.SUPPRESS)
 
     # ---- frames -----------------------------------------------------------
-    p_frames = sub.add_parser(
-        "frames",
-        help="List captured frame ids",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=(
-            "Examples:\n"
-            "  gpa frames                                      # 1) one id per line\n"
-            "  gpa frames --json                               # 2) JSON {\"frames\":[…]}\n"
-            "  gpa frames | wc -l                              # 3) count captured frames\n"
-            "  gpa frames | tail -1 | xargs -I% gpa report --frame %  # 4) latest\n"
-        ),
-    )
-    _add_session_arg(p_frames)
-    p_frames.add_argument(
-        "--json", dest="json_output", action="store_true",
-        help="Emit JSON ({\"frames\":[…]}) instead of one id per line",
-    )
+    frames_cmd.add_subparser(sub)
 
     # ---- source -----------------------------------------------------------
     source_cmd.add_subparser(sub)
@@ -403,11 +387,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             fmt=args.fmt,
         )
     if args.cmd == "frames":
-        return frames_cmd.run(
-            session_dir=args.session,
-            json_output=args.json_output,
-        )
+        return frames_cmd.run(args)
     if args.cmd == "check-config":
+        import sys as _sys
+        print(
+            "warning: 'gpa check-config' is deprecated; use 'gpa frames check-config'",
+            file=_sys.stderr,
+        )
         return check_config_cmd.run(
             session_dir=args.session,
             frame=args.frame,
