@@ -84,14 +84,18 @@ _MINING_RULES_PATH = Path(__file__).parent / "curation" / "mining_rules.yaml"
 
 
 def _load_taxonomy_lists() -> tuple[frozenset[str], frozenset[str]]:
-    """Read mining_rules.yaml; return (categories, frameworks) closed lists."""
+    """Read mining_rules.yaml; return (categories, frameworks) closed lists.
+
+    The "synthetic" sentinel is pre-seeded into both sets so that hand-authored
+    scenarios pass validation without appearing in mining_rules.yaml.
+    """
     global _TAXONOMY_CACHE
     if _TAXONOMY_CACHE is not None:
         return _TAXONOMY_CACHE
     with open(_MINING_RULES_PATH) as f:
         data = yaml.safe_load(f)
-    cats: set[str] = set()
-    fws: set[str] = {"synthetic"}  # synthetic is a sentinel framework
+    cats: set[str] = {"synthetic"}  # synthetic is a sentinel category
+    fws: set[str] = {"synthetic"}   # synthetic is a sentinel framework
     for repo_map in (data.get("taxonomy", {}).get("framework_repos", {}),
                      data.get("taxonomy", {}).get("tag_frameworks", {})):
         for cat_fw in repo_map.values():
@@ -108,8 +112,8 @@ def validate_scenario(s: Scenario) -> list[str]:
     if s.source.type not in VALID_SOURCE_TYPES:
         errors.append(f"source.type={s.source.type!r} not in {sorted(VALID_SOURCE_TYPES)}")
     cats, fws = _load_taxonomy_lists()
-    if s.taxonomy.category not in cats and s.taxonomy.category != "synthetic":
-        errors.append(f"taxonomy.category={s.taxonomy.category!r} not in {sorted(cats | {'synthetic'})}")
+    if s.taxonomy.category not in cats:
+        errors.append(f"taxonomy.category={s.taxonomy.category!r} not in {sorted(cats)}")
     if s.taxonomy.framework not in fws:
         errors.append(f"taxonomy.framework={s.taxonomy.framework!r} not in {sorted(fws)}")
     if s.taxonomy.bug_class not in VALID_BUG_CLASSES:
