@@ -601,6 +601,21 @@ def test_parse_recent_mined_web_map():
 def test_parse_unknown_falls_back_to_legacy():
     p = parse_existing_folder_name("something_bizarre_with_no_prefix")
     assert p.kind == "unknown"
+
+
+def test_parse_r9_is_early_mined_not_recent():
+    # r9_<x> shouldn't match the recent-mined hex regex (which requires {6,8} hex chars).
+    p = parse_existing_folder_name("r9_blend_modes_not_working")
+    assert p.kind == "early-mined"
+    assert p.round == "r9"
+
+
+def test_parse_synthetic_topic_buckets_misc_safely():
+    # 'depth' as a non-prefix substring shouldn't accidentally bucket as depth/.
+    from gpa.eval.migrate_layout import synthetic_topic
+    # only true if the rule splits on '_'; misc bucket otherwise.
+    assert synthetic_topic("compensating_vp") == "misc"
+    assert synthetic_topic("scissor_not_reset") == "misc"
 ```
 
 - [ ] **Step 5.2: Run, confirm fails**
@@ -1301,7 +1316,8 @@ def test_apply_plan_moves_files_and_writes_yaml(tmp_path, monkeypatch):
     (tmp_path / "e1_state_leak" / "main.c").write_text("int main(){}")
     ctx = ResolveContext(rules={}, overrides={})
     plan = build_plan(tmp_path, ctx)
-    apply_plan(plan, tmp_path, use_git=False, write_build_files=True)
+    apply_plan(plan, tmp_path, use_git=False,
+               write_yaml=True, write_build_files=True)
     new_dir = tmp_path / "synthetic" / "state-leak" / "e1_state_leak"
     assert (new_dir / "scenario.md").exists()
     assert (new_dir / "scenario.yaml").exists()
@@ -1313,6 +1329,22 @@ def test_apply_plan_moves_files_and_writes_yaml(tmp_path, monkeypatch):
     assert 'name = "e1_state_leak"' in build_text
 
 
+def test_apply_plan_no_yaml_no_build_move_only(tmp_path):
+    """The move-only commit per spec rollout: no yaml, no BUILD."""
+    from gpa.eval.migrate_layout import build_plan, apply_plan, ResolveContext
+    (tmp_path / "e1_state_leak").mkdir()
+    (tmp_path / "e1_state_leak" / "scenario.md").write_text("# x")
+    (tmp_path / "e1_state_leak" / "main.c").write_text("int main(){}")
+    ctx = ResolveContext(rules={}, overrides={})
+    plan = build_plan(tmp_path, ctx)
+    apply_plan(plan, tmp_path, use_git=False,
+               write_yaml=False, write_build_files=False)
+    new_dir = tmp_path / "synthetic" / "state-leak" / "e1_state_leak"
+    assert (new_dir / "scenario.md").exists()
+    assert not (new_dir / "scenario.yaml").exists()
+    assert not (new_dir / "BUILD.bazel").exists()
+
+
 def test_apply_plan_no_build_for_md_only(tmp_path):
     from gpa.eval.migrate_layout import build_plan, apply_plan, ResolveContext
     (tmp_path / "r96fdc7_framework-maintenance_native-engine_godot_x").mkdir()
@@ -1321,7 +1353,8 @@ def test_apply_plan_no_build_for_md_only(tmp_path):
     )
     ctx = ResolveContext(rules={"godotengine/godot": ("native-engine", "godot")}, overrides={})
     plan = build_plan(tmp_path, ctx)
-    apply_plan(plan, tmp_path, use_git=False, write_build_files=True)
+    apply_plan(plan, tmp_path, use_git=False,
+               write_yaml=True, write_build_files=True)
     new_dir = tmp_path / "native-engine" / "godot" / "godot_1_x"
     assert (new_dir / "scenario.md").exists()
     assert (new_dir / "scenario.yaml").exists()
@@ -1367,12 +1400,17 @@ def apply_plan(
     plan: MigrationPlan,
     root: Path,
     use_git: bool = True,
+    write_yaml: bool = True,
     write_build_files: bool = True,
 ) -> None:
-    """Move each scenario to its new location and write scenario.yaml.
+    """Move each scenario to its new location.
 
     With use_git=True, runs `git mv` (preserves history). Otherwise uses
-    shutil.move (used in tests).
+    shutil.move (used in tests). write_yaml and write_build_files
+    independently control whether scenario.yaml and BUILD.bazel are
+    generated alongside the moves; the spec rolls these out in separate
+    commits, so the move-only commit uses write_yaml=False
+    write_build_files=False.
     """
     for entry in plan.entries:
         new_path = root / entry.new_relative
@@ -1384,8 +1422,8 @@ def apply_plan(
             )
         else:
             shutil.move(str(entry.old_path), str(new_path))
-        # Write yaml + optional BUILD.bazel.
-        dump_scenario_yaml(entry.scenario, new_path / "scenario.yaml")
+        if write_yaml:
+            dump_scenario_yaml(entry.scenario, new_path / "scenario.yaml")
         if write_build_files and any(new_path.glob("*.c")):
             (new_path / "BUILD.bazel").write_text(
                 _BUILD_BAZEL_TEMPLATE.format(name=entry.scenario.slug)
@@ -1412,6 +1450,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     p.add_argument("--review-csv", type=Path, default=Path("/tmp/migration_review.csv"))
     p.add_argument("--apply", action="store_true",
                    help="Actually move files. Default is dry-run.")
+    p.add_argument("--no-yaml", action="store_true",
+                   help="Skip scenario.yaml writes (move-only commit per spec rollout)")
     p.add_argument("--no-build-files", action="store_true",
                    help="Skip BUILD.bazel codegen (useful when staging in two commits)")
     args = p.parse_args(argv)
@@ -1428,6 +1468,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     if args.apply:
         apply_plan(plan, args.root, use_git=True,
+                   write_yaml=not args.no_yaml,
                    write_build_files=not args.no_build_files)
         print("Applied.")
     else:
@@ -1444,9 +1485,9 @@ if __name__ == "__main__":
 
 - [ ] **Step 10.4: Create empty overrides yaml**
 
-```bash
-echo "{}" > src/python/gpa/eval/migration_overrides.yaml
-```
+Create `src/python/gpa/eval/migration_overrides.yaml` containing a
+single line: `{}` (empty mapping). Use the Write tool, not `echo >`,
+per project guidelines.
 
 - [ ] **Step 10.5: Run tests**
 
@@ -1469,6 +1510,17 @@ git commit -m "feat(eval): migrate_layout: apply step + CLI"
 - Modify: `src/python/gpa/eval/migration_overrides.yaml`
 
 This is the operator step. No code change beyond the overrides file.
+
+- [ ] **Step 11.0: Pre-flight — list any top-level eval dir without `scenario.md`**
+
+```bash
+find tests/eval -maxdepth 1 -mindepth 1 -type d \
+    -exec sh -c '[ -f "$1/scenario.md" ] || echo "MISSING_MD: $1"' _ {} \;
+```
+Expected: no output. If any dirs are listed, the operator decides
+whether to delete or annotate them before proceeding — `build_plan`
+silently skips them, so they would be left orphaned in the new tree
+otherwise.
 
 - [ ] **Step 11.1: Run dry-run, capture output**
 
@@ -1519,12 +1571,14 @@ git commit -m "chore(eval): author migration_overrides for unresolved legacy sce
 
 ---
 
-## Task 12: Apply migration — moves only (one commit)
+## Task 12: Apply migration — moves only (one commit, no content edits)
 
 **Files:**
 - All `tests/eval/*/` (moved)
 
-Per the spec, the move commit is `git mv`-only, no content edits. Run with `--no-build-files` so `BUILD.bazel`s are generated in the next commit.
+Per the spec rollout step 4, this commit is `git mv`-only — no
+`scenario.yaml` or `BUILD.bazel` is written here. They land in Task 13.
+Run with `--no-yaml --no-build-files`.
 
 - [ ] **Step 12.1: Confirm clean tree**
 
@@ -1533,20 +1587,21 @@ git status --short
 ```
 Expected: only the spec/plan/overrides/migration_layout.py changes from earlier commits, no other dirty files.
 
-- [ ] **Step 12.2: Apply moves (also writes scenario.yaml, but no BUILD.bazel)**
+- [ ] **Step 12.2: Apply moves only (no yaml, no BUILD.bazel)**
 
 ```bash
-PYTHONPATH=src/python python3 -m gpa.eval.migrate_layout --root tests/eval --apply --no-build-files
+PYTHONPATH=src/python python3 -m gpa.eval.migrate_layout \
+    --root tests/eval --apply --no-yaml --no-build-files
 ```
 
 - [ ] **Step 12.3: Verify counts and structure**
 
 ```bash
 find tests/eval -name scenario.md | wc -l           # must equal pre_migration_count
-find tests/eval -name scenario.yaml | wc -l         # same
+find tests/eval -name scenario.yaml | wc -l         # zero — yaml comes in Task 13
 ls tests/eval/                                       # should show category dirs
 ```
-Expected: counts match, top-level only contains `BUILD.bazel`, `README.md`, `synthetic/`, `native-engine/`, `web-3d/`, `web-2d/`, `web-map/`, `scientific/`, possibly `_legacy/`.
+Expected: scenario.md count matches pre-migration; scenario.yaml count is 0; top-level only contains `BUILD.bazel`, `README.md`, `synthetic/`, `native-engine/`, `web-3d/`, `web-2d/`, `web-map/`, `scientific/`, possibly `_legacy/`.
 
 - [ ] **Step 12.4: Verify `git log --follow` works on a sample**
 
@@ -1555,69 +1610,104 @@ git log --follow tests/eval/synthetic/state-leak/e1_state_leak/scenario.md | hea
 ```
 Expected: history extends back through the `git mv` to the original `tests/eval/e1_state_leak/scenario.md`.
 
-- [ ] **Step 12.5: Run schema validation**
-
-```bash
-PYTHONPATH=src/python python3 -c "
-from pathlib import Path
-from gpa.eval.scenario_metadata import validate_all
-errors = validate_all(Path('tests/eval'))
-for e in errors:
-    print(e)
-print(f'Total errors: {len(errors)}')
-"
-```
-Expected: 0 errors.
-
-- [ ] **Step 12.6: Commit**
+- [ ] **Step 12.5: Commit**
 
 ```bash
 git add -A tests/eval
-git commit -m "refactor(eval): migrate scenarios into taxonomy tree
+git commit -m "refactor(eval): move scenarios into taxonomy tree (rename only)
 
-Move all 198 scenarios from flat layout to <category>/<framework>/<slug>/
-(synthetic/<topic>/<slug>/ for handcrafted). Adds scenario.yaml sidecar
-with round/source/taxonomy/backend metadata. Per-leaf BUILD.bazel files
-land in the next commit.
+git mv-only commit per spec rollout step 4. All 198 scenarios moved from
+flat layout to <category>/<framework>/<slug>/ (synthetic/<topic>/<slug>/
+for handcrafted). scenario.yaml and per-leaf BUILD.bazel land in the
+next commit.
 
 See docs/superpowers/specs/2026-05-02-eval-scenario-taxonomy-layout-design.md."
 ```
 
 ---
 
-## Task 13: Add per-leaf BUILD.bazel + rewrite top-level BUILD.bazel + README.md
+## Task 13: Add scenario.yaml + per-leaf BUILD.bazel + rewrite top-level BUILD.bazel + README.md
 
 **Files:**
+- Create: `tests/eval/<every-leaf>/scenario.yaml` (codegen)
+- Create: `tests/eval/<every-leaf-with-c-files>/BUILD.bazel` (codegen)
 - Modify: `tests/eval/BUILD.bazel`
 - Modify: `tests/eval/README.md`
-- Create: `tests/eval/<every-leaf-with-c-files>/BUILD.bazel` (codegen)
 
-- [ ] **Step 13.1: Run migrate_layout in `--build-files-only` mode**
+This commit lands the metadata + Bazel files together. The migration
+plan was already computed in Task 11; we re-run the planner (idempotent)
+and let `apply_plan` write yaml/BUILD without moving anything (since
+files are already at their new locations).
 
-Add a small wrapper to do this without re-moving:
+- [ ] **Step 13.1: Re-run planner to re-derive scenarios at the new tree**
+
+The post-Task-12 tree is the new layout, so `build_plan` walking it
+sees scenarios that are already where they belong. Skip moves and just
+emit yaml + BUILD via a one-shot script:
 
 ```bash
-PYTHONPATH=src/python python3 -c "
+PYTHONPATH=src/python python3 - <<'PY'
 from pathlib import Path
-from gpa.eval.scenario_metadata import iter_scenarios
-TEMPLATE = '''load(\"@rules_cc//cc:defs.bzl\", \"cc_binary\")
+from gpa.eval.scenario_metadata import (
+    Scenario, Source, Taxonomy, Backend, dump_scenario_yaml,
+)
+from gpa.eval.migrate_layout import (
+    extract_source, parse_existing_folder_name, resolve_taxonomy,
+    load_resolve_context,
+)
+from datetime import date
+
+root = Path("tests/eval")
+ctx = load_resolve_context(
+    Path("src/python/gpa/eval/curation/mining_rules.yaml"),
+    Path("src/python/gpa/eval/migration_overrides.yaml"),
+)
+TEMPLATE = '''load("@rules_cc//cc:defs.bzl", "cc_binary")
 
 cc_binary(
-    name = \"{name}\",
-    srcs = glob([\"*.c\"]),
-    copts = [\"-g\", \"-gdwarf-4\", \"-fno-omit-frame-pointer\", \"-O0\"],
-    linkopts = [\"-lGL\", \"-lX11\", \"-lm\"],
-    visibility = [\"//visibility:public\"],
+    name = "{name}",
+    srcs = glob(["*.c"]),
+    copts = ["-g", "-gdwarf-4", "-fno-omit-frame-pointer", "-O0"],
+    linkopts = ["-lGL", "-lX11", "-lm"],
+    visibility = ["//visibility:public"],
 )
 '''
-root = Path('tests/eval')
-n = 0
-for s in iter_scenarios(root):
-    if any(s.path.glob('*.c')):
-        (s.path / 'BUILD.bazel').write_text(TEMPLATE.format(name=s.slug))
-        n += 1
-print(f'Wrote {n} BUILD.bazel files')
-"
+n_yaml = 0
+n_build = 0
+today = date.today().isoformat()
+for md in sorted(root.rglob("scenario.md")):
+    leaf = md.parent
+    # Reconstruct scenario metadata from leaf path + scenario.md content.
+    # Parts of the new path encode taxonomy: <root>/<cat>/<fw>/<slug>/
+    rel = leaf.relative_to(root)
+    parts = rel.parts
+    if parts[0] == "synthetic":
+        cat, fw = "synthetic", "synthetic"
+    elif parts[0] == "_legacy":
+        cat, fw = "synthetic", "synthetic"  # placeholder, validator allows
+    else:
+        cat, fw = parts[0], parts[1]
+    parsed = parse_existing_folder_name(leaf.name)
+    source = extract_source(md)
+    if parsed.kind == "synthetic":
+        source = Source(type="synthetic")
+    _, _, bc = resolve_taxonomy(parsed, source, ctx, original_name=leaf.name)
+    if cat == "synthetic":
+        bc = "synthetic"
+    s = Scenario(
+        path=leaf, slug=leaf.name, round=parsed.round, mined_at=today,
+        source=source,
+        taxonomy=Taxonomy(category=cat, framework=fw, bug_class=bc),
+        backend=Backend(),
+        status="drafted",
+    )
+    dump_scenario_yaml(s, leaf / "scenario.yaml")
+    n_yaml += 1
+    if any(leaf.glob("*.c")):
+        (leaf / "BUILD.bazel").write_text(TEMPLATE.format(name=leaf.name))
+        n_build += 1
+print(f"Wrote {n_yaml} scenario.yaml + {n_build} BUILD.bazel")
+PY
 ```
 
 - [ ] **Step 13.2: Replace top-level `tests/eval/BUILD.bazel`**
@@ -1648,29 +1738,108 @@ Expected: BUILD SUCCESSFUL, with one cc_binary built per `.c`-bearing leaf.
 
 - [ ] **Step 13.4: Rewrite `tests/eval/README.md`**
 
-Replace contents with the new layout description (see spec section "Folder Layout" for source material). Include:
-- The directory tree at a glance.
-- Slug rules table.
-- `scenario.yaml` schema summary with link to spec.
-- How to add a new scenario.
-- How to query the index.
+Use this skeleton (fill in concrete counts from `gpa-eval index --by taxonomy`):
 
-- [ ] **Step 13.5: Run pytest validator end-to-end**
+```markdown
+# Eval Scenarios
+
+Adversarial rendering bug scenarios for OpenGPA's eval harness.
+Organized by taxonomy: `<category>/<framework>/<slug>/` for mined
+real-world bugs, `synthetic/<topic>/<slug>/` for hand-authored ones.
+See `docs/superpowers/specs/2026-05-02-eval-scenario-taxonomy-layout-design.md`
+for the full design.
+
+## Layout
+
+    tests/eval/
+    ├── synthetic/                  # hand-authored, e1..e33
+    │   ├── state-leak/
+    │   ├── uniform/
+    │   ├── depth/
+    │   ├── culling/
+    │   ├── stencil/
+    │   ├── nan/
+    │   └── misc/
+    ├── native-engine/              # mined: godot, bevy, ...
+    ├── web-3d/                     # mined: three.js, babylon.js, ...
+    ├── web-2d/                     # mined: pixijs, konva
+    ├── web-map/                    # mined: mapbox-gl-js, deck.gl, cesium, ...
+    ├── scientific/                 # mined: vtk-js, gltf-sample-viewer
+    └── _legacy/                    # source URL not recoverable
+
+## Per-Scenario Files
+
+| File | Required | Description |
+|------|----------|-------------|
+| `scenario.md` | yes | Prose: user report, expected vs actual, ground truth, difficulty rating. No hint comments. |
+| `scenario.yaml` | yes | Machine-readable metadata (round, source URL, taxonomy, backend, status). See spec for schema. |
+| `*.c` / `main.c` | no | Buggy GL/Vulkan C app, when a runnable repro has been built. |
+| `BUILD.bazel` | only when *.c | Single `cc_binary(name=<leaf-slug>, ...)`. |
+
+## Slug Rules
+
+| Source | Slug form |
+|--------|-----------|
+| GitHub issue | `<repo>_<issue-num>_<slug>` |
+| GitHub PR | `<repo>_pull_<num>_<slug>` |
+| StackOverflow | `so_<question-id>_<slug>` |
+| Synthetic | `e{N}_<slug>` |
+| Legacy fallback | `legacy_r{N}_<slug>` (under `_legacy/`) |
+
+`<repo>` is the basename, normalized to lowercase + alphanum (`three.js`
+→ `threejs`, `mapbox-gl-js` → `mapbox_gl_js`).
+
+## Adding a Scenario
+
+For mined scenarios, the curation pipeline (`gpa.eval.curation.run`)
+emits into the new layout automatically — no manual placement needed.
+
+For synthetic scenarios:
+1. Pick a topic bucket (or add one in `migrate_layout.py:_SYNTHETIC_BUCKETS`).
+2. Create `tests/eval/synthetic/<topic>/e{N}_<slug>/`.
+3. Write `scenario.md` (no hint comments) and a corresponding
+   `scenario.yaml` with `source.type: synthetic`.
+4. Add `main.c` if the bug needs a runnable repro.
+5. `bazel build //tests/eval/synthetic/<topic>/e{N}_<slug>` should succeed
+   when a `.c` file is present.
+
+## Querying the Index
+
+    gpa-eval index --by taxonomy        # category × framework counts
+    gpa-eval index --by backend         # api × status counts
+
+## See Also
+
+- `src/python/gpa/eval/scenario_metadata.py` — schema + validator
+- `src/python/gpa/eval/migrate_layout.py` — migration tool
+- `docs/superpowers/specs/2026-05-02-eval-scenario-taxonomy-layout-design.md` — design
+```
+
+- [ ] **Step 13.5: Run validator end-to-end against the live tree**
 
 ```bash
 PYTHONPATH=src/python python3 -m pytest tests/unit/python/test_scenario_metadata.py -v
+PYTHONPATH=src/python python3 -c "
+from pathlib import Path
+from gpa.eval.scenario_metadata import validate_all
+errs = validate_all(Path('tests/eval'))
+print(f'errors: {len(errs)}')
+for e in errs[:10]: print(' ', e)
+"
 ```
-Expected: all PASS.
+Expected: all unit tests PASS; `errors: 0` against the live tree.
 
 - [ ] **Step 13.6: Commit**
 
 ```bash
 git add tests/eval
-git commit -m "build(eval): per-leaf BUILD.bazel + new top-level README
+git commit -m "build(eval): scenario.yaml + per-leaf BUILD.bazel + new README
 
-Generates one cc_binary per scenario leaf (only when *.c files exist),
-rewrites tests/eval/BUILD.bazel as documentation only, rewrites
-tests/eval/README.md for the new layout."
+Adds scenario.yaml metadata sidecar to every leaf (198 files), generates
+one cc_binary per scenario leaf that has *.c files, rewrites
+tests/eval/BUILD.bazel as documentation only, rewrites
+tests/eval/README.md for the new layout. Per spec rollout step 5;
+validator now applies the strict schema check from this commit forward."
 ```
 
 ---
@@ -1692,7 +1861,7 @@ Each change is a one-line path rewrite. The new paths:
 | `tests/eval/e1_state_leak.c` | `tests/eval/synthetic/state-leak/e1_state_leak/main.c` |
 | `bazel-bin/tests/eval/e5_uniform_collision` | `bazel-bin/tests/eval/synthetic/uniform/e5_uniform_collision/e5_uniform_collision` |
 | `tests/eval/r15_*` (in eval-results.md) | check actual new path via `git log --follow` and update |
-| `tests/eval/r37_joint_offset_smplx/` | `tests/eval/synthetic/misc/legacy_r37_joint_offset_smplx/` *(or whatever migrate_layout produced — confirm before rewriting)* |
+| `tests/eval/r37_joint_offset_smplx/` | `tests/eval/_legacy/legacy_r37_joint_offset_smplx/` (no recoverable issue URL → falls into `_legacy/` per the migration plan; confirm via `git log --follow` after Task 12 completes) |
 
 - [ ] **Step 14.1: Find every old path reference**
 
@@ -1744,17 +1913,27 @@ git commit -m "docs(eval): rewrite scenario path references for new taxonomy lay
 ## Task 15: Update mining pipeline to emit new layout
 
 **Files:**
+- Modify: `src/python/gpa/eval/curation/commit.py` (the actual write site — line 48 builds `scenario_dir = eval_dir / scenario_id`)
 - Modify: `src/python/gpa/eval/curation/draft.py`
 - Modify: `src/python/gpa/eval/curation/run.py`
 - Modify: `src/python/gpa/eval/curation/journey.py`
 - Test: `tests/unit/python/test_curation_draft_layout.py`
 
-The `draft.DraftLib` is what actually writes new mined scenarios to disk. After migration, it must write to `<category>/<framework>/<slug>/` instead of `tests/eval/<r{round}_...>/`.
+The actual on-disk write happens in `commit.py:commit_scenario`
+(line 48: `scenario_dir = eval_dir / scenario_id`) — this is the line
+that must be replaced. `draft.py` produces the `DraftResult` (files +
+scenario_id); `run.py` calls `commit_scenario(...)`. To emit into the
+new layout, `commit_scenario` needs `(category, framework)` threaded in
+from triage results (already available at the call site in `run.py`),
+and uses `compute_scenario_dir`.
 
-- [ ] **Step 15.1: Read current draft.py to find where it writes**
+- [ ] **Step 15.1: Read current write sites**
 
 ```bash
-grep -n "scenario_id\|scenario_dir\|write\|files\[" src/python/gpa/eval/curation/draft.py | head -20
+grep -n "scenario_id\|scenario_dir\|write\|files\[" \
+    src/python/gpa/eval/curation/commit.py \
+    src/python/gpa/eval/curation/draft.py \
+    src/python/gpa/eval/curation/run.py | head -30
 ```
 
 - [ ] **Step 15.2: Write failing test for the new path computation**
@@ -1815,21 +1994,51 @@ def compute_scenario_dir(
     return eval_root / category / framework / slug
 ```
 
-- [ ] **Step 15.5: Update `DraftLib` and call sites to use `compute_scenario_dir`**
+- [ ] **Step 15.5: Update `commit.py:commit_scenario` to take `(category, framework)`**
 
-Find every `tests/eval/<scenario_id>/` construction and replace with `compute_scenario_dir(...)`. The triage step already produces `(category, framework)` tuples (see `src/python/gpa/eval/curation/rules.py:infer_taxonomy`); pipe that through to `draft`.
+Replace `scenario_dir = eval_dir / scenario_id` (line 48) with
+`scenario_dir = compute_scenario_dir(eval_dir, category, framework, scenario_id)`.
+Add `category: str, framework: str` parameters to `commit_scenario`.
+Also write `scenario.yaml` next to the scenario files (use
+`dump_scenario_yaml` from `gpa.eval.scenario_metadata`); the slug is
+the existing `scenario_id`.
 
-- [ ] **Step 15.6: Run tests**
+The `_append_to_build_bazel` helper at `commit.py:9` becomes obsolete
+(per-leaf BUILD.bazel files now own the targets). Replace its body
+with per-leaf `BUILD.bazel` write when `*.c` files were committed.
+
+- [ ] **Step 15.6: Update `run.py` callers of `commit_scenario`**
+
+The existing call site in `run.py` (around the `commit_scenario(...)`
+invocation — find via `grep -n commit_scenario src/python/gpa/eval/curation/run.py`)
+already has triage output that includes `(category, framework)`. Thread
+those through. If a triage path produces `category=None`, route to
+`_legacy/` (call `commit_scenario(category="synthetic", framework="synthetic")`
+with the leaf path manually under `_legacy/` — or extend
+`compute_scenario_dir` to handle `(None, None) → _legacy/`).
+
+- [ ] **Step 15.7: Update `journey.py`**
+
+```bash
+grep -n "tests/eval\|scenario_dir\|eval_dir" src/python/gpa/eval/curation/journey.py
+```
+Wherever a path is constructed, route through `compute_scenario_dir`.
+
+- [ ] **Step 15.8: Run tests**
 
 ```bash
 PYTHONPATH=src/python python3 -m pytest tests/unit/python/test_curation_draft_layout.py tests/unit/python/test_curation_*.py -v
 ```
 Expected: all PASS.
 
-- [ ] **Step 15.7: Commit**
+- [ ] **Step 15.9: Commit**
 
 ```bash
-git add src/python/gpa/eval/curation/draft.py src/python/gpa/eval/curation/run.py src/python/gpa/eval/curation/journey.py tests/unit/python/test_curation_draft_layout.py
+git add src/python/gpa/eval/curation/commit.py \
+        src/python/gpa/eval/curation/draft.py \
+        src/python/gpa/eval/curation/run.py \
+        src/python/gpa/eval/curation/journey.py \
+        tests/unit/python/test_curation_draft_layout.py
 git commit -m "feat(curation): emit new mined scenarios into taxonomy tree"
 ```
 
