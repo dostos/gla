@@ -1,0 +1,11 @@
+{"type":"thread.started","thread_id":"019de7ec-e585-73f3-9475-1161b472bcc0"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"command_execution","command":"/bin/bash -lc 'gpa frames overview --json'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"/bin/bash -lc 'gpa frames overview --json'","aggregated_output":"{\"frame_id\":1}\n","exit_code":0,"status":"completed"}}
+{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/bash -lc 'gpa drawcalls list --json'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/bash -lc 'gpa drawcalls list --json'","aggregated_output":"[{\"id\":0}]\n","exit_code":0,"status":"completed"}}
+{"type":"item.started","item":{"id":"item_2","type":"command_execution","command":"/bin/bash -lc 'cat /tmp/foo.c'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_2","type":"command_execution","command":"/bin/bash -lc 'cat /tmp/foo.c'","aggregated_output":"int main(){}\n","exit_code":0,"status":"completed"}}
+this line is malformed and should be skipped without crashing
+{"type":"item.completed","item":{"id":"item_3","type":"agent_message","text":"The root cause is a missing glUniform call before draw."}}
+{"type":"turn.completed","usage":{"input_tokens":30318,"cached_input_tokens":18176,"output_tokens":44,"reasoning_output_tokens":0}}

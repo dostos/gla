@@ -8,6 +8,7 @@ Both parsers are pure text → CliRunMetrics transformers; no subprocess imports
 """
 from __future__ import annotations
 import json
+import shlex
 from gpa.eval.agents.cli_spec import CliRunMetrics
 
 
@@ -114,7 +115,8 @@ def parse_codex_ndjson(stdout: str, stderr: str) -> CliRunMetrics:
         ev_type = evt.get("type", "")
 
         # --- Real codex item-based schema ---
-        if ev_type in ("item.started", "item.completed"):
+        # Only count on item.completed (authoritative); item.started is provisional.
+        if ev_type == "item.completed":
             item = evt.get("item") or {}
             itype = item.get("type", "")
             if itype == "command_execution":
@@ -184,11 +186,16 @@ def parse_codex_ndjson(stdout: str, stderr: str) -> CliRunMetrics:
 
 
 def _extract_inner_command(cmd: str) -> str:
-    """Extract inner command from a shell wrapper like /bin/bash -lc '<cmd>'."""
-    # Handle: /bin/bash -lc 'gpa frames overview'
-    # Also handle bare commands with no wrapper.
-    tokens = cmd.split(None, 3)  # at most 4 tokens: shell, flags..., inner
+    """Extract inner command from a shell wrapper like /bin/bash -lc '<cmd>'.
+
+    Uses shlex.split to correctly handle single/double-quoted arguments.
+    Falls back to the original string on parse errors.
+    """
+    try:
+        tokens = shlex.split(cmd)
+    except ValueError:
+        return cmd.strip()
     for i, tok in enumerate(tokens):
         if tok == "-lc" and i + 1 < len(tokens):
-            return tokens[i + 1].strip().strip("'\"")
+            return tokens[i + 1].strip()
     return cmd.strip()
