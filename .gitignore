@@ -16,3 +16,6 @@ node_modules/
 core.*
 # Curation pipeline workdir — per-issue LLM caches + intermediate state
 .eval-pipeline/
+
+# Per-agent / superpowers git worktrees
+.claude/worktrees/
