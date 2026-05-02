@@ -7,14 +7,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
-from pathlib import Path
-from typing import Iterable, TextIO
+from typing import TextIO
 
 from gpa.cli.local_roots import (
     LocalRoot,
     LocalRootError,
+    grep_root_json,
+    read_file_json,
     resolve_relative,
 )
 
@@ -63,25 +63,13 @@ def run_read(
 ) -> int:
     try:
         root = LocalRoot.from_env(_ENV_NAME)
-        target = resolve_relative(root, path)
     except LocalRootError as e:
         print(str(e), file=err_stream)
         return 2
-    if not target.is_file():
-        print(f"not a file: {path}", file=err_stream)
-        return 2
-    raw = target.read_bytes()
-    truncated = len(raw) > max_bytes
-    payload = raw[:max_bytes]
-    text = payload.decode("utf-8", errors="replace")
-    obj = {
-        "path": path,
-        "bytes": len(raw),
-        "truncated": truncated,
-        "text": text,
-    }
-    print(json.dumps(obj, ensure_ascii=False), file=print_stream)
-    return 0
+    return read_file_json(
+        root=root, user_path=path, max_bytes=max_bytes,
+        print_stream=print_stream, err_stream=err_stream,
+    )
 
 
 def run_list(
@@ -119,42 +107,14 @@ def run_grep(
 ) -> int:
     try:
         root = LocalRoot.from_env(_ENV_NAME)
-        base = resolve_relative(root, subdir) if subdir else root.path
     except LocalRootError as e:
         print(str(e), file=err_stream)
         return 2
-    cap = min(max(1, max_matches), _HARD_MAX_MATCHES)
-    try:
-        regex = re.compile(pattern)
-    except re.error as e:
-        print(f"bad pattern: {e}", file=err_stream)
-        return 2
-    matches: list[dict] = []
-    truncated = False
-    iterator: Iterable[Path] = (
-        base.rglob(glob) if glob else base.rglob("*")
+    return grep_root_json(
+        root=root, pattern=pattern, subdir=subdir, glob=glob,
+        max_matches=max_matches, hard_max=_HARD_MAX_MATCHES,
+        print_stream=print_stream, err_stream=err_stream,
     )
-    for path in iterator:
-        if not path.is_file():
-            continue
-        try:
-            text = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        for lineno, line in enumerate(text.splitlines(), start=1):
-            if regex.search(line):
-                rel = path.relative_to(root.path).as_posix()
-                matches.append(
-                    {"path": rel, "line": lineno, "text": line[:500]}
-                )
-                if len(matches) >= cap:
-                    truncated = True
-                    break
-        if truncated:
-            break
-    obj = {"matches": matches, "truncated": truncated}
-    print(json.dumps(obj, ensure_ascii=False), file=print_stream)
-    return 0
 
 
 def run(args: argparse.Namespace) -> int:
