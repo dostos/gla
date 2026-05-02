@@ -400,11 +400,14 @@ class ScenarioLoader:
         is empty.  For ``tier: core`` and ``tier: showcase`` a C source file
         is still expected; snapshot refs are supplementary.
         """
-        scenario_dir = self._eval_dir / scenario_id
+        matches = [p.parent for p in self._eval_dir.rglob("scenario.md")
+                   if p.parent.name == scenario_id]
+        if len(matches) == 0:
+            raise FileNotFoundError(f"Scenario {scenario_id!r} not found under {self._eval_dir}")
+        if len(matches) > 1:
+            raise ValueError(f"Scenario {scenario_id!r} matches multiple paths: {matches}")
+        scenario_dir = matches[0]
         md_path = scenario_dir / "scenario.md"
-
-        if not md_path.exists():
-            raise FileNotFoundError(f"Scenario .md not found: {md_path}")
 
         # Discover source files in the scenario directory.
         # TODO: recurse into subdirs (e.g. upstream_snapshot/) once multi-file
@@ -515,7 +518,7 @@ class ScenarioLoader:
         """
         ids = sorted(
             p.parent.name
-            for p in self._eval_dir.glob("*/scenario.md")
+            for p in self._eval_dir.rglob("scenario.md")
             if not p.parent.name.startswith(".")
         )
         return [self.load(sid) for sid in ids]
