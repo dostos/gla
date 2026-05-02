@@ -2012,10 +2012,12 @@ with per-leaf `BUILD.bazel` write when `*.c` files were committed.
 The existing call site in `run.py` (around the `commit_scenario(...)`
 invocation — find via `grep -n commit_scenario src/python/gpa/eval/curation/run.py`)
 already has triage output that includes `(category, framework)`. Thread
-those through. If a triage path produces `category=None`, route to
-`_legacy/` (call `commit_scenario(category="synthetic", framework="synthetic")`
-with the leaf path manually under `_legacy/` — or extend
-`compute_scenario_dir` to handle `(None, None) → _legacy/`).
+those through. If a triage path produces `category=None` or
+`framework=None`, raise an explicit `ValueError` rather than routing
+to `_legacy/` — `_legacy/` is migration-only (for scenarios where the
+source URL was unrecoverable). New mined scenarios always have triage
+output; if triage returns None, that is a triage bug to fix
+upstream, not something to paper over here.
 
 - [ ] **Step 15.7: Update `journey.py`**
 
