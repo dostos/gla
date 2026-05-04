@@ -1686,12 +1686,53 @@ Godot scenarios show no qualitative diagnosis change but with_gla
 runs 26% cheaper in output tokens — the agent reaches the same
 conclusion with less guessing.
 
+### Post-hoc file-level scoring (correction to "scorer fail" framing)
+
+The legacy keyword scorer is broken, but a regex-based file-level
+re-score (extract paths + bare basenames + capitalised symbol tokens
+from each diagnosis, intersect with `scenario.fix.files`) gives a
+second-opinion signal:
+
+| group   |  | code_only any_hit | with_gla any_hit | mean_recall | mean_precision |
+|---------|--|------------------:|-----------------:|------------:|---------------:|
+| web-map | (6) | 4/6 | **5/6** | 0.67 → 0.53 | 0.58 → **0.67** |
+| godot   | (8) | 5/8 | 3/8 | 0.31 → 0.15 | 0.42 → 0.38 |
+| all     |(14) | 9/14 | 8/14 | 0.46 → 0.31 | 0.49 → 0.50 |
+
+So the picture is more nuanced than "with_gla scored worse":
+
+- **Cesium camera_jumps flipped ✗ → ✓** under file-level scoring:
+  with_gla's diagnosis cites `Scene.js` and `Picking.*` symbols,
+  both of which match `packages/engine/Source/Scene/Scene.js` /
+  `Picking.js` in the 12-file ground truth. code_only had given
+  up; with_gla actually found the bug.
+- **Three godot scenarios flipped ✓ → ✗** the other way: code_only's
+  training-data guess happened to name a file in the gt list;
+  with_gla read the snapshot and proposed a different (probably
+  also-relevant) file from the 13–22-file gt. Likely scoring
+  artifact: `scenario.fix.files` is the *whole PR file list*
+  (including tests + collateral), not just the bug-cause file.
+- **Mean precision is essentially equal** (0.50 vs 0.49). When the
+  agent does name files, with_gla is no less precise than code_only
+  — it just names fewer of them, so recall drops.
+
+### What with_gla actually buys us (signal, not artifact)
+
+1. **Stops give-up answers**: cesium / one godot scenario produced
+   real diagnoses where code_only had bailed.
+2. **Token-efficient on huge codebases**: godot scenarios run 31%
+   faster and use 26% fewer output tokens — the agent grep'd for
+   specific symbols instead of inferring shape from training data.
+3. **Sharper diagnoses on small repos**: maplibre/mapbox scenarios
+   cite specific conditionals and function names readable only via
+   the snapshot.
+
 ### What this round actually measured
 
-This was a **token-efficiency** measurement, not an accuracy one.
-The legacy keyword scorer is unfit for purpose on mined scenarios
-that lack curated ground_truth fields. To get a real accuracy signal
-we need either:
+This was a **token-efficiency + give-up-rate** measurement. The
+"correctness" signal from both legacy keyword and regex file-level
+scorers is noisy enough that neither alone is decisive. To get a
+real accuracy signal we need either:
 
 - **Maintainer-framing scoring** — already implemented in
   `harness._select_prompt_for_scenario` for `framework-internal`
