@@ -1437,3 +1437,151 @@ effect for most cells.
 
 COMMIT: 8cf253d
 
+## Round 12 — Codex-mined scenarios baseline via claude-cli backend (2026-05-04)
+
+First evaluation against the 14 scenarios mined with the codex curation
+pipeline (commit `bcf05f7`): 8 godot framework-maintenance issues
+(`rfc2ac5_*`) and 6 web-map issues across cesium / deck.gl /
+mapbox-gl-js / maplibre-gl-js (`r5211bd_*`). Also the first eval that
+exercises the new `claude-cli` agent backend end-to-end (subprocess
+shells `claude -p --output-format stream-json` per scenario).
+
+This is a baseline, not a comparison: only `code_only` mode was run.
+See "with_gla blockers" below.
+
+### Setup
+
+- **Backend:** `claude-cli` (Claude Code 2.1.126, model
+  `claude-opus-4-7[1m]`, full session prompt loaded each invocation).
+- **Modes:** `code_only` only.
+- **Scenarios:** 14 (8 godot + 6 web-map).
+- **Wall clock:** 2h04m sequential (started 14:54, finished 16:58).
+- **Per-scenario time:** avg 530s, range 222s–992s.
+
+### with_gla blockers
+
+| Blocker | Effect |
+|---|---|
+| No Bazel BUILD targets for any of the 14 scenarios | `runner.build_scenario` would fail at `bazel build //tests/eval:<id>` |
+| No reproducer binaries (mined GitHub issues, not C apps) | Even if a target existed, nothing to capture |
+| OpenGPA engine not running on `:18080` | No live frame to query |
+| `bug_class ∈ {consumer-misuse, user-config}` for all 14 | Maintainer scorer doesn't apply (`maintainer_solved=None` everywhere) |
+
+Decision: run `code_only` only; document the with_gla axis as gated
+on adding capture / reproducer infrastructure for these scenario
+classes.
+
+### Results
+
+| group   |  n |  legacy_correct | avg_time | avg_tools | avg_out_tokens |
+|---------|---:|----------------:|---------:|----------:|---------------:|
+| godot   |  8 |  0/8            |   545s   |    53.2   |     26,154     |
+| web-map |  6 |  5/6            |   510s   |    28.5   |      6,692     |
+| **all** | 14 |  5/14 (35.7%)   |   530s   |    42.6   |     17,813     |
+
+- `legacy_correct` = legacy keyword scorer (`correct_diagnosis` AND
+  `correct_fix`). All 14 scenarios produced concrete `DIAGNOSIS:` +
+  `FIX:` markers; the legacy scorer is the only signal here because
+  no scenario is `framework-internal`, so `maintainer_solved` is `None`
+  for all 14.
+- Only **2/14** runs explicitly gave up ("no upstream snapshot
+  accessible" / "not accessible"): cesium camera_jumps, deck.gl
+  googlemapsoverlay. The other 12 produced substantive file-level
+  patches drawn from the agent's prior knowledge of these
+  frameworks.
+
+### Per-scenario time / tool-calls (code_only)
+
+| scenario (suffix)                                    | time   | tools | out_tok | legacy_corr |
+|------------------------------------------------------|-------:|------:|--------:|:-----------:|
+| godot wrong_position_of_volumetric_fog               | 992s   |   66  |  47,745 | ✗ |
+| godot web_images_break_if_transparent                | 712s   |   66  |  29,912 | ✗ |
+| maplibre geolocatecontrol_ignores_fitbounds          | 681s   |   36  |   8,258 | ✓ |
+| deck.gl googlemapsoverlay_misalign                   | 554s   |   37  |   9,110 | ✗ |
+| cesium camera_jumps_when_globe_translates            | 546s   |   31  |   6,621 | ✓ |
+| godot volumetric_fog_sporradically_flickers          | 538s   |   34  |  26,694 | ✗ |
+| maplibre vertical_edge_wall_artifact                 | 536s   |   26  |   6,040 | ✓ |
+| godot vulkan_forward_severe_full_screen              | 530s   |   57  |  22,938 | ✗ |
+| maplibre 3d_terrain_with_partially_transparent       | 523s   |   20  |   4,904 | ✓ |
+| godot 4_2_world_environment_glow                     | 460s   |   58  |  27,692 | ✗ |
+| godot performance_on_android_devices                 | 457s   |   62  |  26,999 | ✗ |
+| godot glow_extremely_slow_with_mobile                | 363s   |   41  |   9,800 | ✗ |
+| godot weird_shadow_on_mobile_renderer                | 311s   |   42  |  17,448 | ✗ |
+| mapbox symbol_icon_color_is_not_working              | 222s   |   21  |   5,220 | ✓ |
+
+### Observations
+
+1. **The legacy keyword scorer is unreliable for these scenarios.**
+   Eyeballing diagnoses: the maplibre 3d_terrain "correct" run
+   produced a thoughtful root-cause about translucent-pass stencil
+   clipping under 3D terrain, and the godot wrong_position "incorrect"
+   run produced an equally-substantive analysis of asymmetric
+   frustum bounds in `Fog::volumetric_fog_update`. Neither was
+   actually graded against the upstream PR — the legacy scorer just
+   pattern-matches keywords against `ground_truth_diagnosis`, which
+   for these mined-issue scenarios is often empty or templatey.
+   **Bottom line:** treat the 35.7% number as "agent emitted a
+   plausible diagnosis," not "agent matched ground truth."
+
+2. **Godot scenarios cost ~4× more output tokens than web-map.**
+   53 vs 28 tool calls per scenario; 26K vs 6.7K output tokens.
+   The agent spent more turns navigating Godot's C++ rendering
+   internals than typescript web-map source. Likely both
+   "more obscure for the model" and "denser ground-truth code."
+
+3. **`bug_class` distribution is skewed away from
+   `framework-internal`.** All 14 scenarios were
+   `consumer-misuse` (12) or `user-config` (2) — none triggered
+   the maintainer-framing prompt or the file-level scorer. The
+   codex-driven mining pipeline currently classifies most issues
+   as advisor/config rather than upstream patches; this is an
+   important signal about the mining-rule defaults.
+
+4. **claude-cli backend works end-to-end.** The new
+   subprocess-based agent (`gpa.eval.agents.cli_agent.CliAgent`
+   + `CLAUDE_CLI_SPEC`) ran 14 scenarios sequentially with no
+   harness errors. Stream-JSON parsing extracted DIAGNOSIS+FIX
+   markers, tool counts, and per-scenario timings cleanly.
+
+### with_gla unlock prerequisites (next-round gates)
+
+To convert these 14 scenarios from `code_only`-only to a real
+`with_gla` vs `code_only` comparison, we need at least one of:
+
+- **Reproducer binaries**: write minimal C apps that exhibit the
+  rendering bug. Tractable for godot scenarios (vulkan / GL
+  fragment of a real renderer), heavy for web-map (would require
+  a JS/browser harness).
+- **Pre-captured frames**: run the buggy app once outside the
+  eval, save the captured `frames/<id>/*.json` to disk, replay
+  via a `FrameProvider` mock backend during eval. Spec'd in
+  the existing browser-eval pipeline; not yet wired for
+  framework-maintenance scenarios.
+- **Reclassify the scenario class.** If the scenarios are really
+  consumer-misuse questions (read the docs, fix the call site),
+  with_gla doesn't add value; the eval should focus on an
+  advisor-quality metric instead of a capture-quality metric.
+
+### Rolling latest stats (round 12)
+
+- **Date:** 2026-05-04
+- **Scope:** 14 scenarios, 1 mode, 1 backend → 14 runs
+- **Cost:** sequential subscription usage (~$15–30 estimated;
+  no API key — claude-cli runs against the user's Claude Code
+  subscription, no per-token billing surface).
+- **Wall clock:** 2h04m
+- **Result:** 14/14 scenarios completed; 5/14 marked correct
+  by legacy keyword scorer; 12/14 produced substantive
+  file-level diagnoses (2/14 explicitly gave up due to missing
+  upstream snapshot).
+
+### Raw artifacts
+
+- `/data3/gla-eval-results/2026-05-04-round4-claude-cli/` (gitignored, ~44KB)
+  - `results.json` — 14 EvalResult entries
+  - `report.md` — `gpa.eval.cli report` output
+  - `system-status.md` — pre-run system snapshot
+  - `run.log` — eval CLI stdout (one "Saved 14 result(s)" line)
+
+COMMIT: bcf05f7
+
