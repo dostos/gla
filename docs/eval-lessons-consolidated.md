@@ -342,3 +342,137 @@ efficiency for Sonnet. Haiku still over-reads but improving.
   aggregate GPA signal negative while subset data shows GPA is net
   positive on state-collision + source-logical.
 
+---
+
+## Round 12 + 12b — Codex-mined scenarios via claude-cli (2026-05-04)
+
+Three max-effort subagents audited the round (mining pipeline, scoring
+methodology, agent/system improvements). Per-area detail in
+`docs/eval-lessons-{mining,scoring,system}.md`. Synthesis below.
+
+### What's true after R12
+
+11. **The codex mining pipeline mis-classifies framework-internal bugs
+    as `consumer-misuse`/`user-config`.** All 14 R12 scenarios patch
+    framework code (godot `servers/rendering/...`, maplibre
+    `src/render/...`, cesium `packages/engine/Source/...`), yet 12 came
+    out `consumer-misuse` and 2 `user-config`. The decision is made by
+    a regex (`infer_bug_class` in `rules.py:313`) — the LLM `Triage`
+    class is **dead code**, never instantiated by `run.py`. The
+    deciding regex `app_resolution` has bare-token patterns
+    (`use `, `set `, `enable `) that match almost any English issue
+    body (e.g. "Enable Glow" or "Use a custom terrain source").
+12. **`fix.files` is the raw whole-PR file list, padded with
+    collateral.** Cesium's 12 gt files include 5 `*Spec.js` test files
+    that the test-filter missed (it checks `.spec.js`, not Jasmine's
+    `*Spec.js` convention). Godot scenarios carry header+impl+
+    `_inc.glsl` + refactor sweep — the actual bug-causing file is 1
+    of 13–22. This destroys file-level recall: the agent names the
+    real bug file and scores 1/13.
+13. **Legacy keyword scorer is unfit for advisor scenarios.** Mined
+    scenarios have empty/templatey `ground_truth_diagnosis`, so the
+    scorer pattern-matches user-report keywords against the
+    diagnosis. Round 12 cesium "gave up" with one sentence and was
+    marked ✓; round 12b cesium found the real bug (cache invalidation
+    in `Picking.pickPositionWorldCoordinates`) and was marked ✗.
+14. **The with_gla prompt advertises capabilities the agent doesn't
+    have.** 14/14 R12b runs had `live capture unavailable` (no
+    binaries, no engine), yet the prompt block in `cli_agent.py:80-96`
+    lists 11 commands of which only 3 (`gpa upstream read|grep|list`)
+    actually work, and ends with the literally-false line
+    `"GPA_FRAME_ID is set so --frame is automatic."` Agent worked
+    around the noise but ~75% of the prompt's tool block was unusable.
+15. **Free signal is dropped at multiple layers.** The harness loads
+    `scenario.framework`, `upstream_snapshot_repo`, `fix.fix_pr_url`,
+    and resolves `bug_class` — but `cli_agent._render_prompt`
+    threads only `description` + `source_path` into the prompt. The
+    agent has to re-derive context that was already on disk.
+
+### R12 priority backlog
+
+**P0 — half-day each, unblocks honest measurement of every prior round:**
+
+1. **Wire `Triage` LLM into the produce path** (mining). Call
+   `Triage(...)` inside `_run_produce` and override
+   `rec.bug_class_guess`. Belt-and-suspenders: if every entry in
+   `rec.fix_files` resolves under a framework source path, force
+   `bug_class=framework-internal`. → `eval-lessons-mining.md` rec #1
+   + #6.
+2. **Loosen file-level scorer trigger** from `bug_class ==
+   "framework-internal"` to `scenario.fix is not None and
+   scenario.fix.files`. One-line change in `harness.py:111` makes
+   `score_maintainer_patch` available to the 14 R12 scenarios (and
+   any future advisor-classed mine that retains real `fix.files`).
+   → `eval-lessons-scoring.md` §2a.
+3. **Stop lying in the with_gla prompt about live capture.** Branch
+   the prompt block on `tools.get("snapshot_root")` vs runtime
+   capture availability. Drop the "GPA_FRAME_ID is set" line when
+   `frame_id is None`. Add a one-line "scenario blurb" with
+   framework + repo + `fix_pr_url` + bug-summary so the agent doesn't
+   re-derive context. → `eval-lessons-system.md` §5 fix #1 (~40 LoC).
+
+**P1 — a day each, raises measurement ceiling:**
+
+4. **Tighten `app_resolution` regex** to maintainer-response phrasing
+   ("won't fix", "by design", "not a bug" with right-side `\b`).
+   Drop the bare-token literals. → mining rec #3.
+5. **Rank `fix.files` by diff size and cap at top-N** (default 5).
+   Surfaces the bug-causing file rather than the PR sweep. Add
+   `Specs/` segment + case-insensitive `*Spec.js` filter for Jasmine.
+   → mining rec #4 + #5.
+6. **Add the prose scorer + gave-up veto.** `scorer_prose.py`
+   extracts paths/basenames/symbol tokens from free-form `FIX:` text;
+   gave-up regex bank vetoes `solved=True` on bail-out diagnoses
+   (8 patterns). New `ScoreVerdict` dataclass with `needs_review`
+   bucket. → scoring §2b + 2d.
+7. **Stop dropping free signal in the prompt.** Inject
+   `scenario.framework`, `scenario.upstream_snapshot_repo`,
+   `scenario.fix.fix_pr_url`, `tools["bug_class"]` into the agent
+   prompt. → system §4.
+
+**P2 — larger / opt-in:**
+
+8. **LLM-judge tier.** Gate on `solved=False AND any_hit ≥ 1`
+   (ambiguous residual). Reuses `gpa.eval.judge.run_semantic_judge` +
+   `ClaudeCodeLLMClient` — no new client. Cost-bounded: ≤ 8 calls /
+   round, ≤ 5 KB context, disk cache, default off behind
+   `--llm-judge`. → scoring §2c.
+9. **`gpa upstream find-symbol`** (~80 LoC). Symbol-aware verb beats
+   grep+read chains; current `gpa upstream grep` has no `--context`
+   and the 200 KB `_SNAPSHOT_MAX_BYTES` cap truncates godot files at
+   369–402 KB. → system §2 gaps + §5 fix #2 (grep `--context` +
+   raise cap to 512 KB) + fix #3.
+
+### What we now know about with_gla on these scenarios
+
+- **Token-efficiency win is real.** 38% faster wall, 8% fewer total
+  output tokens, 15% fewer tool calls vs same-scenario code_only.
+  Effect concentrated on godot (huge codebase: grep beats inferring
+  shape from training data).
+- **"Did the agent solve it" is a wash by current metrics**, but the
+  metrics are broken (P0 #2 unlocks the real signal). Qualitatively,
+  with_gla flipped cesium ✗→✓ (the kind of bug only solvable with
+  snapshot access) and sharpened maplibre/mapbox diagnoses with
+  symbol-level citations the snapshot enabled.
+- **Web-map subset was a clear win**: 5/6 vs 4/6 file-level any-hit,
+  precision 0.67 vs 0.58. Godot regressed (3/8 vs 5/8) but each
+  godot "regression" is code_only's training-data guess landing on a
+  collateral PR file while with_gla cited a different (probably
+  also-relevant) file from the bug area. P1 #5 addresses this by
+  cutting collateral from `fix.files` in future mines.
+
+### R12 asks (concrete, ordered)
+
+1. **Re-score rounds 4–12 against the new scorer stack** once P0 #2
+   and P1 #6 land. No re-running the agent; results.json on disk has
+   what we need. Expect existing "with_gla solved 0/27" type cells
+   to flip on rounds where `fix.files` is well-shaped.
+2. **Re-mine rounds 11–12 scenarios** after P0 #1 + P1 #4 + P1 #5
+   land. `bug_class` distribution should shift toward
+   `framework-internal` for the 14 R12 cases, and `fix.files`
+   cardinality should drop to ~3 from ~10 average.
+3. **Smoke-test the new `gpa upstream find-symbol` + raised file
+   cap** on the godot scenarios that lost in R12b — this is the
+   class of scenario where the symbol-aware verb should swing the
+   scorer.
+
