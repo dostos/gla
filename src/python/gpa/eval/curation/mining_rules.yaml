@@ -86,7 +86,15 @@ patterns:
 
   repro_artifact: "\\b(jsfiddle|codepen|codesandbox|reproduction|steps to|minimal|live example)\\b"
   expected_actual: "\\bexpected behavior|actual behavior|expected output|actual output\\b"
-  app_resolution: "\\baccepted answer|use |set |enable |disable |configure |workaround|not a bug|works as expected|by design\\b"
+  # Maintainer-resolution phrasing only — the bare-token `use `/`set `/
+  # `enable `/`disable `/`configure ` literals (R12 cohort) hit user-report
+  # prose like "Enable Glow" or "Use a custom terrain source" and forced
+  # `infer_bug_class` to consumer-misuse on framework-internal bugs. The
+  # tightened version requires:
+  #   - canonical resolution phrases ("not a bug", "by design", "won't fix")
+  #   - or the action verbs anchored to "you should"/"please"
+  #   - or "use the X (api|prop|option|method) instead"
+  app_resolution: "(?i)(?:===\\s*)?(?:accepted answer|works as designed|works as expected|not a bug|by design|won.?t fix|wontfix|user error|workaround|use the \\w+ (?:api|prop|property|option|method) instead|(?:you should|please) (?:use|set|enable|disable|configure))"
   config_terms: "\\bautoClear|depthWrite|depthTest|toneMapping|colorSpace|encoding|shadow.camera|clearAlpha|renderTarget|premultiplyAlpha\\b"
   not_planned: "\\bnot_planned|won't fix|wontfix|help \\(please use the forum\\)|browser issue\\b"
 
