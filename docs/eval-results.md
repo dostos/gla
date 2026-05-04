@@ -1786,3 +1786,76 @@ real accuracy signal we need either:
 
 COMMIT: 3cf7920
 
+---
+
+## Round 12c — re-score validation against new ScoreVerdict stack (2026-05-05)
+
+After shipping the R12 audit backlog (commits `6f91a0d` through
+`9eb3612`), re-scored the 28 archived round-12+12b results against the
+new orchestrator (`score_run` without LLM-judge upgrade) to verify the
+acceptance criteria from `eval-lessons-scoring.md` §5. No agent re-runs
+— operates on `results.json` + committed scenario.md only.
+
+### Distribution (28 runs)
+
+| mode      | solved | needs_review | no_signal |
+|-----------|--------|--------------|-----------|
+| with_gla  | 4/14   | 4            | 6         |
+| code_only | 6/14   | 2            | 6         |
+
+`needs_review` is the new "we don't know without an LLM" band — recall
+≥1 hit but below the 0.5 threshold. `no_signal` is a clean ✗ (zero
+hits, no give-up). `solved` is recall ≥ 0.5 AND precision ≥ 0.25 via
+the prose extractor (no JSON tail in this cohort, so `file_level`
+never fires).
+
+### Acceptance criteria
+
+- **maplibre 3d_terrain with_gla** — expected `needs_review` (sharp
+  diagnosis on 1 of 3 gt files, not a hard ✗). **✓** Got
+  `needs_review=True, recall=0.33, precision=1.0`.
+- **cesium camera_jumps with_gla** — expected ✓ via prose or judge.
+  Got `needs_review=True, recall=0.08`. The diagnosis (`Picking.update()
+  never called`) cites `Scene.js` (matches gt) but references
+  `Picking.js` only via the class name (`Picking.prototype.update()`),
+  which the prose extractor doesn't auto-promote to a path. Lands in
+  the residual band where the LLM-judge tier (commit `9eb3612`) is
+  designed to fire — pending real-judge run.
+- **cesium camera_jumps code_only** — lessons-scoring §5 said this
+  was a gave-up. **Lessons doc was stale**: the archived diagnosis is
+  a real (wrong) prose answer pointing at `ScreenSpaceCameraController.js`
+  (not in gt). New stack correctly classifies as `no_signal` (zero
+  hits, no give-up patterns). The legacy keyword scorer's ✓ on this
+  row was the lexical-accident the audit called out — new stack flips
+  it to ✗ correctly.
+
+### What this confirms
+
+1. **Gave-up veto fires correctly** — none of the 28 archived
+   diagnoses match the bail-out patterns; sample inspection confirms
+   all are substantive prose attempts (including the wrong ones).
+2. **Prose extractor recall floor works** — 17/28 prose-leg verdicts,
+   none erroneously `solved=True` from shotgun-listing every file
+   (precision floor active).
+3. **Existing committed scenarios still carry pre-filter gt** —
+   cesium gt has 5 `*Spec.js` files that survived the old filter; new
+   `_filter_source_files` (commit `0bf4cb9`) drops them on future
+   mines but doesn't retroactively rewrite committed scenarios.
+   Re-mining R11–R12 will fix it.
+
+### Next steps
+
+- **Enable `--llm-judge` on the 4 with_gla `needs_review` rows** —
+  expect cesium camera_jumps and maplibre 3d_terrain to flip to
+  `solved=True` (semantic match against fix-PR diff).
+  Acceptance bar: ≥ 5/8 manual agreement per lessons-scoring §5.
+- **Re-mine R12 cohort** with the new pipeline (P0-1 + P1-4 + P1-5)
+  to confirm `bug_class` distribution shifts toward
+  `framework-internal` and `fix.files` cardinality drops to ~3 from
+  the current ~10 average. Affects scoring downstream.
+- **Defer**: `gpa report` UX surfacing `verdict.scorer` /
+  `needs_review` count; legacy `DiagnosisScorer` removal (keep one
+  more round for v1↔v2 comparison telemetry).
+
+COMMIT: 9eb3612 (validation only — no code change)
+
