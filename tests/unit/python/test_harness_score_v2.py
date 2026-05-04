@@ -140,3 +140,55 @@ def test_verdict_low_confidence_review_when_one_of_three_files_cited():
     assert res.verdict["solved"] is False
     assert res.verdict["needs_review"] is True
     assert res.verdict["confidence"] == "low"
+
+
+# ---------------------------------------------------------------------------
+# Judge tier (opt-in via llm_judge_client) upgrades needs_review
+# ---------------------------------------------------------------------------
+
+
+def test_judge_tier_upgrades_needs_review_to_solved(tmp_path, monkeypatch):
+    """When llm_judge_client + snapshot_root are wired, a needs_review
+    prose verdict gets upgraded via semantic match."""
+    from types import SimpleNamespace
+
+    h = _bare_harness()
+
+    class _StubJudgeClient:
+        def __init__(self):
+            self.calls = 0
+
+        def complete(self, *, system, messages):
+            self.calls += 1
+            return SimpleNamespace(text="full")
+
+    h._llm_judge_client = _StubJudgeClient()
+    h._judge_cache_dir = tmp_path / "cache"
+    # Provide a fake snapshot root via _ensure_snapshot
+    snap = tmp_path / "snap"
+    snap.mkdir()
+    h._ensure_snapshot = MagicMock(return_value=snap)
+    # Make fetch_pr_diff_summary return a non-empty payload
+    monkeypatch.setattr(
+        "gpa.eval.judge.fetch_pr_diff_summary",
+        lambda fix_sha, snapshot_root, **_: "stat output",
+    )
+
+    s = _make_scenario(fix_files=[
+        "src/render/draw_fill.ts",
+        "src/render/draw_line.ts",
+        "src/render/painter.ts",
+    ])
+    # Set upstream fields so _ensure_snapshot is reachable
+    s.upstream_snapshot_repo = "https://github.com/o/r"
+    s.upstream_snapshot_sha = "abc1234"
+    h.loader.load.return_value = s
+    diagnosis = (
+        "Sharp diagnosis: the render-pass guard in `src/render/draw_fill.ts` "
+        "is missing a stencil-config update."
+    )
+    res = h.run_scenario(s.id, "code_only", _stub_agent(diagnosis))
+    assert res.verdict is not None
+    assert res.verdict["scorer"] == "judge"
+    assert res.verdict["solved"] is True
+    assert res.verdict["judge_verdict"] == "full"

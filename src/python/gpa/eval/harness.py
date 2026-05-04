@@ -6,7 +6,7 @@ import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 _log = logging.getLogger(__name__)
 
@@ -33,7 +33,9 @@ class EvalHarness:
     """Orchestrates eval runs across scenarios and modes."""
 
     def __init__(self, config: Optional[dict] = None,
-                 snapshot_fetcher: Optional["SnapshotFetcher"] = None):
+                 snapshot_fetcher: Optional["SnapshotFetcher"] = None,
+                 llm_judge_client: Optional[Any] = None,
+                 judge_cache_dir: Optional[Path] = None):
         cfg = config or {}
         eval_dir = cfg.get("eval_dir", "tests/eval")
         self.loader = ScenarioLoader(eval_dir=eval_dir)
@@ -51,6 +53,11 @@ class EvalHarness:
         self._model = cfg.get("model", "unknown")
         self.results: list[EvalResult] = []
         self._snapshot_fetcher = snapshot_fetcher
+        # LLM-judge tier (opt-in): when a client is supplied, the
+        # `needs_review` band gets upgraded via semantic match against
+        # the fix-PR diff. Disk-cached so re-scoring a round is cheap.
+        self._llm_judge_client = llm_judge_client
+        self._judge_cache_dir = judge_cache_dir
 
     # ------------------------------------------------------------------
     # Public API
@@ -153,16 +160,35 @@ class EvalHarness:
 
         # ScoreVerdict v2: orchestrate file_level + prose + gave-up. Best-
         # effort; verdict stays None on failure rather than masking the
-        # legacy fields above.
+        # legacy fields above. When an llm_judge_client is configured,
+        # `needs_review` rows get a semantic-match upgrade.
         verdict_dict = None
         try:
             from dataclasses import asdict
-            from gpa.eval.scorer import score_run
-            verdict_dict = asdict(score_run(
+            from gpa.eval.scorer import judge_residual, score_run
+            verdict = score_run(
                 diagnosis_text=diagnosis_text,
                 fix=scenario.fix,
                 file_score=score_result,
-            ))
+            )
+            judge_client = getattr(self, "_llm_judge_client", None)
+            if judge_client is not None and verdict.needs_review:
+                snap_root = None
+                try:
+                    if (scenario.upstream_snapshot_repo
+                            and scenario.upstream_snapshot_sha):
+                        snap_root = self._ensure_snapshot(scenario)
+                except Exception:
+                    snap_root = None
+                verdict = judge_residual(
+                    verdict,
+                    fix=scenario.fix,
+                    diagnosis_text=diagnosis_text,
+                    snapshot_root=snap_root,
+                    llm_client=judge_client,
+                    cache_dir=getattr(self, "_judge_cache_dir", None),
+                )
+            verdict_dict = asdict(verdict)
         except Exception:
             verdict_dict = None
 

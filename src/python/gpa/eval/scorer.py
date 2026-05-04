@@ -375,7 +375,115 @@ __all__ = [
     "score_maintainer_patch",
     "judge_semantic_match",
     "score_run",
+    "judge_residual",
 ]
+
+
+# ---------------------------------------------------------------------------
+# LLM-judge residual upgrader (cost-bounded, opt-in)
+# ---------------------------------------------------------------------------
+
+
+def _judge_cache_key(fix_sha: str, diagnosis_text: str) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    h.update((fix_sha or "").encode("utf-8"))
+    h.update(b"\n--\n")
+    h.update((diagnosis_text or "").encode("utf-8"))
+    return h.hexdigest()
+
+
+def judge_residual(
+    verdict: ScoreVerdict,
+    *,
+    fix: Any,
+    diagnosis_text: str,
+    snapshot_root: Any,
+    llm_client: Any,
+    cache_dir: Any = None,
+    max_diff_bytes: int = 6000,
+) -> ScoreVerdict:
+    """Upgrade a `needs_review` prose verdict via LLM semantic judge.
+
+    Eligibility (all required):
+      - verdict.scorer == "prose" AND verdict.needs_review
+      - fix has fix_sha
+      - snapshot_root exists
+      - llm_client is non-None
+
+    On `full` → solved=True, scorer="judge", confidence="medium".
+    On `partial`/`none` → keeps solved=False; records `judge_verdict`.
+
+    Disk cache (when `cache_dir` is set) keyed on
+    sha256(fix_sha + diagnosis_text). Repeat invocations skip the LLM.
+    """
+    if not (
+        verdict.scorer == "prose"
+        and verdict.needs_review
+        and llm_client is not None
+        and snapshot_root
+        and fix is not None
+        and getattr(fix, "fix_sha", None)
+    ):
+        return verdict
+
+    cache_path = None
+    if cache_dir is not None:
+        from pathlib import Path
+        cache_dir = Path(cache_dir)
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            key = _judge_cache_key(fix.fix_sha, diagnosis_text or "")
+            cache_path = cache_dir / f"{key}.txt"
+            if cache_path.exists():
+                cached = cache_path.read_text(encoding="utf-8").strip()
+                if cached in {"full", "partial", "none"}:
+                    return _apply_judge_verdict(verdict, cached)
+        except OSError:
+            cache_path = None
+
+    from gpa.eval import judge as judge_mod
+    gt_summary = judge_mod.fetch_pr_diff_summary(
+        fix.fix_sha, snapshot_root, max_bytes=max_diff_bytes,
+    )
+    if not gt_summary:
+        return verdict
+    judged = judge_mod.run_semantic_judge(
+        agent_change_summary=(diagnosis_text or "")[:max_diff_bytes],
+        ground_truth_change_summary=gt_summary,
+        llm_client=llm_client,
+    )
+    if cache_path is not None:
+        try:
+            cache_path.write_text(judged, encoding="utf-8")
+        except OSError:
+            pass
+    return _apply_judge_verdict(verdict, judged)
+
+
+def _apply_judge_verdict(verdict: ScoreVerdict, judged: str) -> ScoreVerdict:
+    """Build the upgraded ScoreVerdict from a raw judge-tag."""
+    if judged not in {"full", "partial", "none"}:
+        return verdict
+    if judged == "full":
+        return ScoreVerdict(
+            scorer="judge", solved=True, confidence="medium",
+            file_score=verdict.file_score,
+            prose_recall=verdict.prose_recall,
+            prose_precision=verdict.prose_precision,
+            judge_verdict="full",
+            gave_up=verdict.gave_up, needs_review=False,
+            reasoning="LLM judge: full match against fix-PR diff",
+        )
+    return ScoreVerdict(
+        scorer=verdict.scorer, solved=False, confidence="low",
+        file_score=verdict.file_score,
+        prose_recall=verdict.prose_recall,
+        prose_precision=verdict.prose_precision,
+        judge_verdict=judged,
+        gave_up=verdict.gave_up, needs_review=True,
+        reasoning=f"LLM judge: {judged} (partial overlap or no match)",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -386,23 +494,25 @@ __all__ = [
 @dataclass
 class ScoreVerdict:
     """Final verdict for a single run, combining file-level + prose +
-    gave-up signals.
+    gave-up + (optional) LLM-judge signals.
 
     `scorer` records which leg produced the binding answer:
       - "file_level": JSON tail parsed AND ScoreResult.solved=True.
       - "prose":      no JSON or file_level failed; prose extractor solved.
+      - "judge":      LLM-judge upgraded a needs_review prose verdict.
       - "gave_up":    bail-out phrase vetoed any positive verdict.
       - "no_signal":  zero hits, no give-up, no signal at all.
 
-    `confidence` is high for definitive ✓/✗, medium for prose-only
-    ✓ (smaller signal set), low for `needs_review` rows.
+    `confidence` is high for definitive ✓/✗, medium for prose- or
+    judge-derived ✓ (smaller signal set), low for `needs_review` rows.
     """
-    scorer: str               # file_level | prose | gave_up | no_signal
+    scorer: str               # file_level | prose | judge | gave_up | no_signal
     solved: bool
     confidence: str           # high | medium | low
     file_score: Optional[float] = None
     prose_recall: Optional[float] = None
     prose_precision: Optional[float] = None
+    judge_verdict: Optional[str] = None  # full | partial | none
     gave_up: bool = False
     needs_review: bool = False
     reasoning: str = ""

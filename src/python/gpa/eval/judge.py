@@ -8,7 +8,9 @@ and keep the prompt in one place.
 from __future__ import annotations
 
 import re
-from typing import Any
+import subprocess
+from pathlib import Path
+from typing import Any, Optional
 
 
 # The judge prompt.  Intentionally terse — the judge is asked to produce
@@ -92,6 +94,48 @@ def run_semantic_judge(
     return _extract_verdict(text)
 
 
+def fetch_pr_diff_summary(
+    fix_sha: str,
+    snapshot_root: Optional[Path],
+    *,
+    max_bytes: int = 6000,
+) -> str:
+    """Return a compact string summarising the fix-PR's diff.
+
+    Combines `git log -1 --format=%B <sha>` (commit message) with
+    `git show --stat <sha>` (per-file change counts). Truncated to
+    `max_bytes`. Best-effort: any subprocess failure or missing
+    snapshot returns empty string — the judge tier degrades gracefully
+    when ground-truth summary can't be assembled.
+    """
+    if not snapshot_root or not Path(snapshot_root).is_dir() or not fix_sha:
+        return ""
+    parts: list[str] = []
+    try:
+        log = subprocess.run(
+            ["git", "log", "-1", "--format=%B", fix_sha],
+            cwd=Path(snapshot_root), capture_output=True, text=True,
+            timeout=10, check=True,
+        )
+        parts.append(log.stdout.strip())
+    except (subprocess.SubprocessError, OSError):
+        pass
+    try:
+        stat = subprocess.run(
+            ["git", "show", "--stat", "--format=", fix_sha],
+            cwd=Path(snapshot_root), capture_output=True, text=True,
+            timeout=10, check=True,
+        )
+        parts.append(stat.stdout.strip())
+    except (subprocess.SubprocessError, OSError):
+        pass
+    out = "\n\n".join(p for p in parts if p)
+    if len(out) > max_bytes:
+        out = out[:max_bytes] + "\n... [truncated]"
+    return out
+
+
 __all__ = [
     "run_semantic_judge",
+    "fetch_pr_diff_summary",
 ]
