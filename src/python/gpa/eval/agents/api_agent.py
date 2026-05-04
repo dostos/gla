@@ -367,6 +367,17 @@ class ApiAgent(AgentBackend):
 
         if mode == "with_gla":
             frame_id = tools["run_with_capture"]()
+            if frame_id is None:
+                # Live capture unavailable; agent has no live frame to query.
+                # Fall through to code_only so the executor is never built
+                # against a sentinel id (would 404 every call).
+                return self.run_code_only(
+                    scenario_description=description,
+                    source_code=source_code,
+                    source_path=source_path,
+                    extra_tools=extra_tools or None,
+                    system_prompt=system_prompt,
+                )
             executor = GpaToolExecutor(
                 base_url=os.environ.get("GPA_BASE_URL", "http://127.0.0.1:18080"),
                 token=os.environ.get("GPA_TOKEN", ""),
@@ -721,19 +732,29 @@ def build_agent_fn(
 
         if mode == "with_gla":
             frame_id = tools["run_with_capture"]()
-            executor = GpaToolExecutor(
-                base_url=os.environ.get("GPA_BASE_URL", "http://127.0.0.1:18080"),
-                token=os.environ.get("GPA_TOKEN", ""),
-                frame_id=frame_id,
-            )
-            result = agent.run_with_gla(
-                scenario_description=description,
-                source_code=source_code,
-                source_path=source_path,
-                tool_executor=executor,
-                extra_tools=extra_tools or None,
-                system_prompt=system_prompt,
-            )
+            if frame_id is None:
+                # Live capture unavailable — fall back to code_only.
+                result = agent.run_code_only(
+                    scenario_description=description,
+                    source_code=source_code,
+                    source_path=source_path,
+                    extra_tools=extra_tools or None,
+                    system_prompt=system_prompt,
+                )
+            else:
+                executor = GpaToolExecutor(
+                    base_url=os.environ.get("GPA_BASE_URL", "http://127.0.0.1:18080"),
+                    token=os.environ.get("GPA_TOKEN", ""),
+                    frame_id=frame_id,
+                )
+                result = agent.run_with_gla(
+                    scenario_description=description,
+                    source_code=source_code,
+                    source_path=source_path,
+                    tool_executor=executor,
+                    extra_tools=extra_tools or None,
+                    system_prompt=system_prompt,
+                )
         else:
             result = agent.run_code_only(
                 scenario_description=description,

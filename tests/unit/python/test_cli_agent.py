@@ -47,6 +47,30 @@ def test_run_with_gla_invokes_capture_and_subprocess(monkeypatch, tmp_path):
     assert "--model" in captured["argv"]
 
 
+def test_run_with_gla_graceful_when_capture_returns_none(monkeypatch, tmp_path):
+    """When run_with_capture returns None (e.g. no Bazel target / build
+    failure), the agent should still run the with_gla prompt but skip
+    pinning GPA_FRAME_ID. GPA_BASE_URL is still set so any gpa CLI
+    invocations the agent attempts get a sensible default."""
+    captured = {}
+    def fake_run(argv, *, input, capture_output, text, env, timeout):
+        captured["argv"] = argv
+        captured["env"] = env
+        captured["input"] = input
+        return subprocess.CompletedProcess(argv, 0, "", "")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    agent = CliAgent(spec=_SPEC)
+    scenario = _Scenario(source_path=str(tmp_path / "main.c"))
+    (tmp_path / "main.c").write_text("")
+    tools = {"run_with_capture": lambda: None}
+    result = agent.run(scenario, "with_gla", tools)
+    assert result.diagnosis.startswith("DIAGNOSIS:")
+    assert "GPA_FRAME_ID" not in captured["env"]
+    assert captured["env"].get("GPA_BASE_URL")  # default applied
+    # The with_gla prompt block was still emitted
+    assert "gpa drawcalls" in captured["input"]
+
+
 def test_run_code_only_omits_capture(monkeypatch, tmp_path):
     captured = {}
     def fake_run(argv, *, input, **kw):

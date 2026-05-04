@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
+
+_log = logging.getLogger(__name__)
 
 from gpa.eval.metrics import DiagnosisScorer, EvalResult
 from gpa.eval.runner import ScenarioRunner
@@ -244,7 +247,17 @@ class EvalHarness:
             "read_scenario_file": lambda path: self._read_scenario_file(scenario, path),
         }
         if mode == "with_gla":
-            tools["run_with_capture"] = lambda: self.runner.run_with_capture(scenario)
+            def _safe_run_with_capture():
+                try:
+                    return self.runner.run_with_capture(scenario)
+                except (RuntimeError, FileNotFoundError, OSError) as exc:
+                    _log.warning(
+                        "scenario %s: live capture unavailable (%s); "
+                        "with_gla will run without GPA_FRAME_ID",
+                        scenario.id, exc,
+                    )
+                    return None
+            tools["run_with_capture"] = _safe_run_with_capture
 
         # Add snapshot tools when the scenario references an upstream snapshot.
         # Agents should be able to walk, read, and grep across the full

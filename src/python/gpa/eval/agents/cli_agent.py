@@ -24,10 +24,15 @@ class CliAgent(AgentBackend):
     def run(self, scenario, mode: str, tools: dict) -> AgentResult:
         env = os.environ.copy()
 
-        # With-gla mode: capture frame first; pin GPA_FRAME_ID for the agent.
+        # With-gla mode: try live capture; pin GPA_FRAME_ID when we have one.
+        # If capture is unavailable (no Bazel target, build error, no engine,
+        # etc.), the harness's run_with_capture lambda returns None — we
+        # leave GPA_FRAME_ID unset so any `gpa` CLI calls fall back to env /
+        # current-frame defaults instead of pointing at a sentinel id.
         if mode == "with_gla":
             frame_id = tools["run_with_capture"]()
-            env["GPA_FRAME_ID"] = str(frame_id)
+            if frame_id is not None:
+                env["GPA_FRAME_ID"] = str(frame_id)
             env.setdefault("GPA_BASE_URL", os.environ.get(
                 "GPA_BASE_URL", "http://127.0.0.1:18080",
             ))
