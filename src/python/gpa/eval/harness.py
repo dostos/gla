@@ -112,6 +112,7 @@ class EvalHarness:
         # metadata. Round-12 surfaced that consumer-misuse / user-config
         # scenarios still patch framework code; their fix.files is just as
         # scoreable as a framework-internal scenario's.
+        score_result = None
         if scenario.fix is not None and scenario.fix.files:
             try:
                 from gpa.eval.scorer import (
@@ -122,9 +123,8 @@ class EvalHarness:
                 # framework-internal prompts ask for JSON, so missing JSON
                 # is itself signal worth scoring (records solved=False).
                 # Other classes (advisor format) don't ask for JSON;
-                # missing JSON is expected, so leave fields None for the
-                # prose scorer / aggregation to handle. This keeps
-                # file_score distributions clean.
+                # missing JSON is expected, so leave file_score None and
+                # let the prose scorer below handle them.
                 should_score = (
                     bug_class == "framework-internal" or parsed_json
                 )
@@ -136,20 +136,35 @@ class EvalHarness:
                             snapshot_root = self._ensure_snapshot(scenario)
                     except Exception:
                         snapshot_root = None
-                    sr = score_maintainer_patch(
+                    score_result = score_maintainer_patch(
                         parsed if parsed is not None else diagnosis_text,
                         scenario.fix,
                         snapshot_root=snapshot_root,
                     )
-                    maintainer_solved = sr.solved
-                    file_score = sr.file_score
-                    file_hits = list(sr.file_hits)
-                    file_misses = list(sr.file_misses)
-                    file_extras = list(sr.file_extras)
-                    out_of_tree = list(sr.out_of_tree)
+                    maintainer_solved = score_result.solved
+                    file_score = score_result.file_score
+                    file_hits = list(score_result.file_hits)
+                    file_misses = list(score_result.file_misses)
+                    file_extras = list(score_result.file_extras)
+                    out_of_tree = list(score_result.out_of_tree)
             except Exception:
                 # Scoring is best-effort; don't fail the run on scorer bugs.
                 pass
+
+        # ScoreVerdict v2: orchestrate file_level + prose + gave-up. Best-
+        # effort; verdict stays None on failure rather than masking the
+        # legacy fields above.
+        verdict_dict = None
+        try:
+            from dataclasses import asdict
+            from gpa.eval.scorer import score_run
+            verdict_dict = asdict(score_run(
+                diagnosis_text=diagnosis_text,
+                fix=scenario.fix,
+                file_score=score_result,
+            ))
+        except Exception:
+            verdict_dict = None
 
         result = EvalResult(
             scenario_id=scenario_id,
@@ -173,6 +188,7 @@ class EvalHarness:
             file_extras=file_extras,
             out_of_tree=out_of_tree,
             parsed_json=parsed_json,
+            verdict=verdict_dict,
         )
         self.results.append(result)
         return result

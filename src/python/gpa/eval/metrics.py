@@ -50,6 +50,11 @@ class EvalResult:
     out_of_tree: Optional[list] = None         # ScoreResult.out_of_tree
     parsed_json: Optional[bool] = None         # True if agent emitted parseable JSON tail
 
+    # ScoreVerdict v2 (file_level + prose + gave-up orchestrator). Stored
+    # as a dict for trivial JSON round-tripping. Keys mirror
+    # `gpa.eval.scorer.ScoreVerdict` fields.
+    verdict: Optional[dict] = None
+
     def to_dict(self) -> dict:
         return asdict(self)
 

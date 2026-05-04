@@ -371,6 +371,113 @@ def judge_semantic_match(
 
 __all__ = [
     "ScoreResult",
+    "ScoreVerdict",
     "score_maintainer_patch",
     "judge_semantic_match",
+    "score_run",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Verdict orchestrator (file-level → prose → gave-up veto)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ScoreVerdict:
+    """Final verdict for a single run, combining file-level + prose +
+    gave-up signals.
+
+    `scorer` records which leg produced the binding answer:
+      - "file_level": JSON tail parsed AND ScoreResult.solved=True.
+      - "prose":      no JSON or file_level failed; prose extractor solved.
+      - "gave_up":    bail-out phrase vetoed any positive verdict.
+      - "no_signal":  zero hits, no give-up, no signal at all.
+
+    `confidence` is high for definitive ✓/✗, medium for prose-only
+    ✓ (smaller signal set), low for `needs_review` rows.
+    """
+    scorer: str               # file_level | prose | gave_up | no_signal
+    solved: bool
+    confidence: str           # high | medium | low
+    file_score: Optional[float] = None
+    prose_recall: Optional[float] = None
+    prose_precision: Optional[float] = None
+    gave_up: bool = False
+    needs_review: bool = False
+    reasoning: str = ""
+
+
+def score_run(
+    *,
+    diagnosis_text: str,
+    fix: Optional[FixMetadata],
+    file_score: Optional[ScoreResult],
+) -> ScoreVerdict:
+    """Combine file-level + prose + gave-up signals into a single verdict.
+
+    Precedence (top wins):
+      1. gave_up phrase in tail → solved=False, scorer=gave_up, conf=high.
+      2. file_score.solved → solved=True, scorer=file_level, conf=high.
+      3. prose extractor solved (recall ≥ 0.5 AND precision ≥ 0.25)
+         → solved=True, scorer=prose, conf=medium.
+      4. prose any_hit but below threshold → solved=False,
+         needs_review=True, conf=low.
+      5. no signal at all → solved=False, scorer=no_signal, conf=high.
+
+    The LLM-judge tier (2c) is intentionally not wired here; it belongs
+    behind an opt-in flag and a separate cost budget. See task #43.
+    """
+    from gpa.eval.scorer_giveup import is_gave_up
+    from gpa.eval.scorer_prose import score_prose
+
+    gave_up = is_gave_up(diagnosis_text)
+    if gave_up:
+        return ScoreVerdict(
+            scorer="gave_up", solved=False, confidence="high",
+            gave_up=True,
+            reasoning="diagnosis tail matches a bail-out pattern",
+        )
+
+    if file_score is not None and file_score.solved:
+        return ScoreVerdict(
+            scorer="file_level", solved=True, confidence="high",
+            file_score=file_score.file_score,
+            reasoning="file_level scorer solved=True",
+        )
+
+    if fix is None or not getattr(fix, "files", None):
+        return ScoreVerdict(
+            scorer="no_signal", solved=False, confidence="high",
+            reasoning="no fix.files ground truth to score against",
+        )
+
+    prose = score_prose(diagnosis_text or "", list(fix.files))
+    if prose.solved:
+        return ScoreVerdict(
+            scorer="prose", solved=True, confidence="medium",
+            file_score=file_score.file_score if file_score else None,
+            prose_recall=prose.recall, prose_precision=prose.precision,
+            reasoning=(
+                f"prose extractor recall={prose.recall:.2f} "
+                f"precision={prose.precision:.2f}"
+            ),
+        )
+    if prose.any_hit:
+        return ScoreVerdict(
+            scorer="prose", solved=False, confidence="low",
+            file_score=file_score.file_score if file_score else None,
+            prose_recall=prose.recall, prose_precision=prose.precision,
+            needs_review=True,
+            reasoning=(
+                f"prose any_hit but below threshold "
+                f"(recall={prose.recall:.2f}, "
+                f"precision={prose.precision:.2f})"
+            ),
+        )
+    return ScoreVerdict(
+        scorer="no_signal", solved=False, confidence="high",
+        file_score=file_score.file_score if file_score else None,
+        prose_recall=prose.recall, prose_precision=prose.precision,
+        reasoning="no file-level or prose hits",
+    )
