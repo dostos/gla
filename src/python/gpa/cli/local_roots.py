@@ -102,12 +102,19 @@ def grep_root_json(
     glob: str,
     max_matches: int,
     hard_max: int,
+    context: int = 0,
     print_stream: TextIO = sys.stdout,
     err_stream: TextIO = sys.stderr,
 ) -> int:
     """Regex-search files under root (optionally filtered by subdir/glob).
 
-    Writes JSON ``{matches:[{path,line,text}], truncated}`` and returns rc.
+    Writes JSON ``{matches:[{path,line,text[,context_before,context_after]}],
+    truncated}`` and returns rc.
+
+    `context` controls grep -C: when >0, each match carries
+    ``context_before`` and ``context_after`` arrays (up to N lines each,
+    excluding the matched line). When 0 (default) the older shape is
+    preserved for back-compat with existing consumers.
     """
     try:
         base = resolve_relative(root, subdir) if subdir else root.path
@@ -115,6 +122,7 @@ def grep_root_json(
         print(str(e), file=err_stream)
         return 2
     cap = min(max(1, max_matches), hard_max)
+    ctx = max(0, int(context))
     try:
         regex = re.compile(pattern)
     except re.error as e:
@@ -132,12 +140,19 @@ def grep_root_json(
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        for lineno, line in enumerate(text.splitlines(), start=1):
+        lines = text.splitlines()
+        for idx, line in enumerate(lines):
             if regex.search(line):
                 rel = path.relative_to(root.path).as_posix()
-                matches.append(
-                    {"path": rel, "line": lineno, "text": line[:500]}
-                )
+                m: dict = {"path": rel, "line": idx + 1, "text": line[:500]}
+                if ctx > 0:
+                    m["context_before"] = [
+                        ln[:500] for ln in lines[max(0, idx - ctx):idx]
+                    ]
+                    m["context_after"] = [
+                        ln[:500] for ln in lines[idx + 1:idx + 1 + ctx]
+                    ]
+                matches.append(m)
                 if len(matches) >= cap:
                     truncated = True
                     break
@@ -145,4 +160,176 @@ def grep_root_json(
             break
     obj = {"matches": matches, "truncated": truncated}
     print(json.dumps(obj, ensure_ascii=False), file=print_stream)
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Symbol-aware definition finder. Regex-based (no LSP/ctags), but knows
+# enough per-language definition shapes that one call replaces a typical
+# grep+read chain ("where is `Painter` defined?" → one match instead of
+# 30 noise hits).
+# ---------------------------------------------------------------------------
+
+
+def _defn_pattern(template: str, name: str) -> "re.Pattern":
+    """Substitute `{NAME}` in `template` with `re.escape(name)`."""
+    return re.compile(template.replace("{NAME}", re.escape(name)))
+
+
+_LANG_DEFS = {
+    "c": {
+        "exts": (".c", ".h"),
+        "patterns": [
+            ("function", r"^[\w\s*<>:&]+\b{NAME}\s*\([^;]*\)\s*\{?\s*$"),
+            ("typedef",  r"\btypedef\b[^;]*\b{NAME}\s*[;\(]"),
+            ("struct",   r"\bstruct\s+{NAME}\b"),
+        ],
+    },
+    "cpp": {
+        "exts": (".cpp", ".cc", ".cxx", ".hpp", ".hh", ".h", ".inc"),
+        "patterns": [
+            ("function",  r"^[\w\s*<>:&,]+\b{NAME}\s*\([^;]*\)\s*\{?\s*$"),
+            ("class",     r"\bclass\s+{NAME}\b"),
+            ("struct",    r"\bstruct\s+{NAME}\b"),
+            ("namespace", r"\bnamespace\s+{NAME}\b"),
+        ],
+    },
+    "ts": {
+        "exts": (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"),
+        "patterns": [
+            ("function", r"\bfunction\s+\*?{NAME}\b"),
+            ("class",    r"\bclass\s+{NAME}\b"),
+            ("const",    r"^\s*(?:export\s+)?(?:const|let|var)\s+{NAME}\b"),
+            ("method",   r"^\s+(?:public\s+|private\s+|protected\s+|static\s+)*"
+                          r"{NAME}\s*\([^;]*\)\s*\{"),
+        ],
+    },
+    "py": {
+        "exts": (".py",),
+        "patterns": [
+            ("function", r"^\s*(?:async\s+)?def\s+{NAME}\s*\("),
+            ("class",    r"^\s*class\s+{NAME}\b"),
+        ],
+    },
+    "rs": {
+        "exts": (".rs",),
+        "patterns": [
+            ("function", r"\bfn\s+{NAME}\b"),
+            ("struct",   r"\bstruct\s+{NAME}\b"),
+            ("trait",    r"\btrait\s+{NAME}\b"),
+            ("enum",     r"\benum\s+{NAME}\b"),
+        ],
+    },
+    "go": {
+        "exts": (".go",),
+        "patterns": [
+            ("function", r"\bfunc\s+(?:\([^)]*\)\s*)?{NAME}\b"),
+            ("type",     r"\btype\s+{NAME}\b"),
+        ],
+    },
+    "gdscript": {
+        "exts": (".gd",),
+        "patterns": [
+            ("function", r"^\s*(?:static\s+)?func\s+{NAME}\s*\("),
+            ("class",    r"^class_name\s+{NAME}\b"),
+            ("signal",   r"^signal\s+{NAME}\b"),
+        ],
+    },
+    "glsl": {
+        "exts": (".glsl", ".vert", ".frag", ".comp", ".geom", ".gdshader"),
+        "patterns": [
+            ("function", r"^\s*\w+\s+{NAME}\s*\("),
+        ],
+    },
+}
+
+
+def _langs_for_file(path: Path) -> list[str]:
+    """Return the lang keys whose `exts` claim this file."""
+    suffix = path.suffix.lower()
+    return [lang for lang, spec in _LANG_DEFS.items() if suffix in spec["exts"]]
+
+
+def find_symbol_json(
+    *,
+    root: LocalRoot,
+    name: str,
+    subdir: str,
+    lang: str,
+    max_matches: int,
+    print_stream: TextIO = sys.stdout,
+    err_stream: TextIO = sys.stderr,
+) -> int:
+    """Scan files under root for definition-shaped lines naming `name`.
+
+    Returns ``{matches: [{path, line, kind, signature, lang}], truncated}``
+    in JSON.
+    """
+    try:
+        base = resolve_relative(root, subdir) if subdir else root.path
+    except LocalRootError as e:
+        print(str(e), file=err_stream)
+        return 2
+    if not name:
+        print("symbol name is empty", file=err_stream)
+        return 2
+
+    if lang and lang not in _LANG_DEFS:
+        print(
+            f"unknown lang {lang!r}; known: {sorted(_LANG_DEFS)}",
+            file=err_stream,
+        )
+        return 2
+
+    # Compile per-lang patterns once.
+    compiled: dict[str, list[tuple[str, "re.Pattern"]]] = {
+        lng: [(kind, _defn_pattern(tpl, name)) for kind, tpl in spec["patterns"]]
+        for lng, spec in _LANG_DEFS.items()
+    }
+
+    matches: list[dict] = []
+    truncated = False
+    cap = max(1, int(max_matches))
+    for path in base.rglob("*"):
+        if truncated:
+            break
+        if not path.is_file():
+            continue
+        if lang:
+            # Restrict to files whose extension belongs to that lang.
+            if path.suffix.lower() not in _LANG_DEFS[lang]["exts"]:
+                continue
+            candidate_langs = [lang]
+        else:
+            candidate_langs = _langs_for_file(path)
+        if not candidate_langs:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        rel = path.relative_to(root.path).as_posix()
+        for idx, line in enumerate(text.splitlines()):
+            for lng in candidate_langs:
+                for kind, pat in compiled[lng]:
+                    if pat.search(line):
+                        matches.append({
+                            "path": rel, "line": idx + 1, "kind": kind,
+                            "signature": line.strip()[:300],
+                            "lang": lng,
+                        })
+                        break
+                else:
+                    continue
+                break
+            if len(matches) >= cap:
+                truncated = True
+                break
+    print(
+        json.dumps(
+            {"matches": matches, "truncated": truncated},
+            ensure_ascii=False,
+        ),
+        file=print_stream,
+    )
     return 0

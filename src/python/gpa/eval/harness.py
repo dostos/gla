@@ -26,7 +26,7 @@ AgentFn = Callable[
 
 _ALL_MODES = ["with_gla", "code_only"]
 
-_SNAPSHOT_MAX_BYTES = 200 * 1024  # 200 KB
+_SNAPSHOT_MAX_BYTES = 512 * 1024  # 512 KB — godot files run 369–402 KB
 
 
 class EvalHarness:

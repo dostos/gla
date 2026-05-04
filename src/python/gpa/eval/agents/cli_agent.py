@@ -140,9 +140,10 @@ class CliAgent(AgentBackend):
         )
         upstream_block = (
             "Upstream-snapshot tools (GPA_UPSTREAM_ROOT is set):\n"
-            "- gpa upstream list [SUBDIR]         — orient inside the framework tree\n"
-            "- gpa upstream grep PATTERN          — grep upstream snapshot\n"
-            "- gpa upstream read PATH             — read a file from upstream snapshot\n"
+            "- gpa upstream list [SUBDIR]                        — orient inside the framework tree\n"
+            "- gpa upstream grep PATTERN [-C N]                  — grep with N lines of context\n"
+            "- gpa upstream find-symbol NAME [--lang LANG]       — locate a definition (function/class/struct/etc)\n"
+            "- gpa upstream read PATH                             — read a file (cap 512 KB)\n"
         )
         source_block = (
             "Source tools:\n"
