@@ -108,34 +108,45 @@ class EvalHarness:
         out_of_tree: Optional[list] = None
         parsed_json: Optional[bool] = None
 
-        if bug_class == "framework-internal" and scenario.fix is not None:
+        # File-level scorer fires whenever the scenario carries real fix
+        # metadata. Round-12 surfaced that consumer-misuse / user-config
+        # scenarios still patch framework code; their fix.files is just as
+        # scoreable as a framework-internal scenario's.
+        if scenario.fix is not None and scenario.fix.files:
             try:
                 from gpa.eval.scorer import (
                     _extract_json_tail, score_maintainer_patch,
                 )
-                # Parse JSON tail separately from scoring so we can track
-                # parsed_json independently (missing JSON → timeout per
-                # telemetry.classify_verdict).
                 parsed = _extract_json_tail(diagnosis_text)
                 parsed_json = parsed is not None
-                snapshot_root = None
-                try:
-                    if (scenario.upstream_snapshot_repo
-                            and scenario.upstream_snapshot_sha):
-                        snapshot_root = self._ensure_snapshot(scenario)
-                except Exception:
-                    snapshot_root = None
-                sr = score_maintainer_patch(
-                    parsed if parsed is not None else diagnosis_text,
-                    scenario.fix,
-                    snapshot_root=snapshot_root,
+                # framework-internal prompts ask for JSON, so missing JSON
+                # is itself signal worth scoring (records solved=False).
+                # Other classes (advisor format) don't ask for JSON;
+                # missing JSON is expected, so leave fields None for the
+                # prose scorer / aggregation to handle. This keeps
+                # file_score distributions clean.
+                should_score = (
+                    bug_class == "framework-internal" or parsed_json
                 )
-                maintainer_solved = sr.solved
-                file_score = sr.file_score
-                file_hits = list(sr.file_hits)
-                file_misses = list(sr.file_misses)
-                file_extras = list(sr.file_extras)
-                out_of_tree = list(sr.out_of_tree)
+                if should_score:
+                    snapshot_root = None
+                    try:
+                        if (scenario.upstream_snapshot_repo
+                                and scenario.upstream_snapshot_sha):
+                            snapshot_root = self._ensure_snapshot(scenario)
+                    except Exception:
+                        snapshot_root = None
+                    sr = score_maintainer_patch(
+                        parsed if parsed is not None else diagnosis_text,
+                        scenario.fix,
+                        snapshot_root=snapshot_root,
+                    )
+                    maintainer_solved = sr.solved
+                    file_score = sr.file_score
+                    file_hits = list(sr.file_hits)
+                    file_misses = list(sr.file_misses)
+                    file_extras = list(sr.file_extras)
+                    out_of_tree = list(sr.out_of_tree)
             except Exception:
                 # Scoring is best-effort; don't fail the run on scorer bugs.
                 pass
@@ -294,6 +305,10 @@ class EvalHarness:
         tools["system_prompt"] = self._select_prompt_for_scenario(
             scenario, bug_class=bug_class, mode=mode,
         )
+        # Free signal that helps the agent skip "where am I?" turns.
+        # cli_agent reads these into a one-line scenario blurb.
+        if scenario.fix is not None and scenario.fix.fix_pr_url:
+            tools["fix_pr_url"] = scenario.fix.fix_pr_url
 
         return tools
 

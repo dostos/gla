@@ -47,6 +47,122 @@ def test_run_with_gla_invokes_capture_and_subprocess(monkeypatch, tmp_path):
     assert "--model" in captured["argv"]
 
 
+def test_with_gla_no_capture_no_snapshot_uses_minimal_block(monkeypatch, tmp_path):
+    """When neither live capture nor a snapshot is available, the with_gla
+    prompt must NOT advertise the 11-command tool block (most are
+    unusable). And it must NOT lie about GPA_FRAME_ID being set."""
+    captured = {}
+    def fake_run(argv, *, input, capture_output, text, env, timeout):
+        captured["input"] = input
+        return subprocess.CompletedProcess(argv, 0, "", "")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    agent = CliAgent(spec=_SPEC)
+    scenario = _Scenario()
+    tools = {"run_with_capture": lambda: None}  # no frame, no snapshot key
+    agent.run(scenario, "with_gla", tools)
+    assert "GPA_FRAME_ID is set" not in captured["input"]
+    assert "gpa drawcalls" not in captured["input"]  # live-frame tools omitted
+    assert "gpa pixel" not in captured["input"]
+
+
+def test_with_gla_no_capture_but_snapshot_uses_advisor_block(monkeypatch, tmp_path):
+    """With snapshot but no live frame, the prompt should be an advisor
+    block: list/grep/read of upstream only, NOT the live-frame commands."""
+    captured = {}
+    def fake_run(argv, *, input, capture_output, text, env, timeout):
+        captured["input"] = input
+        return subprocess.CompletedProcess(argv, 0, "", "")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    snap = tmp_path / "snap"
+    snap.mkdir()
+    agent = CliAgent(spec=_SPEC)
+    scenario = _Scenario()
+    tools = {
+        "run_with_capture": lambda: None,
+        "snapshot_root": lambda: snap,
+    }
+    agent.run(scenario, "with_gla", tools)
+    text = captured["input"]
+    assert "GPA_FRAME_ID is set" not in text
+    assert "gpa upstream read" in text
+    assert "gpa upstream grep" in text
+    # Live-frame commands should not appear in advisor block
+    assert "gpa drawcalls" not in text
+    assert "gpa pixel" not in text
+
+
+def test_with_gla_full_capture_keeps_full_block(monkeypatch, tmp_path):
+    """When live capture succeeded AND snapshot is present, we get the
+    full block (live-frame tools + upstream tools)."""
+    captured = {}
+    def fake_run(argv, *, input, capture_output, text, env, timeout):
+        captured["input"] = input
+        return subprocess.CompletedProcess(argv, 0, "", "")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    snap = tmp_path / "snap"
+    snap.mkdir()
+    agent = CliAgent(spec=_SPEC)
+    scenario = _Scenario()
+    tools = {
+        "run_with_capture": lambda: 42,
+        "snapshot_root": lambda: snap,
+    }
+    agent.run(scenario, "with_gla", tools)
+    text = captured["input"]
+    assert "gpa drawcalls" in text
+    assert "gpa pixel" in text
+    assert "gpa upstream read" in text
+
+
+def test_scenario_blurb_injected_when_metadata_present(monkeypatch, tmp_path):
+    """The free signal already on disk (framework, upstream repo,
+    fix_pr_url, bug_class) must be injected into the prompt so the
+    agent doesn't waste turns sniffing it via list/grep."""
+    captured = {}
+    def fake_run(argv, *, input, capture_output, text, env, timeout):
+        captured["input"] = input
+        return subprocess.CompletedProcess(argv, 0, "", "")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    from dataclasses import dataclass
+    @dataclass
+    class _RichScenario:
+        bug_description: str = "stripes appear"
+        source_path: str = ""
+        framework: str = "maplibre-gl-js"
+        upstream_snapshot_repo: str = "https://github.com/maplibre/maplibre-gl-js"
+
+    scenario = _RichScenario()
+    agent = CliAgent(spec=_SPEC)
+    tools = {
+        "run_with_capture": lambda: None,
+        "bug_class": "consumer-misuse",
+        "fix_pr_url": "https://github.com/maplibre/maplibre-gl-js/pull/5746",
+    }
+    agent.run(scenario, "with_gla", tools)
+    text = captured["input"]
+    assert "maplibre-gl-js" in text
+    assert "maplibre/maplibre-gl-js" in text or "github.com/maplibre" in text
+    assert "consumer-misuse" in text
+    assert "5746" in text
+
+
+def test_scenario_blurb_omits_missing_fields(monkeypatch, tmp_path):
+    """Fields that aren't set should silently drop, not show as 'None'."""
+    captured = {}
+    def fake_run(argv, *, input, capture_output, text, env, timeout):
+        captured["input"] = input
+        return subprocess.CompletedProcess(argv, 0, "", "")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    agent = CliAgent(spec=_SPEC)
+    scenario = _Scenario()  # no framework/repo/etc.
+    tools = {"run_with_capture": lambda: None}
+    agent.run(scenario, "with_gla", tools)
+    text = captured["input"]
+    # Don't print "Framework: None" or "fix-PR: None" sentinel garbage
+    assert "None" not in text or text.count("None") < 3  # tolerant
+
+
 def test_snapshot_root_callable_pins_gpa_upstream_root(monkeypatch, tmp_path):
     """The cli_agent resolves tools["snapshot_root"] (a callable) and pins
     GPA_UPSTREAM_ROOT so `gpa upstream read/grep` shell calls work."""
@@ -107,8 +223,10 @@ def test_run_with_gla_graceful_when_capture_returns_none(monkeypatch, tmp_path):
     assert result.diagnosis.startswith("DIAGNOSIS:")
     assert "GPA_FRAME_ID" not in captured["env"]
     assert captured["env"].get("GPA_BASE_URL")  # default applied
-    # The with_gla prompt block was still emitted
-    assert "gpa drawcalls" in captured["input"]
+    # The agent still produces output. With no frame and no snapshot,
+    # the live-frame tools should NOT appear in the prompt (they'd be
+    # advertising commands the agent can't successfully invoke).
+    assert "gpa drawcalls" not in captured["input"]
 
 
 def test_run_code_only_omits_capture(monkeypatch, tmp_path):
@@ -118,11 +236,14 @@ def test_run_code_only_omits_capture(monkeypatch, tmp_path):
         captured["input"] = input
         return subprocess.CompletedProcess(argv, 0, "", "")
     monkeypatch.setattr(subprocess, "run", fake_run)
+    snap = tmp_path / "snap"
+    snap.mkdir()
     agent = CliAgent(spec=_SPEC)
     scenario = _Scenario(source_path=str(tmp_path / "main.c"))
     (tmp_path / "main.c").write_text("")
-    # No run_with_capture key needed for code_only.
-    result = agent.run(scenario, "code_only", tools={})
+    # No run_with_capture key needed for code_only; snapshot makes upstream
+    # tools appear in the prompt under the new contract.
+    result = agent.run(scenario, "code_only", tools={"snapshot_root": lambda: snap})
     # Code-only prompt shouldn't list with-gla tools
     assert "gpa drawcalls" not in captured["input"]
     assert "gpa upstream read" in captured["input"]

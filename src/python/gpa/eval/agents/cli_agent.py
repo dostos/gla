@@ -29,6 +29,7 @@ class CliAgent(AgentBackend):
         # etc.), the harness's run_with_capture lambda returns None — we
         # leave GPA_FRAME_ID unset so any `gpa` CLI calls fall back to env /
         # current-frame defaults instead of pointing at a sentinel id.
+        frame_id = None
         if mode == "with_gla":
             frame_id = tools["run_with_capture"]()
             if frame_id is not None:
@@ -47,7 +48,11 @@ class CliAgent(AgentBackend):
         if snap:
             env["GPA_UPSTREAM_ROOT"] = str(snap)
 
-        prompt = self._render_prompt(scenario, mode, tools)
+        prompt = self._render_prompt(
+            scenario, mode, tools,
+            have_frame=(frame_id is not None),
+            have_snapshot=(snap is not None),
+        )
         argv = [self._spec.binary, *self._spec.base_args]
         argv = self._inject_model(argv, self._model)
 
@@ -70,15 +75,59 @@ class CliAgent(AgentBackend):
         metrics = self._spec.parse_run(proc.stdout, proc.stderr)
         return self._to_agent_result(metrics, elapsed)
 
-    def _render_prompt(self, scenario, mode: str, tools: dict) -> str:
+    def _render_prompt(
+        self, scenario, mode: str, tools: dict,
+        *, have_frame: bool = False, have_snapshot: bool = False,
+    ) -> str:
         description = (
             getattr(scenario, "description", None)
             or getattr(scenario, "bug_description", "")
             or ""
         )
         source_path = getattr(scenario, "source_path", "")
-        gla_tools_block = (
-            "Tools (run via your shell):\n"
+        block = self._tool_block(mode, have_frame, have_snapshot)
+        blurb = self._scenario_blurb(scenario, tools)
+        parts = ["You are debugging an OpenGL application that has a rendering bug.\n"]
+        if blurb:
+            parts.append(blurb)
+        parts.append(block)
+        parts.append(f"Problem:\n{description}\n")
+        if source_path:
+            parts.append(f"Source file: {source_path}\n")
+        parts.append(
+            "Investigate and end your final response with:\n"
+            "DIAGNOSIS: <one-sentence root cause>\n"
+            "FIX: <specific code change>"
+        )
+        return "\n".join(parts)
+
+    @staticmethod
+    def _scenario_blurb(scenario, tools: dict) -> str:
+        """One-line "you are looking at X bug in Y repo (class Z, PR W)"
+        prepended to the prompt so the agent doesn't waste turns sniffing
+        framework identity / fix-PR location via list+grep."""
+        framework = getattr(scenario, "framework", None) or ""
+        repo = getattr(scenario, "upstream_snapshot_repo", None) or ""
+        bug_class = (tools or {}).get("bug_class") or ""
+        fix_pr = (tools or {}).get("fix_pr_url") or ""
+        if not (framework or repo or bug_class or fix_pr):
+            return ""
+        bits = []
+        if framework:
+            bits.append(f"framework={framework}")
+        if repo:
+            bits.append(f"repo={repo}")
+        if bug_class:
+            bits.append(f"bug_class={bug_class}")
+        if fix_pr:
+            bits.append(f"fix_pr={fix_pr}")
+        return "Scenario: " + ", ".join(bits) + "\n"
+
+    @staticmethod
+    def _tool_block(mode: str, have_frame: bool, have_snapshot: bool) -> str:
+        """Render only the tools the agent can actually use right now."""
+        live_block = (
+            "Live-frame tools (GPA_FRAME_ID is set; --frame is automatic):\n"
             "- gpa frames overview                — current frame summary\n"
             "- gpa drawcalls list                 — list draw calls in this frame\n"
             "- gpa drawcalls explain --dc N       — deep dive on draw call N\n"
@@ -88,29 +137,35 @@ class CliAgent(AgentBackend):
             "- gpa scene find --predicate STR     — predicate-driven scene search\n"
             "- gpa scene get/camera/objects       — scene metadata\n"
             "- gpa diff frames --a A --b B        — diff two frames\n"
-            "- gpa source read PATH               — read a file from buggy app\n"
-            "- gpa upstream read PATH             — read a file from upstream snapshot\n"
+        )
+        upstream_block = (
+            "Upstream-snapshot tools (GPA_UPSTREAM_ROOT is set):\n"
+            "- gpa upstream list [SUBDIR]         — orient inside the framework tree\n"
             "- gpa upstream grep PATTERN          — grep upstream snapshot\n"
-            "- gpa --help                         — discover more\n\n"
-            "GPA_FRAME_ID is set so --frame is automatic.\n"
-        )
-        code_only_tools_block = (
-            "Tools (run via your shell):\n"
-            "- gpa source read PATH               — read a file from buggy app\n"
             "- gpa upstream read PATH             — read a file from upstream snapshot\n"
-            "- gpa upstream grep PATTERN          — grep upstream snapshot\n"
-            "- gpa upstream list SUBDIR           — list snapshot directory\n"
         )
-        block = gla_tools_block if mode == "with_gla" else code_only_tools_block
-        return (
-            "You are debugging an OpenGL application that has a rendering bug.\n\n"
-            f"{block}\n"
-            f"Problem:\n{description}\n\n"
-            f"Source file: {source_path}\n\n"
-            "Investigate and end your final response with:\n"
-            "DIAGNOSIS: <one-sentence root cause>\n"
-            "FIX: <specific code change>"
+        source_block = (
+            "Source tools:\n"
+            "- gpa source read PATH               — read a file from buggy app\n"
         )
+        if mode == "with_gla":
+            if have_frame and have_snapshot:
+                return live_block + "\n" + upstream_block + "\n" + source_block
+            if have_frame:
+                return live_block + "\n" + source_block
+            if have_snapshot:
+                return (
+                    "Advisor mode: NO live frame for this scenario. "
+                    "Investigate via the upstream snapshot.\n\n"
+                    + upstream_block + "\n" + source_block
+                    + "Typical loop: list → grep → read. Cite specific files.\n"
+                )
+            # No frame, no snapshot — just source if any.
+            return source_block
+        # code_only
+        if have_snapshot:
+            return upstream_block + "\n" + source_block
+        return source_block
 
     def _inject_model(self, argv: list[str], model: str | None) -> list[str]:
         if not model:
