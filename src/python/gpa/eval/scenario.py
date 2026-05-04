@@ -232,6 +232,27 @@ def _extract_fix(diagnosis_text: str) -> str:
     return diagnosis_text
 
 
+def _load_scenario_yaml(scenario_dir: Path) -> dict:
+    """Read scenario.yaml next to scenario.md, if present.
+
+    Returns a dict on success, an empty dict on absent / unparseable yaml.
+    The yaml stores codex-mining metadata (taxonomy, source repo, mined_at,
+    etc.); the loader uses it to backfill fields that the .md doesn't carry.
+    """
+    yaml_path = scenario_dir / "scenario.yaml"
+    if not yaml_path.exists():
+        return {}
+    try:
+        data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        _log.warning(
+            "scenario %s: scenario.yaml is unparseable (%s); ignoring",
+            scenario_dir.name, exc,
+        )
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def _parse_upstream_snapshot(section_text: str) -> tuple[Optional[str], Optional[str], list[str]]:
     """Parse `## Upstream Snapshot` body into (repo, sha, relevant_files).
 
@@ -471,6 +492,34 @@ class ScenarioLoader:
         fix_meta: Optional[FixMetadata] = None
         if "fix" in sections:
             fix_meta = _parse_fix_section(sections["fix"], scenario_id)
+
+        # Backfill missing md-section fields from scenario.yaml + fix metadata.
+        # Codex-mined scenarios (rfc2ac5_/r5211bd_) carry taxonomy + source
+        # repo in scenario.yaml and fix info in scenario.md, but never emit a
+        # `## Upstream Snapshot` section. Without backfill the harness can't
+        # clone the upstream repo and the agent gets no `gpa upstream` tools.
+        yaml_data = _load_scenario_yaml(scenario_dir)
+        if framework is None or framework == "":
+            tax_fw = ((yaml_data.get("taxonomy") or {}).get("framework"))
+            if isinstance(tax_fw, str) and tax_fw:
+                framework = tax_fw
+        if upstream_repo is None:
+            src_repo = ((yaml_data.get("source") or {}).get("repo"))
+            if isinstance(src_repo, str) and "/" in src_repo:
+                upstream_repo = f"https://github.com/{src_repo}"
+        if upstream_sha is None and fix_meta is not None:
+            # Prefer parent (= bug state). Fall back to fix_sha; this shows
+            # the post-fix tree to the agent and weakens eval signal — flag
+            # for the mining pipeline to start populating fix_parent_sha.
+            if fix_meta.fix_parent_sha:
+                upstream_sha = fix_meta.fix_parent_sha
+            elif fix_meta.fix_sha:
+                upstream_sha = fix_meta.fix_sha
+                _log.info(
+                    "scenario %s: using fix_sha as upstream snapshot "
+                    "(no fix_parent_sha recorded; agent will see post-fix tree)",
+                    scenario_id,
+                )
 
         return ScenarioMetadata(
             id=scenario_id,
