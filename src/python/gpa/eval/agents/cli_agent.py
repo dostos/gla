@@ -228,7 +228,10 @@ class CliAgent(AgentBackend):
             "- gpa upstream list [SUBDIR]                        — orient inside the framework tree\n"
             "- gpa upstream grep PATTERN [-C N]                  — grep with N lines of context\n"
             "- gpa upstream find-symbol NAME [--lang LANG]       — locate a definition (function/class/struct/etc)\n"
-            "- gpa upstream read PATH                             — read a file (cap 512 KB)\n"
+            "- gpa upstream outline PATH                          — list every function/class/struct in a file (cheap triage; 5-10x smaller than `read`)\n"
+            "- gpa upstream read PATH [--lines START..END]        — read a file or just a line range (cap 512 KB)\n"
+            "  prefer: outline → pick line range → read --lines\n"
+            "  over:   read PATH (full 300 KB framework files burn tokens)\n"
         )
         source_block = (
             "Source tools:\n"

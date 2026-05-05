@@ -68,10 +68,18 @@ def read_file_json(
     root: LocalRoot,
     user_path: str,
     max_bytes: int,
+    line_start: int = 0,
+    line_end: int = 0,
     print_stream: TextIO = sys.stdout,
     err_stream: TextIO = sys.stderr,
 ) -> int:
-    """Resolve user_path under root, read the file, write JSON, return rc."""
+    """Resolve user_path under root, read the file, write JSON, return rc.
+
+    When ``line_start > 0``, return only lines in ``[line_start, line_end]``
+    (1-indexed, inclusive). Pairs with ``outline``: agent reads the
+    outline, picks a function's line range, then reads only that hunk.
+    Avoids pulling 300 KB of file content to find one 30-line function.
+    """
     try:
         target = resolve_relative(root, user_path)
     except LocalRootError as e:
@@ -81,15 +89,39 @@ def read_file_json(
         print(f"not a file: {user_path}", file=err_stream)
         return 2
     raw = target.read_bytes()
-    truncated = len(raw) > max_bytes
-    payload = raw[:max_bytes]
-    text = payload.decode("utf-8", errors="replace")
-    obj = {
-        "path": user_path,
-        "bytes": len(raw),
-        "truncated": truncated,
-        "text": text,
-    }
+
+    # Optional line-range slicing. If line_start is 0 (or negative),
+    # behave as the legacy whole-file read.
+    if line_start > 0:
+        text_full = raw.decode("utf-8", errors="replace")
+        lines = text_full.splitlines(keepends=True)
+        end = line_end if line_end > 0 else len(lines)
+        # Clamp to valid range (1-indexed)
+        sliced = lines[max(0, line_start - 1):min(len(lines), end)]
+        text = "".join(sliced)
+        # Honour max_bytes on the sliced output too
+        encoded = text.encode("utf-8")
+        truncated = len(encoded) > max_bytes
+        text = encoded[:max_bytes].decode("utf-8", errors="replace")
+        obj = {
+            "path": user_path,
+            "bytes": len(raw),
+            "line_start": line_start,
+            "line_end": min(len(lines), end),
+            "total_lines": len(lines),
+            "truncated": truncated,
+            "text": text,
+        }
+    else:
+        truncated = len(raw) > max_bytes
+        payload = raw[:max_bytes]
+        text = payload.decode("utf-8", errors="replace")
+        obj = {
+            "path": user_path,
+            "bytes": len(raw),
+            "truncated": truncated,
+            "text": text,
+        }
     print(json.dumps(obj, ensure_ascii=False), file=print_stream)
     return 0
 
@@ -330,6 +362,196 @@ def find_symbol_json(
             {"matches": matches, "truncated": truncated},
             ensure_ascii=False,
         ),
+        file=print_stream,
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Outline: enumerate ALL definitions in a single file. Token-efficient
+# triage path — agents typically `read PATH` (300-400 KB on godot/cesium),
+# burning 5-10k tokens to find one function. `outline PATH` returns just
+# the structural skeleton (~5 KB on the same files) so the agent can
+# decide which line range actually warrants a full read.
+#
+# Driven by R12c-R14 forensics: failed scenarios spend ~2x tokens of
+# solved ones, dominated by full-file reads on large framework sources.
+# ---------------------------------------------------------------------------
+
+
+# Outline patterns capture the symbol name with a group. Most are
+# adapted from `_LANG_DEFS` patterns above with `{NAME}` replaced by
+# `(\w+)` so the outline can list every symbol of each kind.
+_OUTLINE_PATTERNS: dict[str, list[tuple[str, str]]] = {
+    "c": [
+        ("function", r"^[\w\s*<>:&]+\b(\w+)\s*\([^;]*\)\s*\{?\s*$"),
+        ("typedef",  r"\btypedef\b[^;]*\b(\w+)\s*[;\(]"),
+        ("struct",   r"\bstruct\s+(\w+)\b"),
+    ],
+    "cpp": [
+        ("function",  r"^[\w\s*<>:&,]+\b(\w+)\s*\([^;]*\)\s*\{?\s*$"),
+        ("class",     r"\bclass\s+(\w+)\b"),
+        ("struct",    r"\bstruct\s+(\w+)\b"),
+        ("namespace", r"\bnamespace\s+(\w+)\b"),
+    ],
+    "ts": [
+        ("function", r"\bfunction\s+\*?(\w+)\b"),
+        ("class",    r"\bclass\s+(\w+)\b"),
+        ("const",    r"^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\b"),
+        ("interface", r"\binterface\s+(\w+)\b"),
+        ("type",     r"^\s*(?:export\s+)?type\s+(\w+)\b"),
+    ],
+    "py": [
+        ("function", r"^\s*(?:async\s+)?def\s+(\w+)\s*\("),
+        ("class",    r"^\s*class\s+(\w+)\b"),
+    ],
+    "rs": [
+        ("function", r"\bfn\s+(\w+)\b"),
+        ("struct",   r"\bstruct\s+(\w+)\b"),
+        ("trait",    r"\btrait\s+(\w+)\b"),
+        ("enum",     r"\benum\s+(\w+)\b"),
+        ("impl",     r"\bimpl(?:\s*<[^>]*>)?\s+(?:[\w:]+\s+for\s+)?(\w+)\b"),
+    ],
+    "go": [
+        ("function", r"\bfunc\s+(?:\([^)]*\)\s*)?(\w+)\b"),
+        ("type",     r"\btype\s+(\w+)\b"),
+    ],
+    "gdscript": [
+        ("function", r"^\s*(?:static\s+)?func\s+(\w+)\s*\("),
+        ("class",    r"^class_name\s+(\w+)\b"),
+        ("signal",   r"^signal\s+(\w+)\b"),
+    ],
+    "glsl": [
+        ("function", r"^\s*\w+\s+(\w+)\s*\("),
+    ],
+}
+
+
+# Names that look like definitions to the regex but are actually
+# control flow / type-decl keywords. Filter these out of outline
+# results so the noise doesn't drown the real definitions.
+_OUTLINE_NOISE_NAMES = frozenset({
+    "if", "for", "while", "switch", "return", "else", "do",
+    "case", "default", "goto", "break", "continue",
+    "sizeof", "alignof", "typeof", "decltype",
+    "new", "delete", "throw", "try", "catch",
+    "static_assert", "static_cast", "dynamic_cast", "const_cast",
+    "reinterpret_cast",
+    # Common method-call sites that match the function regex
+    "memcpy", "memset", "memmove", "printf", "fprintf",
+    "ERR_FAIL_COND", "ERR_FAIL_NULL", "ERR_FAIL_INDEX",
+    "ERR_FAIL_COND_V", "ERR_FAIL_NULL_V", "ERR_FAIL_INDEX_V",
+    "ERR_PRINT", "WARN_PRINT", "DEV_ASSERT",
+})
+
+
+def _compile_outline(lang: str) -> list[tuple[str, "re.Pattern"]]:
+    return [(kind, re.compile(tpl)) for kind, tpl in _OUTLINE_PATTERNS[lang]]
+
+
+def outline_file_json(
+    *,
+    root: LocalRoot,
+    user_path: str,
+    max_definitions: int = 500,
+    print_stream: TextIO = sys.stdout,
+    err_stream: TextIO = sys.stderr,
+) -> int:
+    """Emit a structural outline of a single file.
+
+    Returns ``{path, lang, total_lines, file_size_bytes, definitions, truncated}``
+    in JSON. ``definitions`` is a list of ``{kind, name, line, signature}``.
+
+    Use case: a 300-KB framework file (godot renderer, cesium engine)
+    fits in ~5 KB of outline. The agent triages by outline, then reads
+    a 50-line range around the function it cares about — not the whole
+    file. R12c-R14 forensics: full-file reads dominated failed-scenario
+    token budgets (5-10k tokens per read on these files).
+    """
+    try:
+        target = resolve_relative(root, user_path)
+    except LocalRootError as e:
+        print(str(e), file=err_stream)
+        return 2
+    if not target.is_file():
+        print(f"not a file: {user_path}", file=err_stream)
+        return 2
+
+    langs = _langs_for_file(target)
+    if not langs:
+        # Unknown language — emit a degenerate outline (line count only)
+        # so the agent doesn't have to retry with `read`.
+        try:
+            text = target.read_text(encoding="utf-8", errors="replace")
+            line_count = text.count("\n") + 1
+        except OSError:
+            line_count = 0
+        try:
+            size = target.stat().st_size
+        except OSError:
+            size = 0
+        print(
+            json.dumps({
+                "path": user_path,
+                "lang": "",
+                "total_lines": line_count,
+                "file_size_bytes": size,
+                "definitions": [],
+                "truncated": False,
+                "note": "no outline patterns for this file extension",
+            }, ensure_ascii=False),
+            file=print_stream,
+        )
+        return 0
+
+    # Pick the first matching language's patterns (most files have one)
+    lang = langs[0]
+    compiled = _compile_outline(lang)
+    try:
+        text = target.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        print(f"read failed: {e}", file=err_stream)
+        return 2
+
+    lines = text.splitlines()
+    definitions: list[dict] = []
+    truncated = False
+    cap = max(1, int(max_definitions))
+    for idx, line in enumerate(lines):
+        for kind, pat in compiled:
+            m = pat.search(line)
+            if m:
+                try:
+                    name = m.group(1)
+                except IndexError:
+                    name = ""
+                if name in _OUTLINE_NOISE_NAMES:
+                    break  # control-flow keyword, not a real def
+                definitions.append({
+                    "kind": kind,
+                    "name": name,
+                    "line": idx + 1,
+                    "signature": line.strip()[:120],
+                })
+                if len(definitions) >= cap:
+                    truncated = True
+                break
+        if truncated:
+            break
+
+    try:
+        size = target.stat().st_size
+    except OSError:
+        size = 0
+    print(
+        json.dumps({
+            "path": user_path,
+            "lang": lang,
+            "total_lines": len(lines),
+            "file_size_bytes": size,
+            "definitions": definitions,
+            "truncated": truncated,
+        }, ensure_ascii=False),
         file=print_stream,
     )
     return 0
