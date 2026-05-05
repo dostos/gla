@@ -110,11 +110,31 @@ def _cmd_run(args: argparse.Namespace) -> int:
             api_key=os.environ.get("ANTHROPIC_API_KEY"),
         )
 
-    results = harness.run_all(
-        agent_fn=agent_fn, scenarios=scenarios, modes=modes
-    )
-
     output_path = args.output or "results.json"
+    try:
+        results = harness.run_all(
+            agent_fn=agent_fn, scenarios=scenarios, modes=modes
+        )
+    except Exception as exc:
+        # Stop cleanly on rate-limit (or any other agent-side hard
+        # failure) so the operator can pause and resume rather than
+        # burning through a queue producing identical garbage.
+        # Save whatever results were collected before the failure.
+        from gpa.eval.agents.cli_agent import CliRateLimitError
+        is_rate_limit = isinstance(exc, CliRateLimitError)
+        partial_n = len(harness.results)
+        harness.save_results(output_path)
+        kind = "rate-limit" if is_rate_limit else "agent-error"
+        print(
+            f"\n[{kind}] {exc}\n"
+            f"Saved {partial_n} result(s) collected before the failure "
+            f"to {output_path}. Re-run after resolving the underlying "
+            f"issue (resume same cohort by passing --scenarios excluding "
+            f"the ones already saved).",
+            file=sys.stderr,
+        )
+        return 3 if is_rate_limit else 1
+
     harness.save_results(output_path)
     print(f"Saved {len(results)} result(s) to {output_path}")
     return 0

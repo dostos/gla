@@ -22,6 +22,34 @@ def _has_json_tail(text: str) -> bool:
     return _extract_json_tail(text or "") is not None
 
 
+# Rate-limit signatures from the claude CLI. When the daily cap is
+# exhausted the CLI prints a one-line message instead of running the
+# agent loop. R16 forensics: 11 of 14 scenarios in a single cohort
+# silently recorded these as "scenario failures" with 0 tokens.
+# Detecting them lets the harness raise loudly so the operator can
+# pause and resume after the cap resets.
+_RATE_LIMIT_SIGNATURES = (
+    "you've hit your limit",
+    "you have hit your limit",
+    "rate limit",
+    "usage limit",
+    "daily limit",
+)
+
+
+class CliRateLimitError(RuntimeError):
+    """Raised when the CLI returned a rate-limit message instead of a
+    real diagnosis. Bubbled up so run_all can stop the cohort cleanly
+    rather than burn through a queue producing identical failures."""
+
+
+def _looks_like_rate_limit(text: str) -> bool:
+    if not text:
+        return False
+    low = text.lower()
+    return any(sig in low for sig in _RATE_LIMIT_SIGNATURES)
+
+
 def _build_json_reprompt(prior_diagnosis: str) -> str:
     """Build a tight follow-up that asks ONLY for the JSON object."""
     truncated = (prior_diagnosis or "").strip()[-2000:]
@@ -104,6 +132,22 @@ class CliAgent(AgentBackend):
         elapsed = time.time() - t0
 
         metrics = self._spec.parse_run(proc.stdout, proc.stderr)
+
+        # Bail loudly on rate-limit responses. claude-cli prints a
+        # one-line "You've hit your limit · resets <time>" message and
+        # exits cleanly, which the parser otherwise interprets as a
+        # legitimate (terrible) diagnosis. Cohorts then record N
+        # identical garbage failures. Better to stop the run, surface
+        # the actual error, and resume after the cap resets.
+        if (metrics.tool_calls == 0
+                and metrics.input_tokens == 0
+                and metrics.output_tokens == 0
+                and _looks_like_rate_limit(metrics.diagnosis)):
+            raise CliRateLimitError(
+                f"CLI returned rate-limit message: "
+                f"{metrics.diagnosis.strip()[:200]!r} — "
+                "stop the cohort, resume after the cap resets."
+            )
 
         # If the agent ignored the JSON output contract, give it one
         # follow-up shot. The first response stays in `metrics` for

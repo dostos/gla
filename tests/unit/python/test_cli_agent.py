@@ -468,3 +468,66 @@ def test_json_reprompt_skipped_when_no_system_prompt(monkeypatch, tmp_path):
 
     assert len(calls) == 1
     assert "DIAGNOSIS:" in result.diagnosis
+
+
+def test_cli_agent_raises_on_rate_limit_response(monkeypatch, tmp_path):
+    """When claude-cli is over its daily cap it returns a one-line
+    'You've hit your limit' message with 0 tokens. Pre-R16 the harness
+    silently recorded these as scenario failures; one rate-limited
+    cohort produced 11 fake-failure rows. CliAgent now raises so the
+    cohort stops cleanly."""
+    from gpa.eval.agents.cli_agent import CliRateLimitError
+
+    def fake_run(*a, **kw):
+        return subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    def parse_rate_limited(stdout, stderr):
+        return CliRunMetrics(
+            diagnosis="You've hit your limit · resets 10pm (Asia/Seoul)",
+            input_tokens=0, output_tokens=0, tool_calls=0, num_turns=1,
+        )
+
+    spec = CliBackendSpec(
+        name="fake", binary="/bin/true", base_args=("-q",),
+        parse_run=parse_rate_limited, timeout_sec=10,
+    )
+    agent = CliAgent(spec=spec)
+    scenario = _Scenario(source_path=str(tmp_path / "main.c"))
+    (tmp_path / "main.c").write_text("// hi")
+    tools = {"run_with_capture": lambda: None}
+
+    import pytest
+    with pytest.raises(CliRateLimitError) as info:
+        agent.run(scenario, "with_gla", tools)
+    assert "rate-limit" in str(info.value).lower()
+
+
+def test_cli_agent_does_not_raise_on_legit_short_response(monkeypatch, tmp_path):
+    """A legitimately short response (e.g. agent quickly emits JSON)
+    must not be treated as a rate-limit. Distinguish on tokens=0 AND
+    rate-limit signature, not just shortness."""
+    def fake_run(*a, **kw):
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    def parse_short_legit(stdout, stderr):
+        return CliRunMetrics(
+            diagnosis='{"bug_class":"framework-internal","proposed_patches":[],"confidence":"low","reasoning":"short answer"}',
+            input_tokens=10, output_tokens=20, tool_calls=0, num_turns=1,
+        )
+
+    spec = CliBackendSpec(
+        name="fake", binary="/bin/true", base_args=("-q",),
+        parse_run=parse_short_legit, timeout_sec=10,
+    )
+    agent = CliAgent(spec=spec)
+    scenario = _Scenario(source_path=str(tmp_path / "main.c"))
+    (tmp_path / "main.c").write_text("// hi")
+    tools = {"run_with_capture": lambda: None}
+
+    # Should NOT raise — this is a real (terse) response with non-zero tokens
+    result = agent.run(scenario, "with_gla", tools)
+    assert "proposed_patches" in result.diagnosis
