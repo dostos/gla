@@ -1,4 +1,4 @@
-"""Tests for the GPA eval harness: ScenarioLoader, DiagnosisScorer, ReportGenerator."""
+"""Tests for the GPA eval harness: ScenarioLoader, ReportGenerator."""
 from __future__ import annotations
 
 import textwrap
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from gpa.eval.metrics import DiagnosisScorer, EvalResult, ReportGenerator
+from gpa.eval.metrics import EvalResult, ReportGenerator
 from gpa.eval.scenario import ScenarioLoader, ScenarioMetadata
 
 
@@ -21,8 +21,7 @@ EVAL_DIR = Path(__file__).parent.parent.parent / "eval"
 def _make_result(
     scenario_id: str = "e1_state_leak",
     mode: str = "with_gla",
-    correct_diagnosis: bool = True,
-    correct_fix: bool = True,
+    solved: bool = True,
     total_tokens: int = 1000,
     input_tokens: int = 800,
     output_tokens: int = 200,
@@ -30,11 +29,11 @@ def _make_result(
     num_turns: int = 5,
     time_seconds: float = 2.5,
 ) -> EvalResult:
+    """Build an EvalResult with verdict.solved=solved (R17: replaces
+    correct_diagnosis/correct_fix with the verdict-orchestrator field)."""
     return EvalResult(
         scenario_id=scenario_id,
         mode=mode,
-        correct_diagnosis=correct_diagnosis,
-        correct_fix=correct_fix,
         diagnosis_text="The texture binding is missing for Quad B.",
         input_tokens=input_tokens,
         output_tokens=output_tokens,
@@ -44,6 +43,7 @@ def _make_result(
         time_seconds=time_seconds,
         model="test-model",
         timestamp=datetime.now(timezone.utc).isoformat(),
+        verdict={"solved": solved, "scorer": "test", "confidence": "high"},
     )
 
 
@@ -120,48 +120,10 @@ class TestScenarioLoader:
             loader.load("e99_does_not_exist")
 
 
-# ---------------------------------------------------------------------------
-# DiagnosisScorer tests
-# ---------------------------------------------------------------------------
-
-class TestDiagnosisScorer:
-    @pytest.fixture
-    def e1_scenario(self) -> ScenarioMetadata:
-        return ScenarioLoader(eval_dir=str(EVAL_DIR)).load("e1_state_leak")
-
-    def test_correct_diagnosis_scores_true(self, e1_scenario):
-        """A diagnosis that contains the key concepts scores (True, True)."""
-        scorer = DiagnosisScorer()
-        # Contains key words from ground truth: texture, bind, state, red, blue
-        diagnosis = (
-            "The bug is that glBindTexture is never called before drawing Quad B, "
-            "so the GL texture unit retains the tex_red binding from Quad A. "
-            "The fix is to insert glBindTexture(GL_TEXTURE_2D, tex_blue) before "
-            "the second glDrawArrays call."
-        )
-        correct_diag, correct_fix = scorer.score(diagnosis, e1_scenario)
-        assert correct_diag is True
-        assert correct_fix is True
-
-    def test_incorrect_diagnosis_scores_false(self, e1_scenario):
-        """A diagnosis that is completely off-topic scores (False, False)."""
-        scorer = DiagnosisScorer()
-        diagnosis = (
-            "The issue is a NaN in the projection matrix caused by a divide-by-zero "
-            "in the perspective calculation. Replacing the field-of-view angle with "
-            "a non-zero value will fix the rendering corruption."
-        )
-        correct_diag, correct_fix = scorer.score(diagnosis, e1_scenario)
-        assert correct_diag is False
-
-    def test_threshold_boundary(self, e1_scenario):
-        """A very short vague diagnosis just at the threshold behaves predictably."""
-        scorer = DiagnosisScorer(diagnosis_threshold=0.9, fix_threshold=0.9)
-        # With a very high threshold even a reasonable diagnosis may not pass
-        diagnosis = "texture binding missing"
-        correct_diag, _ = scorer.score(diagnosis, e1_scenario)
-        # At 90% overlap requirement this should be False for most scenarios
-        assert isinstance(correct_diag, bool)
+# R17: DiagnosisScorer tests deleted along with the class. The
+# verdict orchestrator (file_level → prose → judge) is the only
+# scoring path now. See `tests/unit/python/test_scorer*.py` for the
+# replacement coverage.
 
 
 # ---------------------------------------------------------------------------
@@ -171,12 +133,10 @@ class TestDiagnosisScorer:
 class TestReportGenerator:
     def _two_mode_results(self) -> list[EvalResult]:
         return [
-            _make_result("e1_state_leak", "with_gla",
-                         correct_diagnosis=True, correct_fix=True,
+            _make_result("e1_state_leak", "with_gla", solved=True,
                          total_tokens=500, input_tokens=400, output_tokens=100,
                          tool_calls=3, num_turns=4, time_seconds=1.2),
-            _make_result("e1_state_leak", "code_only",
-                         correct_diagnosis=False, correct_fix=False,
+            _make_result("e1_state_leak", "code_only", solved=False,
                          total_tokens=1500, input_tokens=1200, output_tokens=300,
                          tool_calls=0, num_turns=6, time_seconds=3.0),
         ]

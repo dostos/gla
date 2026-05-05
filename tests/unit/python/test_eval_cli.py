@@ -37,7 +37,7 @@ def test_agent_backend_flag_calls_factory(monkeypatch):
 
     # Patch harness so we don't spin up a real EvalHarness.
     class _FakeHarness:
-        def __init__(self, config):
+        def __init__(self, config, **kwargs):
             pass
         def run_all(self, agent_fn, scenarios=None, modes=None):
             # Call agent_fn to confirm it was set correctly.
@@ -93,7 +93,7 @@ def test_dry_run_uses_stub_agent_not_factory(monkeypatch):
     monkeypatch.setattr(cli_mod, "_stub_agent", _tracked_stub)
 
     class _FakeHarness:
-        def __init__(self, config):
+        def __init__(self, config, **kwargs):
             pass
         def run_all(self, agent_fn, scenarios=None, modes=None):
             class _FakeScenario:

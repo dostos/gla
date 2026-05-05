@@ -2,12 +2,9 @@
 from __future__ import annotations
 
 import json
-import re
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from datetime import datetime, timezone
 from typing import Optional
-
-from gpa.eval.scenario import ScenarioMetadata
 
 
 @dataclass
@@ -15,9 +12,6 @@ class EvalResult:
     scenario_id: str
     mode: str                  # "with_gla" or "code_only"
 
-    # Accuracy
-    correct_diagnosis: bool
-    correct_fix: bool
     diagnosis_text: str        # LLM's diagnosis
 
     # Efficiency
@@ -40,7 +34,7 @@ class EvalResult:
 
     # Maintainer-framing scorer output (Phase 4).  When the scenario has
     # a `## Fix` section with a scored bug_class, the harness populates
-    # these; otherwise they stay None and the legacy fields above apply.
+    # these; otherwise they stay None.
     bug_class: Optional[str] = None            # framework-internal | consumer-misuse | user-config | legacy
     maintainer_solved: Optional[bool] = None   # ScoreResult.solved
     file_score: Optional[float] = None         # ScoreResult.file_score
@@ -52,7 +46,8 @@ class EvalResult:
 
     # ScoreVerdict v2 (file_level + prose + gave-up orchestrator). Stored
     # as a dict for trivial JSON round-tripping. Keys mirror
-    # `gpa.eval.scorer.ScoreVerdict` fields.
+    # `gpa.eval.scorer.ScoreVerdict` fields. The primary "is this solved?"
+    # signal — `verdict["solved"]` is what the round logs report.
     verdict: Optional[dict] = None
 
     def to_dict(self) -> dict:
@@ -60,62 +55,13 @@ class EvalResult:
 
     @classmethod
     def from_dict(cls, d: dict) -> "EvalResult":
+        # Tolerate legacy result files that still carry correct_diagnosis /
+        # correct_fix — drop them silently. R17 deleted those fields and
+        # the keyword-based DiagnosisScorer that populated them; the
+        # verdict orchestrator (file_level → prose → judge) is the only
+        # scoring path now.
+        d = {k: v for k, v in d.items() if k not in ("correct_diagnosis", "correct_fix")}
         return cls(**d)
-
-
-# ---------------------------------------------------------------------------
-# Keyword extraction helpers
-# ---------------------------------------------------------------------------
-
-def _extract_keywords(text: str) -> list[str]:
-    """Extract meaningful lowercase words (>3 chars) from text."""
-    # Strip code blocks and markdown formatting
-    text = re.sub(r"```.*?```", " ", text, flags=re.DOTALL)
-    text = re.sub(r"`[^`]+`", " ", text)
-    words = re.findall(r"[a-zA-Z_][a-zA-Z0-9_]{3,}", text)
-    return [w.lower() for w in words]
-
-
-def _keyword_overlap_ratio(candidate: str, reference: str) -> float:
-    """Return fraction of reference keywords that appear in candidate."""
-    ref_kw = set(_extract_keywords(reference))
-    if not ref_kw:
-        return 0.0
-    cand_kw = set(_extract_keywords(candidate))
-    return len(ref_kw & cand_kw) / len(ref_kw)
-
-
-# Threshold for considering a keyword match "correct"
-_DIAGNOSIS_THRESHOLD = 0.25
-_FIX_THRESHOLD = 0.25
-
-
-class DiagnosisScorer:
-    """Scores whether an LLM's diagnosis matches ground truth via keyword matching."""
-
-    def __init__(
-        self,
-        diagnosis_threshold: float = _DIAGNOSIS_THRESHOLD,
-        fix_threshold: float = _FIX_THRESHOLD,
-    ):
-        self._diag_thresh = diagnosis_threshold
-        self._fix_thresh = fix_threshold
-
-    def score(
-        self, diagnosis: str, ground_truth: ScenarioMetadata
-    ) -> tuple[bool, bool]:
-        """Return (correct_diagnosis, correct_fix).
-
-        Checks keyword overlap between the LLM's diagnosis text and the
-        ground truth diagnosis / fix extracted from the scenario metadata.
-        """
-        diag_ratio = _keyword_overlap_ratio(
-            diagnosis, ground_truth.ground_truth_diagnosis
-        )
-        fix_ratio = _keyword_overlap_ratio(
-            diagnosis, ground_truth.ground_truth_fix
-        )
-        return (diag_ratio >= self._diag_thresh, fix_ratio >= self._fix_thresh)
 
 
 # ---------------------------------------------------------------------------
@@ -144,10 +90,16 @@ class ReportGenerator:
             return sum(values) / len(values) if values else None
 
         def _agg(rs: list[EvalResult]) -> dict:
+            # solved: derived from the v2 verdict orchestrator's `solved`
+            # field, which reflects file_level → prose → judge scoring.
+            # Pre-R17 this row was driven by the keyword-based
+            # DiagnosisScorer; R17 deleted that scorer in favour of the
+            # verdict orchestrator everywhere.
             return {
                 "count": len(rs),
-                "accuracy_diagnosis": _avg([int(r.correct_diagnosis) for r in rs]),
-                "accuracy_fix": _avg([int(r.correct_fix) for r in rs]),
+                "solved_rate": _avg([
+                    int(bool((r.verdict or {}).get("solved"))) for r in rs
+                ]),
                 "avg_total_tokens": _avg([r.total_tokens for r in rs]),
                 "avg_input_tokens": _avg([r.input_tokens for r in rs]),
                 "avg_output_tokens": _avg([r.output_tokens for r in rs]),
@@ -214,8 +166,7 @@ class ReportGenerator:
             ("avg_tool_calls", "Avg Tool Calls"),
             ("avg_turns", "Avg Turns"),
             ("avg_time_seconds", "Avg Time (s)"),
-            ("accuracy_diagnosis", "Diagnosis Accuracy"),
-            ("accuracy_fix", "Fix Accuracy"),
+            ("solved_rate", "Solved (verdict orchestrator)"),
         ]
         for key, label in metrics_display:
             row = [label]

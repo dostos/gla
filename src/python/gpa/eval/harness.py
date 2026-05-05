@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Callable, Optional
 
 _log = logging.getLogger(__name__)
 
-from gpa.eval.metrics import DiagnosisScorer, EvalResult
+from gpa.eval.metrics import EvalResult
 from gpa.eval.runner import ScenarioRunner
 from gpa.eval.scenario import (
     ScenarioLoader,
@@ -49,10 +49,6 @@ class EvalHarness:
             shim_path=cfg.get("shim_path", ""),
             bazel_bin=cfg.get("bazel_bin", "bazel"),
             repo_root=cfg.get("repo_root"),
-        )
-        self._scorer = DiagnosisScorer(
-            diagnosis_threshold=cfg.get("diagnosis_threshold", 0.25),
-            fix_threshold=cfg.get("fix_threshold", 0.25),
         )
         self._model = cfg.get("model", "unknown")
         self.results: list[EvalResult] = []
@@ -102,9 +98,6 @@ class EvalHarness:
             num_turns,
             elapsed,
         ) = agent_fn(scenario, mode, tools)
-
-        # Legacy keyword scorer — still runs so we can compare.
-        correct_diag, correct_fix = self._scorer.score(diagnosis_text, scenario)
 
         # Maintainer-framing scorer (Phase 4): run when the scenario has
         # a parseable `## Fix` section with a non-legacy bug_class that
@@ -199,8 +192,6 @@ class EvalHarness:
         result = EvalResult(
             scenario_id=scenario_id,
             mode=mode,
-            correct_diagnosis=correct_diag,
-            correct_fix=correct_fix,
             diagnosis_text=diagnosis_text,
             input_tokens=input_tokens,
             output_tokens=output_tokens,

@@ -26,7 +26,7 @@ def test_commit_appends_log_and_writes_summary(tmp_path):
         predicted_helps="yes",
         observed_helps="yes",
         failure_mode=None,
-        eval_summary={"with_gla": {"correct_diagnosis": True, "total_tokens": 100}},
+        eval_summary={"with_gla": {"solved": True, "total_tokens": 100}},
         category="native-engine",
         framework="godot",
     )

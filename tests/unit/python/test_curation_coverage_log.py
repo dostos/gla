@@ -18,8 +18,8 @@ def test_append_and_read(tmp_path):
         predicted_helps="yes",
         observed_helps="yes",
         failure_mode=None,
-        eval_summary={"with_gla": {"correct_diagnosis": True, "total_tokens": 1820},
-                      "code_only": {"correct_diagnosis": False, "total_tokens": 5940}},
+        eval_summary={"with_gla": {"solved": True, "total_tokens": 1820},
+                      "code_only": {"solved": False, "total_tokens": 5940}},
     )
     log.append(entry)
 

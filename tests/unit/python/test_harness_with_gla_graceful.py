@@ -230,7 +230,6 @@ def test_run_all_skips_with_gla_for_source_less_scenarios(tmp_path, monkeypatch)
         # Return a minimal result so the loop continues
         from gpa.eval.metrics import EvalResult
         return EvalResult(scenario_id=sid, mode=mode,
-                          correct_diagnosis=False, correct_fix=False,
                           diagnosis_text="", input_tokens=0, output_tokens=0,
                           total_tokens=0, tool_calls=0, num_turns=0,
                           time_seconds=0.0, model="x",

@@ -5,11 +5,15 @@ from gpa.eval.curation.llm_client import LLMResponse
 from gpa.eval.metrics import EvalResult
 
 def _mk(mode, correct, total_tokens):
-    return EvalResult(scenario_id="r1", mode=mode, correct_diagnosis=correct,
-                      correct_fix=correct, diagnosis_text="",
-                      input_tokens=0, output_tokens=0, total_tokens=total_tokens,
-                      tool_calls=0, num_turns=0, time_seconds=0.0,
-                      model="x", timestamp=datetime.now(timezone.utc).isoformat())
+    """Build an EvalResult with verdict.solved=correct (R17 replaced
+    correct_diagnosis/correct_fix with the verdict-orchestrator field)."""
+    return EvalResult(
+        scenario_id="r1", mode=mode, diagnosis_text="",
+        input_tokens=0, output_tokens=0, total_tokens=total_tokens,
+        tool_calls=0, num_turns=0, time_seconds=0.0,
+        model="x", timestamp=datetime.now(timezone.utc).isoformat(),
+        verdict={"solved": bool(correct), "scorer": "test", "confidence": "high"},
+    )
 
 def test_rule_1_gpa_correct_code_wrong():
     r = classify_observed_helps(_mk("with_gla", True, 1000), _mk("code_only", False, 1000))

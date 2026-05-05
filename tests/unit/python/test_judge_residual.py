@@ -35,8 +35,13 @@ def test_fetch_pr_diff_summary_runs_git_commands(tmp_path, monkeypatch):
     calls = []
 
     def fake_run(argv, *, cwd=None, capture_output=None, text=None,
-                 timeout=None, check=None):
+                 timeout=None, check=None, errors=None):
         calls.append((tuple(argv), cwd))
+        # R16: judge calls `git cat-file -e <sha>^1` to verify the
+        # parent is reachable; if it isn't, follows up with a depth=2
+        # fetch. Both should succeed in this test.
+        if "cat-file" in argv:
+            return subprocess.CompletedProcess(argv, returncode=0, stdout="", stderr="")
         if "log" in argv:
             return subprocess.CompletedProcess(
                 argv, returncode=0,
@@ -63,9 +68,8 @@ def test_fetch_pr_diff_summary_runs_git_commands(tmp_path, monkeypatch):
     # Diff hunks are now part of the summary (R12c refinement)
     assert "diff --git" in out
     assert "@@ -10,3 +10,3 @@" in out
-    # All three subprocesses ran in the snapshot dir
+    # All subprocesses ran in the snapshot dir
     assert all(c[1] == tmp_path for c in calls)
-    assert len(calls) == 3
 
 
 def test_fetch_pr_diff_summary_truncates(tmp_path, monkeypatch):
@@ -73,7 +77,7 @@ def test_fetch_pr_diff_summary_truncates(tmp_path, monkeypatch):
 
     huge = "x" * 50000
 
-    def fake_run(argv, *, cwd, capture_output, text, timeout, check):
+    def fake_run(argv, *, cwd, capture_output, text, timeout, check, errors=None):
         return subprocess.CompletedProcess(argv, 0, huge, "")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -86,7 +90,7 @@ def test_fetch_pr_diff_summary_truncates(tmp_path, monkeypatch):
 def test_fetch_pr_diff_summary_handles_missing_sha(tmp_path, monkeypatch):
     from gpa.eval import judge
 
-    def fake_run(argv, *, cwd, capture_output, text, timeout, check):
+    def fake_run(argv, *, cwd, capture_output, text, timeout, check, errors=None):
         raise subprocess.CalledProcessError(128, argv, "", "fatal: bad object")
 
     monkeypatch.setattr(subprocess, "run", fake_run)

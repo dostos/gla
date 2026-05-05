@@ -41,24 +41,35 @@ class FailureModeResult:
     details: str
 
 
+def _solved(result: EvalResult) -> bool:
+    """True when the verdict orchestrator marked this result as solved.
+
+    R17 deleted the legacy keyword-based DiagnosisScorer
+    (correct_diagnosis / correct_fix). The verdict orchestrator's
+    `solved` flag is now the single source of truth across file_level,
+    prose, and judge scoring tiers.
+    """
+    return bool((result.verdict or {}).get("solved"))
+
+
 def classify_observed_helps(
     with_gla: EvalResult, code_only: EvalResult
 ) -> ObservedClassification:
     """Return an ObservedClassification based on the 6-rule decision table."""
     # Rule 1
-    if with_gla.correct_diagnosis and not code_only.correct_diagnosis:
+    if _solved(with_gla) and not _solved(code_only):
         return ObservedClassification(
             "yes",
-            "correct_with_gla=True, correct_code_only=False",
+            "solved_with_gla=True, solved_code_only=False",
         )
     # Rule 2
-    if not with_gla.correct_diagnosis and code_only.correct_diagnosis:
+    if not _solved(with_gla) and _solved(code_only):
         return ObservedClassification(
             "no",
             "OpenGPA regressed vs code_only",
         )
     # Rule 3: both wrong
-    if not with_gla.correct_diagnosis and not code_only.correct_diagnosis:
+    if not _solved(with_gla) and not _solved(code_only):
         return ObservedClassification(
             "no",
             "both modes wrong",
