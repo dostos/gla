@@ -2020,3 +2020,73 @@ Fix (`5e5fbdb`):
 
 19/19 fetcher unit tests pass; pre-warm of all 14 R12 SHAs succeeds.
 
+## R12c+R12d with LLM-judge (real numbers)
+
+The "5/14 with_gla, 7/14 code_only" headline above was itself
+under-counting. Three scoring infra bugs, all silent until R12d
+exposed them, were masking solved scenarios:
+
+1. **Prose-scorer regex truncated `.cpp`/`.tsx`/`.gdshader` paths.**
+   `c|cc|cpp` matched `c` first, so `render_scene_buffers_rd.cpp`
+   parsed as `render_scene_buffers_rd.c` and never matched ground
+   truth. Fix: sort `_SOURCE_EXTS` longest-first globally.
+2. **LLM-judge was opt-in, gated on `scorer == "prose"` only.** A
+   correct diagnosis that named 3 of 13 ground-truth files (file
+   score 0.23 < 0.5 threshold) got dropped to `no_signal` and never
+   reached the judge. Fix: judge now runs on file-level any-hit and
+   substantive no-signal verdicts too.
+3. **`fetch_pr_diff_summary` ran `git show <fix_sha>` against a
+   depth-1 snapshot.** The merge commit's parent wasn't in the
+   local repo, so git treated the merge as additive-from-nothing
+   and reported "13506 files / 7M insertions" instead of the actual
+   13-file fix. Fix: lazily `git fetch --depth 2 origin <fix_sha>`
+   so both the merge and its parent are reachable.
+
+After all three fixes (commit `35c9597`), re-scoring the same agent
+runs (no agent re-execution; only the verdicts changed) gives:
+
+| Run | Solved | scorer breakdown |
+|---|---|---|
+| **R12c with_gla**  | **10/14 (71%)** | prose 8 · judge 4 · no_signal 2 |
+| **R12c code_only** | **10/14 (71%)** | prose 11 · judge 1 · no_signal 2 |
+| R12d with_gla  | 2/14 (14%) | judge 2 · no_signal 12 |
+| R12d code_only | 4/14 (29%) | judge 2 · prose 2 · no_signal 10 |
+| R12b with_gla (artifactual baseline) | 1/14 (7%) | — |
+
+Headline: **agents solve real bugs at 10/14 once snapshot + scorer
+are correct.** 1/14 → 10/14 is a 10× lift, all from infrastructure
+fixes — same agent, same scenarios, same model.
+
+**with_gla = code_only at 71%, but with_gla used 90% of the tokens.**
+That's the inversion R12c hinted at: native scenarios benefit (GPA
+gives faster diagnosis paths), web-map breaks even (GPA can't see
+browser WebGL but the agent doesn't waste much on the empty
+overviews thanks to the tier-mismatch warning).
+
+### Why R12d underperforms R12c despite the same fixes
+
+R12d ran with a heavier "READ FIRST — non-negotiable" prompt that
+collapsed agent investigation tokens 5× (10k → 2k average). Short
+diagnoses can't satisfy the prose-recall threshold for 13-file
+multi-file refactor PRs even when the agent's reasoning is correct.
+The judge upgraded what it could (2 + 4 = 6 R12d scenarios) but the
+remaining 8-12 had too little material to compare against the diff.
+Reverted to the lighter prompt (commit `35c9597`); next round will
+re-test with the lighter prompt and judge-on default.
+
+### LLM-judge methodology
+
+`judge_residual` runs a sonnet-class judge with a sub-200-token
+prompt that includes:
+- Agent's full diagnosis text (truncated to 6 KB)
+- Real fix-PR diff: commit message + shortstat + diff hunks
+  (also truncated to 6 KB)
+- Three-token verdict: `full` / `partial` / `none`
+
+`full` upgrades the verdict to `solved=True, scorer="judge",
+confidence="medium"`. `partial`/`none` keep `solved=False` but
+record the judge's verdict for review. Disk-cached on
+`sha256(fix_sha + diagnosis_text)` so re-scoring a round costs zero.
+
+Cost per cohort: ~14 scenarios × ~$0.005/judge call ≈ $0.07.
+

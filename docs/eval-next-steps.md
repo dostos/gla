@@ -73,26 +73,60 @@ Scenarios that already have upstream snapshot references:
       network / build tiers; failed scenarios moved to
       `tests/eval-quarantine/`
 - [x] Re-run R12-style cohort with capture working + verified scenarios
-      (R12c, 2026-05-05): 5/14 with_gla, 7/14 code_only — was 1/14 with
-      stale snapshots. Real signal restored.
+      (R12c, 2026-05-05): with judge enabled, **10/14 with_gla, 10/14
+      code_only** — was 1/14 with stale snapshots. 10× lift from
+      infrastructure alone.
 - [x] Measure token reduction from OpenGPA on the cleaned cohort:
       with_gla 147k vs code_only 163k total (≈10% reduction overall).
-      Native godot tied 2/8; web-map widened gap (3/6 vs 5/6) because
-      the GL shim doesn't intercept browser WebGL — see
-      `docs/eval-results.md` "R12c Re-evaluation".
+      with_gla matches code_only at 71% solved while using 90% of the
+      tokens. See `docs/eval-results.md` "R12c+R12d with LLM-judge".
+- [x] Wire LLM-judge as default scorer. Reads the actual fix-PR diff
+      and grades semantic match. Lifted R12c from 6/14 → 10/14 just
+      by upgrading partial-hit verdicts. Cost ~$0.07 per 14-scenario
+      cohort. CLI flags: `--judge / --no-judge / --judge-backend /
+      --judge-model / --judge-cache-dir`.
+- [x] Fix three silent scoring bugs surfaced by R12c→R12d comparison:
+      regex truncation of `.cpp`/`.tsx`/`.gdshader` paths; judge
+      eligibility too narrow (prose only); depth-1 snapshot couldn't
+      diff merge commits. All three fixed in commit `35c9597`.
 
-## Open question for next iteration
+## Open questions for next iteration
 
-OpenGPA loses to code-only on JS/WebGL scenarios (2 maplibre bugs in
-R12c). The shim only intercepts native GL/Vulkan, so browser-side
-WebGL surfaces no useful frame state — yet the agent still pays the
-prompt overhead enumerating empty overviews. Two paths forward:
+### 1. Reverse the R12d collapse
 
-1. **Gate at the harness**: detect WebGL-tier scenarios from
-   `framework_kind` / source language and skip GPA tool injection
-   entirely. Cheap, immediate.
+R12d (2026-05-05, with the heavy "READ FIRST" prompt) ran 5×
+smaller agent responses than R12c (2k vs 10k tokens average) and
+solved 2-4/14 vs R12c's 10/14. The heavy prompt prioritised JSON
+emission over investigation. The lighter prompt (commit `35c9597`)
+should restore investigation depth — re-run R13 with the new prompt
++ judge default and confirm it matches R12c's 10/14.
+
+### 2. WebGL coverage
+
+OpenGPA ties code_only on web-map at 71% (3/6 each in R12c with
+judge). The shim still doesn't intercept browser WebGL — the
+tier-mismatch warning prevents bad with_gla token spend, but real
+*lift* on browser scenarios needs a WebGL backend. Two paths:
+
+1. **Gate at the harness** (done in `d7bd4bb`) — at least prevents
+   regressions and warns the user. Already shipped.
 2. **Add a WebGL backend**: extend `src/shims/webgl/` to surface
-   frame state via the same FrameProvider ABC. Higher payoff but
-   a real engineering investment.
+   frame state via the same FrameProvider ABC. Real engineering;
+   only worth it once we have hard evidence that WebGL frame state
+   would close real diagnoses (R13 will test this).
 
-Option 1 is the ratchet — pick it up before the next eval round.
+### 3. Mining quality bar
+
+R12c judges showed 4 scenarios where with_gla solved but code_only
+didn't (or vice versa). When the judge says `none` for both modes,
+the scenario may be **unsolvable from the materials we provide**
+(the relevant context isn't in the snapshot or user report). Need a
+"scenario-level difficulty" gate — if both modes get `judge=none`
+across multiple model tiers, requalify the scenario or move it to
+quarantine.
+
+### 4. Cost of the judge
+
+Sonnet judge runs at ~$0.005 per scenario × N modes. At 100-scenario
+cohorts × 2 modes × 3 model tiers = $3 per round. Acceptable but
+worth a daily-budget knob when we scale up.
