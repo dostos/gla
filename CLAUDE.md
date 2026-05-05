@@ -55,11 +55,24 @@ curl -H "Authorization: Bearer TOKEN" localhost:18080/api/v1/frames/current/over
 
 ## Eval-Driven Development Loop
 
-1. **Mine** — Find real-world graphics bugs from GitHub issues
-2. **Evaluate** — Run with/without OpenGPA, compare accuracy and tool usage
-3. **Improve** — Fix capture bugs or add new capabilities based on eval gaps
+1. **Mine** — Find real-world graphics bugs from GitHub issues. Curation pipeline writes scenarios with full fix metadata (`fix_pr_url`, `fix_sha`, `fix_parent_sha`, `bug_class`, `files`).
+2. **Verify** — `python -m gpa.eval.curation.verify tests/eval [--network --build]`. Quarantine broken scenarios to `tests/eval-quarantine/`. Skipping this stage = silent signal degradation.
+3. **Capture** — Run native scenarios under the GL/Vulkan shim. **Skip for WebGL/JS** — the native shim doesn't intercept browser GL calls.
+4. **Evaluate** — Run with/without OpenGPA across model tiers, compare accuracy × token cost.
+5. **Improve** — Fix capture bugs or add new capabilities based on eval gaps. Re-run eval to verify.
 
-Eval scenarios live in `tests/eval/`. Each has a `.c` file (GL app) and `.md` file (description). Source files must NOT contain hint comments (// BUG, // should be, etc.)
+The full skill: `~/.claude/skills/eval-driven-improvement/SKILL.md` (reference: `docs/skills/eval-driven-improvement.md`).
+
+Eval scenarios live in `tests/eval/<category>/<framework>/<slug>/`. See `docs/eval-scenario-format.md` for the schema. Source files must NOT contain hint comments (// BUG, // should be, etc.) — the verifier rejects them.
+
+### Snapshot pipeline invariants (load-bearing)
+
+| Invariant | Failure mode if violated |
+|---|---|
+| `fix_parent_sha` populated | Snapshot serves post-fix tree; agents investigate already-fixed code |
+| `SnapshotFetcher` per-cache-key fcntl lock | Parallel modes race on the same cache dir, FileNotFoundError on cwd |
+| `--unshallow` only when `.git/shallow` exists | git fatals "--unshallow on a complete repository" after fallback |
+| `runner._bazel_target_for(scenario)` for live capture | Old `//tests/eval:<slug>` targets don't exist post-taxonomy migration |
 
 ### Mining (single-path pipeline)
 
