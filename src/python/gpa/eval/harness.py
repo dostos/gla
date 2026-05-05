@@ -12,7 +12,11 @@ _log = logging.getLogger(__name__)
 
 from gpa.eval.metrics import DiagnosisScorer, EvalResult
 from gpa.eval.runner import ScenarioRunner
-from gpa.eval.scenario import ScenarioLoader, ScenarioMetadata
+from gpa.eval.scenario import (
+    ScenarioLoader,
+    ScenarioMetadata,
+    is_browser_tier_scenario,
+)
 
 if TYPE_CHECKING:
     from gpa.eval.snapshot_fetcher import SnapshotFetcher
@@ -300,6 +304,24 @@ class EvalHarness:
             "read_scenario_file": lambda path: self._read_scenario_file(scenario, path),
         }
         if mode == "with_gla":
+            # Tier mismatch: scenarios under web-2d / web-3d / web-map /
+            # graphics-lib run in a browser. The native LD_PRELOAD shim
+            # can't intercept their GL calls, so with_gla here surfaces
+            # only the (unhelpful) "Advisor mode" preamble vs the
+            # equivalent code_only setup. R12c (2026-05-05) showed
+            # with_gla *underperforming* code_only by 2/6 on web-map
+            # for exactly this reason. Log a clear warning so users can
+            # filter the cohort or interpret the result correctly.
+            if is_browser_tier_scenario(scenario):
+                _log.warning(
+                    "scenario %s: browser-tier (web-* / graphics-lib) "
+                    "scenario in with_gla mode — the native shim does "
+                    "not intercept browser WebGL, so GPA tools provide "
+                    "no useful frame state. Result will be comparable "
+                    "to code_only but with extra prompt overhead.",
+                    scenario.id,
+                )
+
             def _safe_run_with_capture():
                 try:
                     return self.runner.run_with_capture(scenario)

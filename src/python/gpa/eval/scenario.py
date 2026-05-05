@@ -23,6 +23,38 @@ _VALID_BUG_CLASSES = frozenset(
     {"framework-internal", "consumer-misuse", "user-config", "legacy"}
 )
 
+# Top-level taxonomy categories whose scenarios run in a browser
+# (WebGL/JS) — the native LD_PRELOAD shim cannot intercept these, so
+# `with_gla` mode surfaces no useful frame state for them. Used by the
+# harness to warn (and optionally gate) when running with_gla on a
+# tier-mismatched scenario.
+_BROWSER_TIER_CATEGORIES = frozenset(
+    {"web-2d", "web-3d", "web-map", "graphics-lib"}
+)
+
+
+def is_browser_tier_scenario(scenario: "ScenarioMetadata") -> bool:
+    """True iff the scenario lives under a browser/WebGL category.
+
+    Reads the top-level directory name from `scenario.scenario_dir`
+    (e.g. `tests/eval/web-map/cesium/<slug>` → `web-map` → True).
+    Synthetic and native-engine scenarios return False.
+
+    Falsey when scenario_dir is unset or doesn't fit the layout — in
+    that case the harness keeps default behavior.
+    """
+    if not scenario.scenario_dir:
+        return False
+    parts = Path(scenario.scenario_dir).parts
+    try:
+        i = parts.index("eval")
+    except ValueError:
+        return False
+    # Category is the directory immediately under tests/eval/
+    if i + 1 >= len(parts):
+        return False
+    return parts[i + 1] in _BROWSER_TIER_CATEGORIES
+
 
 @dataclass
 class FixMetadata:
