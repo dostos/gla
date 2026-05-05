@@ -234,11 +234,26 @@ the fixed shape (template in `docs/eval-rounds/README.md`):
 - **Ran**: cohort, modes, model, output dir
 - **Findings**: bullet points, what we learned that we didn't know
   before. Reference the per-scenario forensics if non-trivial.
-- **Added**: commits shipped, backlog items added, scenarios mined
+- **Added / modified**: split into two buckets:
+  - **System** (OpenGPA itself: shims, engine, API, MCP, backends,
+    framework integration)
+  - **Eval pipeline** (harness, scorer, prompts, mining, scenarios)
+  Attribution matters — a lift from a new GL function intercept means
+  something different than a lift from a scoring fix.
 - **Removed / closed**: backlog items resolved, scenarios quarantined
 - **Numbers**: per-mode solved + tokens + delta vs prior round
 - **Open backlog**: ranked items carried forward to next round, each
   with expected lift × inverse cost rationale
+
+To enumerate the commits per round, tag the round at launch:
+
+```bash
+git tag round-<name> <sha-when-launched>
+scripts/round-changes.sh round-<prev> round-<this>
+```
+
+The script prints System / Eval pipeline / Other sections ready to
+paste. Tags also provide a reproducible re-run point.
 
 Append-only: don't rewrite prior rounds. If a finding turns out wrong
 in a later round, note it in *that* round's "Findings" with a
