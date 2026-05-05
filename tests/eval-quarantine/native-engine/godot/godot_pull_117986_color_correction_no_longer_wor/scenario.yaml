@@ -14,6 +14,12 @@ taxonomy:
 backend:
   api: unknown
   status: not-yet-reproduced
-status: drafted
+status: quarantined
 tags: []
 notes: ''
+verification:
+  checked_at: '2026-05-05T04:25:52.998791+00:00'
+  checks_run:
+  - static
+  failures:
+  - fix_parent_sha unset (snapshot would default to post-fix state)

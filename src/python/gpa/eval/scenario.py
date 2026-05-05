@@ -563,15 +563,42 @@ class ScenarioLoader:
             fix=fix_meta,
         )
 
-    def load_all(self) -> list[ScenarioMetadata]:
+    def load_all(self, *, include_quarantined: bool = False) -> list[ScenarioMetadata]:
         """Load all available scenarios in sorted order.
 
         Discovers every subdirectory of ``eval_dir`` that contains a
-        ``scenario.md`` file.
+        ``scenario.md`` file. Scenarios marked ``status: quarantined`` in
+        their ``scenario.yaml`` are skipped by default — the verifier
+        sets that status when a scenario fails its checks, and the
+        harness must not inadvertently evaluate against them.
         """
-        ids = sorted(
-            p.parent.name
-            for p in self._eval_dir.rglob("scenario.md")
-            if not p.parent.name.startswith(".")
-        )
-        return [self.load(sid) for sid in ids]
+        scenario_dirs: list[Path] = []
+        for md in self._eval_dir.rglob("scenario.md"):
+            sd = md.parent
+            if sd.name.startswith("."):
+                continue
+            if not include_quarantined and _scenario_yaml_status(sd) == "quarantined":
+                continue
+            scenario_dirs.append(sd)
+        return [self.load(sd.name) for sd in sorted(scenario_dirs, key=lambda p: p.name)]
+
+
+def _scenario_yaml_status(scenario_dir: Path) -> Optional[str]:
+    """Best-effort: return scenario.yaml's top-level ``status`` field.
+
+    Returns ``None`` for scenarios without a yaml file or with malformed
+    content — those are surfaced by the verifier, not silently swallowed
+    here, so the loader treats them as "no status set" (i.e. visible).
+    """
+    yml = scenario_dir / "scenario.yaml"
+    if not yml.exists():
+        return None
+    try:
+        import yaml as _yaml  # local import — yaml is already a project dep
+        data = _yaml.safe_load(yml.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return None
+    if isinstance(data, dict):
+        v = data.get("status")
+        return str(v) if v is not None else None
+    return None
