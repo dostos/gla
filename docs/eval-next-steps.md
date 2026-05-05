@@ -90,6 +90,154 @@ Scenarios that already have upstream snapshot references:
       eligibility too narrow (prose only); depth-1 snapshot couldn't
       diff merge commits. All three fixed in commit `35c9597`.
 
+## Forensic analysis of remaining R12c failures (2026-05-05)
+
+Methodically broke down the 4 unsolved R12c verdicts across modes
+(union: 5 distinct scenario failures, 3 of which fail in both modes).
+
+### Failure taxonomy
+
+| # | Scenario | Modes | Type | Root cause |
+|---|---|---|---|---|
+| 1 | cesium_camera_jumps | both | **scenario quality** | Agent diagnosed PR #13098 (Float32→Float64 fix); harness reference is PR #12983 (sync/buffer fix). Both PRs closed the same user issue. Mining picked one. |
+| 2 | godot_4_2_world_environment | both | **reasoning depth** | Agent stopped at first plausible mechanism (luminance_multiplier in copy path); actual fix is a buffer-format change (UNORM → half-float). Hit 2/13 files. judge=partial. |
+| 3 | godot_performance_on_android | both | **scenario quality** | Mining picked an Android Java/Kotlin lifecycle refactor PR; user report is a Vulkan Mali-G52 perf regression. Snapshot date predates regression. Files don't match bug class. |
+| 4 | godot_weird_shadow | wg solved, co failed | **stochastic variance** | with_gla: debanding (correct). code_only: specular_occlusion (wrong rabbit hole). Same model, same materials — agent grepped different keywords. |
+| 5 | godot_wrong_position | wg failed, co solved | **file-mismatch reasoning** | with_gla diagnosed correct root cause (XR multiview reprojection mismatch) but proposed fix in `scene_forward_clustered.glsl` (consumer side); maintainer fixed it in `sky.cpp`. judge=partial. |
+
+### Distribution
+
+- Scenario quality: 2/5 (40%) — mining picked wrong/incomplete fix
+- Reasoning correct but file-mismatch: 1.5/5 (godot_4_2 partial, wrong_position full)
+- Reasoning shallow: 1/5 — stopped at first plausible explanation
+- Stochastic agent variance: 1/5 — same problem, different exploration → different outcome
+
+### Token-spend signal
+
+**Solved scenarios use half the tokens of failed ones** (avg 8k vs 16k
+output tokens, 18 vs 33 tool calls). When an agent doesn't have the
+right hypothesis it grinds — repeated greps, multi-file reads,
+backtracking. Token spend is a real-time confidence indicator.
+
+| Cohort | Solved avg | Failed avg | Ratio |
+|---|---|---|---|
+| with_gla | 8.1k tokens | 16.4k tokens | 2.0× |
+| code_only | similar pattern | — | — |
+
+Fast-solve regime: web-map scenarios (2-5k tokens, 9-16 tool calls).
+Slow-solve regime: multi-file godot refactors (8-25k tokens, 20-64
+tool calls). The size of the fix predicts the cost.
+
+## Systematic improvement backlog
+
+Ranked by expected solve-rate gain × inverse cost. The flywheel's
+final step is choosing what ships next, not running another round.
+
+### P0 — fix mining quality (addresses 40% of failures)
+
+**Multi-PR detection**: cesium and android-perf show that one user
+issue can be closed by multiple PRs. The mining pipeline currently
+picks the first cited PR. Two changes:
+
+1. **List ALL PRs that closed the issue.** When the issue body cites
+   multiple PR numbers (`Closes #X`, `Fixes #Y`, `Closes #Z`), record
+   them in `fix.fix_pr_url` as a list. The judge accepts agent
+   diagnosis matching ANY listed fix.
+2. **Mining-quality verifier**: post-mine check that the listed
+   `fix.files` semantically relate to the user report. Heuristic: do
+   the file paths share keywords with the issue title? If not, flag
+   for review (probably mis-classified bug_class or wrong PR).
+
+Cost: ~50 lines in `extract_draft.py` + verifier addendum.
+Expected lift: closes the cesium + android-perf failures → +2/14.
+
+### P1 — pre-flight scoping hint (addresses reasoning-shallow + file-mismatch)
+
+When the agent starts, give it a **shortstat-only** hint from the fix
+PR diff: "the canonical fix touches 13 files in `servers/rendering/`,
+none in `editor/` or `core/`." This calibrates the agent's search
+scope without leaking the actual answer:
+
+- Tells them how big a fix to look for (1 file vs 13)
+- Tells them what *area* of the codebase
+- Doesn't reveal which files specifically
+
+Implementation: extend the prompt to include `fix.shortstat_summary`
+(generated at curation time from `git show --shortstat`). Or compute
+on demand in `_select_prompt_for_scenario` from the snapshot's
+`fix_sha`.
+
+Cost: ~30 lines in scenario.yaml schema + curation pipeline + harness
+prompt rendering.
+Expected lift: closes godot_4_2_world_environment (agent would have
+known to look for buffer-format changes, not just multiplier paths)
+and godot_wrong_position (scope of fix points at sky.cpp not glsl).
++1.5/14.
+
+### P2 — tool-call budget + checkpoint
+
+Failure correlates with tool-call grind. Two complementary measures:
+
+1. **Hard budget**: After 30 tool calls without a confident hypothesis,
+   the harness injects a checkpoint message: "You've spent 30 tool
+   calls; summarize what you know in 3 bullet points and what you'd
+   investigate next." Forces synthesis; often surfaces the agent's
+   own confusion.
+2. **Soft signal**: Surface tool-call count to the agent so they can
+   self-throttle. Currently they have no awareness of how much they've
+   spent.
+
+Cost: ~80 lines in cli_agent (tool-counter wrapper around each tool
+invocation) + prompt update.
+Expected lift: tightens the failure tax. Won't lift solves directly
+but cuts ~30% of wasted tokens. Important for cohort scaling.
+
+### P3 — ensemble agents (addresses stochastic variance)
+
+For scenarios near the threshold (judge=partial OR file_score ∈
+[0.2, 0.5]), run a second independent agent attempt. Take the union
+of cited files; have the judge score the combined diagnosis. Cost
+~$0.10/scenario × ~30% of scenarios = $0.03 net average increase.
+
+godot_weird_shadow: code_only failed because of one wrong grep
+choice. A second attempt would have likely landed on debanding too.
+
+Cost: ~50 lines in cli_agent (re-run logic) + judge fallback path.
+Expected lift: closes godot_weird_shadow co failure. +0.5/14.
+
+### P4 — directory-aware file scoring
+
+Agents that name 3 files all in the right *directory* of a 13-file
+fix have made a stronger claim than naive recall=0.23 suggests.
+Weight file-overlap by:
+
+- 1.0 for exact-path hits
+- 0.5 for same-immediate-directory hits
+- 0.25 for same-package-prefix hits (e.g. `servers/rendering/`)
+
+Cost: ~40 lines in `scorer_prose` + `scorer.py`.
+Expected lift: marginal — judge already covers most of these. Worth
+~+0.3/14 on godot multi-file cases.
+
+### P5 — re-run R12d with the lighter prompt
+
+R12d (heavy "READ FIRST" prompt) collapsed agent investigation 5×.
+The lighter prompt is now in main (`35c9597`). Re-run those same 14
+scenarios; expected to recover R12c-level numbers (10/14).
+
+Cost: 1 hour wall time + ~$0.50 in claude-cli costs.
+Validates that the prompt revert was the right call.
+
+## Decision: ship P0 + P1 next
+
+Largest expected lift × smallest implementation cost. P0 fixes
+*scenario quality* (2/14 → 0/14 of that failure mode). P1 gives the
+agent the search scope it currently lacks (1.5/14 → 0/14 of that
+mode). Combined: 6.5/14 max ceiling lift, realistic 3/14.
+
+P2-P5 wait for the next iteration; their effects compound only when
+P0/P1 are in place.
+
 ## Open questions for next iteration
 
 ### 1. Reverse the R12d collapse
