@@ -102,18 +102,21 @@ def test_framework_internal_uses_maintainer_prompt():
 
 
 def test_consumer_misuse_uses_advisor_prompt():
-    """`bug_class: consumer-misuse` → advisor prompt (user code change)."""
+    """`bug_class: consumer-misuse` → advisor prompt (user code change).
+
+    The advisor prompt's PRIMARY schema is user_code_change, but it
+    documents `proposed_patches` as an escape hatch — when the agent
+    discovers the bug is actually framework-internal (mining sometimes
+    mis-classifies). The primary schema must still be user_code_change.
+    """
     harness = _make_harness()
     scenario = _make_scenario(fix=_fix("consumer-misuse"))
     tools = harness._build_tools(scenario, mode="code_only")
     assert tools["bug_class"] == "consumer-misuse"
     prompt = tools["system_prompt"]
     assert prompt is not None
-    # The advisor prompt is framed around telling the user to change
-    # their code, not patching the framework.
-    assert "misuse" in prompt.lower() or "user_code_change" in prompt
-    # Must NOT use the maintainer JSON schema.
-    assert "proposed_patches" not in prompt
+    # The advisor prompt's primary schema is user_code_change.
+    assert "user_code_change" in prompt
     # Must carry the user report.
     assert "VERBATIM_ISSUE_BODY_SENTINEL" in prompt
 

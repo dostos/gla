@@ -135,10 +135,28 @@ def fetch_pr_diff_summary(
     cwd = Path(snapshot_root)
 
     def _run(argv):
+        # `errors="replace"` because merge commits sometimes carry
+        # binary blobs (icons, fonts, textures) that aren't valid utf-8;
+        # we don't want a single byte to kill the whole judge call.
         return subprocess.run(
             argv, cwd=cwd, capture_output=True, text=True,
-            timeout=15, check=True,
+            errors="replace", timeout=30, check=True,
         )
+
+    # The snapshot was originally cloned at fix_parent_sha with depth=1,
+    # so the fix_sha commit (and its parents) may not be in the local
+    # repo. Without the parents `git show` thinks the merge added the
+    # whole tree from nothing (millions of lines). Fetch with depth=2
+    # so both the merge commit AND its first parent land locally —
+    # that lets `git show` produce a real diff. Best effort: silent on
+    # failure, the show below will then return empty.
+    try:
+        _run(["git", "cat-file", "-e", fix_sha + "^1"])
+    except (subprocess.SubprocessError, OSError):
+        try:
+            _run(["git", "fetch", "--depth", "2", "origin", fix_sha])
+        except (subprocess.SubprocessError, OSError):
+            pass
 
     try:
         log = _run(["git", "log", "-1", "--format=%B", fix_sha])
@@ -157,9 +175,17 @@ def fetch_pr_diff_summary(
     except (subprocess.SubprocessError, OSError):
         pass
     try:
-        diff = _run(
-            ["git", "show", "--no-color", "--no-prefix", "--format=", fix_sha]
-        )
+        # Skip binary diffs and cap per-file output so a giant merge
+        # doesn't drown the relevant hunks. `--first-parent` keeps the
+        # merge-commit case readable (we want the merge's net effect,
+        # not every commit on the side branch).
+        diff = _run([
+            "git", "show",
+            "--no-color", "--no-prefix",
+            "--format=", "--first-parent", "--no-ext-diff",
+            "--text",  # treat binary files as text (we'll truncate anyway)
+            fix_sha,
+        ])
         hunks = diff.stdout
         if hunks:
             parts.append(f"=== Diff hunks ===\n{hunks}")

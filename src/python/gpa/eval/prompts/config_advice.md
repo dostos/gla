@@ -3,32 +3,6 @@ mistake. The bug below is caused by a setting/flag the user did not
 enable (or enabled incorrectly); the fix is a one-line configuration
 change, not a code change.
 
-# Output contract (READ FIRST — non-negotiable)
-
-Your final message MUST end with a single, raw JSON object on its own
-final line. Anything you say before that line is for your own reasoning;
-the harness only scores what is in the JSON. If you skip the JSON your
-diagnosis cannot be scored and the run is wasted.
-
-```
-{"bug_class":"user-config","setting_change":{"key":"<setting name>","value":"<correct value>","context":"<where the user sets this>"},"confidence":"high|medium|low","reasoning":"<short>"}
-```
-
-Rules for the JSON object:
-
-- It must be the LAST non-empty line. Nothing after it — no signoff, no
-  markdown fence, no trailing prose.
-- It must be valid JSON: double-quoted keys/strings, no comments, no
-  trailing commas.
-- If you cannot pin the setting confidently, still emit the JSON with
-  `value: ""` and `confidence: "low"` — never omit it.
-
-If, while reading the framework source, you discover the bug is
-actually in framework code (not user config), set `bug_class:
-"framework-internal"` and emit `proposed_patches` (list of
-`{repo,file,change_summary}` objects) instead of `setting_change` —
-mining sometimes mis-classifies these.
-
 # Bug report
 
 {user_report}
@@ -46,6 +20,32 @@ mining sometimes mis-classifies these.
 
 # Task
 
-Identify the configuration key and its correct value (or, if it turns
-out to be framework-internal, the fix file), then emit the JSON object
-described above as your final line.
+Identify the configuration key and its correct value. Cite the
+framework file(s) where the setting lives (e.g.
+``src/render/Renderer.ts``) — the harness scores you partly on those
+file-level cites.
+
+If, while reading the source, you discover the bug is actually
+framework-internal (renderer/state/shader code, not a setting), switch
+to the maintainer schema (`bug_class:"framework-internal"`,
+`proposed_patches:[{repo,file,change_summary}]`) instead — mining
+sometimes mis-classifies these.
+
+# Output (REQUIRED — last line)
+
+End with a SINGLE JSON object on the LAST line. No markdown around it.
+Skipping the JSON means your diagnosis cannot be parsed — emit it
+even if your confidence is low.
+
+```
+{
+  "bug_class": "user-config",
+  "setting_change": {
+    "key": "<setting name, e.g. renderer.physicallyCorrectLights>",
+    "value": "<correct value>",
+    "context": "<where the user sets this, e.g. renderer init>"
+  },
+  "confidence": "high|medium|low",
+  "reasoning": "short explanation of how you identified the setting"
+}
+```

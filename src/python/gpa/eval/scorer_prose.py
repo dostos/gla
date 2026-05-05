@@ -23,13 +23,20 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-_SOURCE_EXTS = (
+_SOURCE_EXTS_RAW = (
     "c", "cc", "cpp", "h", "hpp",
     "ts", "tsx", "js", "jsx", "mjs", "cjs",
     "py", "go", "rs", "rb", "java",
     "glsl", "vert", "frag", "comp", "geom",
     "gd", "gdshader",
 )
+# Sort longest-first GLOBALLY. Regex alternation matches left-to-right,
+# so a shorter extension that's a prefix of another one (e.g. `c`
+# matching the start of `.cpp` or `.cjs`) wins and truncates the path.
+# Sorting longest-first guarantees the regex tries `cpp`/`cjs`/`hpp`
+# /`tsx`/`gdshader` before their shorter prefixes. R12c silently lost
+# every such hit before this ordering.
+_SOURCE_EXTS = tuple(sorted(_SOURCE_EXTS_RAW, key=len, reverse=True))
 _EXT_GROUP = "|".join(_SOURCE_EXTS)
 
 # Path with at least one '/' — matches `src/foo.ts`, `packages/x/y.cpp`.

@@ -19,5 +19,8 @@ core.*
 # Glob covers .eval-pipeline/, .eval-pipeline-codex/, etc.
 .eval-pipeline*/
 
+# LLM-judge verdict cache — keyed on (fix_sha, diagnosis_text); recreatable.
+.eval-judge-cache/
+
 # Per-agent / superpowers git worktrees
 .claude/worktrees/

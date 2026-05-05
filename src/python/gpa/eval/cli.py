@@ -44,7 +44,41 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if args.model:
         config["model"] = args.model
 
-    harness = EvalHarness(config=config)
+    judge_client = None
+    judge_cache_dir = None
+    if not args.no_judge:
+        judge_cache_dir = Path(args.judge_cache_dir or ".eval-judge-cache")
+        try:
+            from gpa.eval.curation.llm_client import (
+                ClaudeCodeLLMClient, CodexCliLLMClient, LLMClient,
+            )
+            backend = args.judge_backend
+            if backend == "claude-cli":
+                judge_client = ClaudeCodeLLMClient.from_env(model=args.judge_model)
+            elif backend == "codex-cli":
+                judge_client = CodexCliLLMClient.from_env(model=args.judge_model)
+            elif backend == "api":
+                judge_client = LLMClient.from_env(model=args.judge_model)
+            else:
+                print(
+                    f"warning: unknown --judge-backend {backend!r}; "
+                    "falling back to no-judge mode",
+                    file=sys.stderr,
+                )
+        except Exception as exc:
+            print(
+                f"warning: judge client setup failed ({exc}); "
+                "falling back to no-judge mode",
+                file=sys.stderr,
+            )
+            judge_client = None
+            judge_cache_dir = None
+
+    harness = EvalHarness(
+        config=config,
+        llm_judge_client=judge_client,
+        judge_cache_dir=judge_cache_dir,
+    )
 
     # Determine which scenarios / modes to run
     if args.all:
@@ -139,6 +173,28 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument(
         "--dry-run", action="store_true",
         help="Use the built-in stub agent instead of a real LLM backend",
+    )
+    run_p.add_argument(
+        "--no-judge", action="store_true",
+        help="Disable LLM-judge tier. Default is on — the judge upgrades "
+             "needs_review verdicts by reading the actual fix-PR diff. "
+             "Disable for offline runs or when no LLM backend is configured.",
+    )
+    run_p.add_argument(
+        "--judge-backend", default="claude-cli",
+        choices=["api", "claude-cli", "codex-cli"],
+        help="Judge LLM backend (default: claude-cli)",
+    )
+    run_p.add_argument(
+        "--judge-model", default="claude-sonnet-4-6",
+        help="Model for the LLM-judge tier (default: claude-sonnet-4-6, "
+             "cheaper than the agent's opus model and adequate for "
+             "semantic match against a diff hunk)",
+    )
+    run_p.add_argument(
+        "--judge-cache-dir", default=None,
+        help="Disk cache for judge verdicts (default: .eval-judge-cache/). "
+             "Keyed on (fix_sha, diagnosis_text) so re-scoring is free.",
     )
 
     # --- report subcommand ---

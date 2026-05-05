@@ -181,3 +181,55 @@ def test_common_basename_alone_does_not_hit(stop_basename):
     text = f"Bug is in `{stop_basename}`."
     out = score_prose(text, gt_files=[f"packages/engine/Source/{stop_basename}"])
     assert out.file_hits == set()
+
+
+# ---------------------------------------------------------------------------
+# Regex alternation — every multi-char extension that shares a prefix with
+# a shorter one must match in full. R12c silently dropped every .cpp /
+# .hpp / .tsx / .gdshader / .mjs hit because the alternation `c|cc|cpp`
+# matched `c` first and truncated the path.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "ext, sibling_short_ext",
+    [
+        ("cpp", "c"),
+        ("cc", "c"),
+        ("hpp", "h"),
+        ("tsx", "ts"),
+        ("jsx", "js"),
+        ("mjs", "js"),
+        ("cjs", "js"),
+        ("gdshader", "gd"),
+    ],
+)
+def test_extension_alternation_matches_longest(ext, sibling_short_ext):
+    """`servers/.../foo.cpp` must NOT be truncated to `foo.c` by the
+    regex alternation. The fix is longest-prefix-first ordering of
+    _SOURCE_EXTS."""
+    path = f"src/render/foo.{ext}"
+    text = f"The bug is in `{path}` somewhere."
+    out = score_prose(text, gt_files=[path])
+    assert path in out.file_hits, (
+        f".{ext} path was not matched in full — likely got truncated to .{sibling_short_ext}"
+    )
+    assert out.recall == 1.0
+
+
+def test_godot_cpp_path_inside_json_block():
+    """Smoke-test of the actual R12c failure: agent emits the path
+    inside a JSON `proposed_patches` block (so it's surrounded by
+    JSON quoting). The prose scorer must still extract it."""
+    diagnosis = (
+        "Reasoning prose.\n"
+        '{"proposed_patches":[{"file":"servers/rendering/renderer_rd/'
+        'storage_rd/render_scene_buffers_rd.cpp","change_summary":"x"}]}'
+    )
+    gt = [
+        "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.cpp",
+        "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.cpp",
+    ]
+    out = score_prose(diagnosis, gt)
+    assert "servers/rendering/renderer_rd/storage_rd/render_scene_buffers_rd.cpp" in out.file_hits
+    assert out.any_hit is True

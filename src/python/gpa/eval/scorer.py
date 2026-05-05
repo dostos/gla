@@ -417,8 +417,11 @@ def judge_residual(
     Disk cache (when `cache_dir` is set) keyed on
     sha256(fix_sha + diagnosis_text). Repeat invocations skip the LLM.
     """
+    # Eligibility: any "we have evidence but couldn't auto-decide"
+    # verdict — prose/file_level/no_signal — provided needs_review=True
+    # and we have everything required to fetch the real fix-PR diff.
     if not (
-        verdict.scorer == "prose"
+        verdict.scorer in ("prose", "file_level", "no_signal")
         and verdict.needs_review
         and llm_client is not None
         and snapshot_root
@@ -562,6 +565,25 @@ def score_run(
             reasoning="no fix.files ground truth to score against",
         )
 
+    # File-level partial hit: agent named at least one ground-truth file
+    # but not enough to clear the recall threshold. R12c/R12d showed this
+    # is the dominant failure mode for multi-file refactor PRs (e.g. a
+    # godot fix that touches 13 files — the agent correctly names 3 of
+    # them but file_score=0.23 is below the 0.5 threshold). Mark as
+    # needs_review so the LLM judge gets a chance to upgrade against the
+    # actual diff hunks.
+    if file_score is not None and file_score.file_hits:
+        return ScoreVerdict(
+            scorer="file_level", solved=False, confidence="low",
+            file_score=file_score.file_score,
+            needs_review=True,
+            reasoning=(
+                f"file_level any_hit but below threshold "
+                f"({len(file_score.file_hits)}/{len(fix.files)} files, "
+                f"score={file_score.file_score:.2f})"
+            ),
+        )
+
     prose = score_prose(diagnosis_text or "", list(fix.files))
     if prose.solved:
         return ScoreVerdict(
@@ -584,6 +606,19 @@ def score_run(
                 f"(recall={prose.recall:.2f}, "
                 f"precision={prose.precision:.2f})"
             ),
+        )
+    # Substantive diagnosis with no file or prose hits — still worth
+    # judging when we have a real diagnosis to compare. Filters out
+    # short or empty responses (the gave_up/timeout cases above already
+    # short-circuit; this catches the "agent diagnosed correctly but
+    # used different file path conventions" tail).
+    if (diagnosis_text or "").strip() and len(diagnosis_text) >= 200:
+        return ScoreVerdict(
+            scorer="no_signal", solved=False, confidence="medium",
+            file_score=file_score.file_score if file_score else None,
+            prose_recall=prose.recall, prose_precision=prose.precision,
+            needs_review=True,
+            reasoning="no file or prose hits but substantive diagnosis — judge eligible",
         )
     return ScoreVerdict(
         scorer="no_signal", solved=False, confidence="high",
