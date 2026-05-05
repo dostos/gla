@@ -404,6 +404,15 @@ class EvalHarness:
         # prompts package (keeps import times cheap for callers that
         # don't need prompts, e.g. analytics scripts).
         from gpa.eval.prompts import load_prompt, render_maintainer_prompt
+        from gpa.eval.scope_hint import compute_scope_hint
+
+        # Pre-compute the scope hint once for the scenario; passed to
+        # whichever bug-class prompt fires. Pulls from the curated
+        # fix.files list — this is "size and area" only, never the
+        # filenames themselves (the hint helper enforces this).
+        scope_hint = None
+        if scenario.fix is not None and scenario.fix.files:
+            scope_hint = compute_scope_hint(scenario.fix.files)
 
         if bug_class == "framework-internal":
             return render_maintainer_prompt(
@@ -412,14 +421,15 @@ class EvalHarness:
                 upstream_snapshot_repo=scenario.upstream_snapshot_repo,
                 upstream_snapshot_sha=scenario.upstream_snapshot_sha,
                 mode=mode,
+                scope_hint=scope_hint,
             )
         if bug_class == "consumer-misuse":
             return self._render_class_prompt(
-                "advisor", scenario, mode=mode,
+                "advisor", scenario, mode=mode, scope_hint=scope_hint,
             )
         if bug_class == "user-config":
             return self._render_class_prompt(
-                "config_advice", scenario, mode=mode,
+                "config_advice", scenario, mode=mode, scope_hint=scope_hint,
             )
         # "legacy" or unknown — fall back to the agent's default prompt.
         return None
@@ -429,11 +439,12 @@ class EvalHarness:
         template_name: str,
         scenario: ScenarioMetadata,
         mode: str,
+        scope_hint: Optional[str] = None,
     ) -> str:
         """Render an advisor / config_advice prompt with the same
         substitution rules as the maintainer prompt."""
         import re as _re
-        from gpa.eval.prompts import load_prompt
+        from gpa.eval.prompts import load_prompt, _build_scope_hint_block
 
         template = load_prompt(template_name)
         if mode == "with_gla":
@@ -459,6 +470,10 @@ class EvalHarness:
             .replace(
                 "{upstream_snapshot.sha}",
                 scenario.upstream_snapshot_sha or "HEAD",
+            )
+            .replace(
+                "{scope_hint_block}",
+                _build_scope_hint_block(scope_hint),
             )
         )
 

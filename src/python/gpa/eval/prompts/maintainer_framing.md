@@ -10,6 +10,7 @@ minimal repro.
 # Bug report
 
 {user_report}
+{scope_hint_block}
 
 # Resources
 

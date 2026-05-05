@@ -25,6 +25,7 @@ def render_maintainer_prompt(
     upstream_snapshot_repo: Optional[str],
     upstream_snapshot_sha: Optional[str],
     mode: str = "code_only",
+    scope_hint: Optional[str] = None,
 ) -> str:
     """Render the maintainer-framing prompt for a scenario.
 
@@ -36,6 +37,11 @@ def render_maintainer_prompt(
       upstream_snapshot_sha: The pre-fix parent SHA.
       mode: ``"with_gla"`` or ``"code_only"`` — controls whether the
         OpenGPA tool block is included.
+      scope_hint: Optional pre-computed scope-hint text from
+        :func:`gpa.eval.scope_hint.compute_scope_hint`. When provided,
+        the ``{scope_hint_block}`` placeholder is filled with a short
+        section telling the agent the size+area of the canonical fix.
+        When None, the placeholder is dropped.
 
     Returns:
       The fully-rendered prompt text.
@@ -69,6 +75,26 @@ def render_maintainer_prompt(
         .replace("{user_report}", (user_report or "").strip())
         .replace("{upstream_snapshot.repo}", repo)
         .replace("{upstream_snapshot.sha}", sha)
+        .replace("{scope_hint_block}", _build_scope_hint_block(scope_hint))
+    )
+
+
+def _build_scope_hint_block(scope_hint: Optional[str]) -> str:
+    """Inline section the agent sees when a scope hint is available.
+
+    Empty string when no hint — the placeholder collapses to nothing
+    so the prompt stays clean. The hint is framed as calibration, not
+    as the answer: the agent still has to find the specific files.
+    """
+    if not scope_hint or not scope_hint.strip():
+        return ""
+    return (
+        "\n# Scope hint\n\n"
+        f"The canonical fix has scope: **{scope_hint.strip()}**\n\n"
+        "Use this to calibrate where to look — it tells you the size "
+        "and area of the fix, not the specific files. Don't propose "
+        "fixes outside this scope unless you find compelling evidence "
+        "that the canonical fix missed something.\n"
     )
 
 
