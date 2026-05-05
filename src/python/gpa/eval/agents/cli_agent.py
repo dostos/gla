@@ -14,12 +14,43 @@ from typing import Any
 
 from gpa.eval.agents.base import AgentBackend, AgentResult
 from gpa.eval.agents.cli_spec import CliBackendSpec, CliRunMetrics
+from gpa.eval.scorer import _extract_json_tail
+
+
+def _has_json_tail(text: str) -> bool:
+    """True iff `text` ends with a parseable JSON object."""
+    return _extract_json_tail(text or "") is not None
+
+
+def _build_json_reprompt(prior_diagnosis: str) -> str:
+    """Build a tight follow-up that asks ONLY for the JSON object."""
+    truncated = (prior_diagnosis or "").strip()[-2000:]
+    return (
+        "Your previous response below was missing the required JSON "
+        "object on the final line. The harness scores ONLY the JSON "
+        "tail — without it your diagnosis cannot be evaluated.\n\n"
+        "Reply with the JSON object and NOTHING ELSE: no markdown "
+        "fence, no preamble, no trailing commentary. Use the schema "
+        "from the original task. If you cannot pin a specific fix "
+        "file/setting, emit the JSON anyway with confidence:\"low\" "
+        "and an empty patches list.\n\n"
+        "--- Your prior response (tail) ---\n"
+        f"{truncated}\n"
+        "--- End prior ---\n\n"
+        "Now emit ONLY the JSON object as your entire response."
+    )
 
 
 class CliAgent(AgentBackend):
     def __init__(self, spec: CliBackendSpec, *, model: str | None = None):
         self._spec = spec
         self._model = model
+
+    # When True, on a parse failure we send a tight follow-up asking for
+    # ONLY the JSON object. Costs at most one extra round-trip; bounded
+    # by the same CLI timeout. Disabled when no system_prompt is present
+    # (i.e. legacy synthetic scenarios that don't expect JSON).
+    JSON_REPROMPT_ENABLED = True
 
     def run(self, scenario, mode: str, tools: dict) -> AgentResult:
         env = os.environ.copy()
@@ -73,20 +104,69 @@ class CliAgent(AgentBackend):
         elapsed = time.time() - t0
 
         metrics = self._spec.parse_run(proc.stdout, proc.stderr)
+
+        # If the agent ignored the JSON output contract, give it one
+        # follow-up shot. The first response stays in `metrics` for
+        # cost accounting; we append the second response's diagnosis
+        # so the scorer sees the JSON tail.
+        if (self.JSON_REPROMPT_ENABLED
+                and (tools or {}).get("system_prompt")
+                and not _has_json_tail(metrics.diagnosis)):
+            followup_prompt = _build_json_reprompt(metrics.diagnosis)
+            t1 = time.time()
+            try:
+                proc2 = subprocess.run(
+                    argv, input=followup_prompt, capture_output=True,
+                    text=True, env=env,
+                    timeout=self._spec.timeout_sec,
+                )
+                metrics2 = self._spec.parse_run(proc2.stdout, proc2.stderr)
+                # Merge: keep the original diagnosis prose and append the
+                # JSON tail from the follow-up so the scorer can read it
+                # while the human-readable reasoning stays intact.
+                if _has_json_tail(metrics2.diagnosis):
+                    metrics = metrics.with_appended_tail(metrics2)
+                elapsed += time.time() - t1
+            except subprocess.TimeoutExpired:
+                # Re-prompt timed out — accept the original (un-JSONed)
+                # diagnosis. The scorer will still record no_signal but
+                # we've spent the cost.
+                elapsed += time.time() - t1
+
         return self._to_agent_result(metrics, elapsed)
 
     def _render_prompt(
         self, scenario, mode: str, tools: dict,
         *, have_frame: bool = False, have_snapshot: bool = False,
     ) -> str:
+        # When the harness has rendered a bug-class-specific system prompt
+        # (maintainer_framing / advisor / config_advice), use it as the
+        # primary instruction — it carries the JSON output contract that
+        # the scorer parses. We still prepend the tool block + scenario
+        # blurb so the agent knows what tools are available and which
+        # framework / repo it's looking at, but the system prompt drives
+        # the task framing and final-output format.
+        system_prompt = (tools or {}).get("system_prompt") or ""
+        block = self._tool_block(mode, have_frame, have_snapshot)
+        blurb = self._scenario_blurb(scenario, tools)
+
+        if system_prompt:
+            parts: list[str] = []
+            if blurb:
+                parts.append(blurb)
+            parts.append(block)
+            parts.append(system_prompt.strip())
+            return "\n".join(parts) + "\n"
+
+        # Fallback for scenarios without a rendered system prompt
+        # (bug_class == "legacy" or unknown — synthetic E1-E10 etc.):
+        # keep the original one-line DIAGNOSIS/FIX framing.
         description = (
             getattr(scenario, "description", None)
             or getattr(scenario, "bug_description", "")
             or ""
         )
         source_path = getattr(scenario, "source_path", "")
-        block = self._tool_block(mode, have_frame, have_snapshot)
-        blurb = self._scenario_blurb(scenario, tools)
         parts = ["You are debugging an OpenGL application that has a rendering bug.\n"]
         if blurb:
             parts.append(blurb)

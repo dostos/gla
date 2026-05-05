@@ -119,17 +119,22 @@ def test_consumer_misuse_uses_advisor_prompt():
 
 
 def test_user_config_uses_config_advice_prompt():
-    """`bug_class: user-config` → config-advice prompt."""
+    """`bug_class: user-config` → config-advice prompt.
+
+    The config-advice prompt is allowed to mention `proposed_patches`
+    as an escape hatch — when the agent reads the framework source and
+    discovers the bug is actually framework-internal, mining sometimes
+    mis-classified it. The PRIMARY schema is still setting_change.
+    """
     harness = _make_harness()
     scenario = _make_scenario(fix=_fix("user-config"))
     tools = harness._build_tools(scenario, mode="code_only")
     assert tools["bug_class"] == "user-config"
     prompt = tools["system_prompt"]
     assert prompt is not None
-    # The config-advice prompt references a setting_change schema.
-    assert "setting_change" in prompt or "config" in prompt.lower()
-    # Must NOT use the maintainer or advisor schemas.
-    assert "proposed_patches" not in prompt
+    # The config-advice prompt's primary schema is setting_change.
+    assert "setting_change" in prompt
+    # Must NOT use the advisor schema (consumer-misuse / user_code_change).
     assert "user_code_change" not in prompt
 
 

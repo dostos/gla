@@ -283,3 +283,188 @@ def test_codex_preset_constructible():
     assert CODEX_CLI_SPEC.binary == "codex"
     metrics = CODEX_CLI_SPEC.parse_run("", "")
     assert metrics.tool_calls == 0
+
+
+def test_render_prompt_uses_system_prompt_when_provided(monkeypatch, tmp_path):
+    """When tools['system_prompt'] is set (maintainer/advisor/config),
+    the cli_agent must include it instead of the legacy DIAGNOSIS/FIX
+    framing — the system prompt carries the JSON output contract."""
+    inputs: list[str] = []
+
+    def fake_run(argv, *, input, capture_output, text, env, timeout):
+        inputs.append(input)
+        return subprocess.CompletedProcess(argv, returncode=0, stdout="", stderr="")
+
+    # Stub that already emits JSON, so reprompt does not fire and we
+    # observe the first (only) call's input directly.
+    def parse_with_json(stdout, stderr):
+        return CliRunMetrics(
+            diagnosis='ok\n{"bug_class":"framework-internal","proposed_patches":[],"confidence":"low","reasoning":""}',
+            input_tokens=10, output_tokens=20, tool_calls=2, num_turns=3,
+        )
+
+    spec = CliBackendSpec(
+        name="fake-cli", binary="/bin/true", base_args=("-q",),
+        parse_run=parse_with_json, timeout_sec=10,
+    )
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    agent = CliAgent(spec=spec)
+    scenario = _Scenario(source_path=str(tmp_path / "main.c"))
+    (tmp_path / "main.c").write_text("// hi")
+
+    sysprompt = (
+        "You are a maintainer of foo. End with a single JSON object on "
+        "the last line: {\"bug_class\":\"framework-internal\", ...}."
+    )
+    tools = {
+        "run_with_capture": lambda: None,
+        "system_prompt": sysprompt,
+    }
+    agent.run(scenario, "with_gla", tools)
+
+    # Only one CLI invocation — the first (and only) prompt
+    assert len(inputs) == 1
+    rendered = inputs[0]
+    # The maintainer-style instruction must appear in the rendered prompt
+    assert "maintainer of foo" in rendered
+    # The legacy DIAGNOSIS/FIX footer must NOT appear when system prompt is used
+    assert "DIAGNOSIS: <one-sentence root cause>" not in rendered
+
+
+def test_render_prompt_falls_back_to_legacy_when_no_system_prompt(monkeypatch, tmp_path):
+    """Legacy synthetic scenarios (E1-E10) don't have a system_prompt.
+    The cli_agent must keep its original DIAGNOSIS/FIX framing for them."""
+    captured = {}
+
+    def fake_run(argv, *, input, capture_output, text, env, timeout):
+        captured["input"] = input
+        return subprocess.CompletedProcess(argv, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    agent = CliAgent(spec=_SPEC)
+    scenario = _Scenario(source_path=str(tmp_path / "main.c"))
+    (tmp_path / "main.c").write_text("// hi")
+
+    tools = {"run_with_capture": lambda: None}  # no system_prompt
+    agent.run(scenario, "with_gla", tools)
+
+    # Legacy framing must survive
+    assert "DIAGNOSIS: <one-sentence root cause>" in captured["input"]
+
+
+def test_json_reprompt_fires_when_first_response_lacks_json(monkeypatch, tmp_path):
+    """If the agent's first response has no JSON tail and a system_prompt
+    is in play, the cli_agent must send a follow-up prompt and merge the
+    JSON tail back into the diagnosis."""
+    calls = []
+    responses = [
+        # First call: prose only, no JSON tail
+        CliRunMetrics(
+            diagnosis="DIAGNOSIS: lights flicker. FIX: clamp.",
+            input_tokens=100, output_tokens=200, tool_calls=5, num_turns=4,
+        ),
+        # Follow-up: JSON only
+        CliRunMetrics(
+            diagnosis='{"bug_class":"framework-internal","proposed_patches":[{"repo":"foo","file":"src/a.cpp","change_summary":"clamp"}],"confidence":"low","reasoning":"fallback"}',
+            input_tokens=20, output_tokens=30, tool_calls=0, num_turns=1,
+        ),
+    ]
+
+    def fake_run(argv, *, input, capture_output, text, env, timeout):
+        calls.append(input)
+        return subprocess.CompletedProcess(argv, returncode=0, stdout="", stderr="")
+
+    spec_iter = iter(responses)
+    spec = CliBackendSpec(
+        name="fake-cli", binary="/bin/true", base_args=("-q",),
+        parse_run=lambda s, e: next(spec_iter), timeout_sec=10,
+    )
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    agent = CliAgent(spec=spec)
+    scenario = _Scenario(source_path=str(tmp_path / "main.c"))
+    (tmp_path / "main.c").write_text("// hi")
+    tools = {
+        "run_with_capture": lambda: None,
+        "system_prompt": "You are a maintainer. End with JSON.",
+    }
+    result = agent.run(scenario, "with_gla", tools)
+
+    # Two CLI invocations: original + reprompt
+    assert len(calls) == 2
+    # Reprompt mentions the missing JSON
+    assert "JSON" in calls[1]
+    # Tokens summed across both calls
+    assert result.input_tokens == 120
+    assert result.output_tokens == 230
+    # JSON tail was merged into the final diagnosis
+    assert '"proposed_patches"' in result.diagnosis
+    # Original prose preserved
+    assert "lights flicker" in result.diagnosis
+
+
+def test_json_reprompt_skipped_when_first_response_already_has_json(monkeypatch, tmp_path):
+    """If the agent already complied, no follow-up — saves tokens."""
+    calls = []
+    responses = [
+        CliRunMetrics(
+            diagnosis='Reasoning text.\n{"bug_class":"framework-internal","proposed_patches":[],"confidence":"low","reasoning":""}',
+            input_tokens=100, output_tokens=200, tool_calls=5, num_turns=4,
+        ),
+    ]
+
+    def fake_run(argv, *, input, capture_output, text, env, timeout):
+        calls.append(input)
+        return subprocess.CompletedProcess(argv, returncode=0, stdout="", stderr="")
+
+    spec_iter = iter(responses)
+    spec = CliBackendSpec(
+        name="fake-cli", binary="/bin/true", base_args=("-q",),
+        parse_run=lambda s, e: next(spec_iter), timeout_sec=10,
+    )
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    agent = CliAgent(spec=spec)
+    scenario = _Scenario(source_path=str(tmp_path / "main.c"))
+    (tmp_path / "main.c").write_text("// hi")
+    tools = {
+        "run_with_capture": lambda: None,
+        "system_prompt": "You are a maintainer. End with JSON.",
+    }
+    result = agent.run(scenario, "with_gla", tools)
+
+    # Only the original call — no reprompt
+    assert len(calls) == 1
+    assert result.input_tokens == 100
+
+
+def test_json_reprompt_skipped_when_no_system_prompt(monkeypatch, tmp_path):
+    """Legacy scenarios with no system_prompt must NOT trigger the
+    reprompt — they don't expect JSON output."""
+    calls = []
+    responses = [
+        CliRunMetrics(
+            diagnosis="DIAGNOSIS: thing. FIX: other thing.",
+            input_tokens=100, output_tokens=200, tool_calls=5, num_turns=4,
+        ),
+    ]
+
+    def fake_run(argv, *, input, capture_output, text, env, timeout):
+        calls.append(input)
+        return subprocess.CompletedProcess(argv, returncode=0, stdout="", stderr="")
+
+    spec_iter = iter(responses)
+    spec = CliBackendSpec(
+        name="fake-cli", binary="/bin/true", base_args=("-q",),
+        parse_run=lambda s, e: next(spec_iter), timeout_sec=10,
+    )
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    agent = CliAgent(spec=spec)
+    scenario = _Scenario(source_path=str(tmp_path / "main.c"))
+    (tmp_path / "main.c").write_text("// hi")
+    tools = {"run_with_capture": lambda: None}  # no system_prompt
+    result = agent.run(scenario, "with_gla", tools)
+
+    assert len(calls) == 1
+    assert "DIAGNOSIS:" in result.diagnosis
