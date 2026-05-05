@@ -117,6 +117,7 @@ process gap.
 | [R13](2026-05-05-r13.md)   | 2026-05-05 | Scope-hint validated: file_solved 0→6, tokens −25% to −48%, +2 code_only |
 | [R14](2026-05-05-r14.md)   | 2026-05-05 | Browser-tier gate closes web-map gap (+0); budget hint over-throttled (-6 solves); revert in R15 |
 | [R15](2026-05-05-r15.md)   | 2026-05-05 | First system change in 4 rounds (`gpa upstream outline`); audit identifies 3 R16 deletions |
+| [R16](2026-05-05-r16.md)   | 2026-05-05 | First deletion-shipping round: with_gla skip works perfectly; rate-limit invalidates code_only validation |
 
 Older rounds (R1–R12b) predate this convention; their narrative lives
 in `docs/eval-results.md` as legacy reference.
