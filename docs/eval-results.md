@@ -1950,3 +1950,73 @@ What shipped to unblock a meaningful re-run:
 The cohort is now in a known-good state. Future mining + verification
 runs will keep the `tests/eval/` tree clean automatically.
 
+## R12c Re-evaluation (post-fix snapshot)
+
+After fixing the snapshot pipeline (parent SHA + Bazel target + verifier
++ snapshot fetcher race) we re-ran the same 14 R12 scenarios in both
+modes against `claude-opus-4-7[1m]`. Results live at
+`/data3/gla-eval-results/2026-05-05-iter-r12c-rerun/`.
+
+| Run | Solved | Total tokens | Avg tokens/scenario |
+|---|---|---|---|
+| **R12c with_gla** (NEW, buggy snapshot) | **5/14 (36%)** | 147,358 | 10,526 |
+| **R12c code_only** (NEW, buggy snapshot) | **7/14 (50%)** | 162,824 | 11,630 |
+| R12b with_gla (OLD, fixed snapshot, old scorer) | 1/14 (7%) | 229,872 | 16,419 |
+
+Headline: **agents now solve real bugs.** 1/14 → 5–7/14 (5–7×) once
+they see the buggy upstream state instead of the post-fix tree. Tokens
+also dropped 36% — fewer wasted turns reading already-fixed code.
+
+### with_gla vs code_only on the cleaned cohort
+
+| Scenario family | w/ GLA | code-only |
+|---|---|---|
+| godot (8) | 2/8 | 2/8 |
+| web-map (6) | 3/6 | 5/6 |
+| **all (14)** | **5/14** | **7/14** |
+
+Two web-map scenarios that code_only solved but with_gla didn't:
+`maplibre-gl-js_3d_terrain_with_partially_tran` and
+`maplibre-gl-js_vertical_edge_wall_artifact_at`. These are JS-side
+WebGL bugs — the GL shim doesn't intercept browser WebGL calls, so
+GPA tools surface no useful frame state. Their with_gla outputs got
+distracted enumerating empty/irrelevant overviews. **Implication:**
+GLA's value proposition currently only applies when the host app
+runs against the native GL/Vulkan path; gating with_gla off for
+WebGL/JS scenarios would close the gap.
+
+### Failure mode breakdown
+
+Across both modes the surviving failure modes are:
+
+- **`no_signal`** (5 with_gla, 4 code_only): agent produced prose but
+  none matched the ground-truth file or the canonical fix description.
+  Concentrated on the harder godot scenarios where the bug is several
+  layers deep in renderer pipeline state.
+- **`prose` low-confidence** (4 with_gla, 3 code_only): partial recall,
+  agent identified the affected subsystem but not the specific cause.
+
+No `gave_up`, no `parsed_json: false`, no `out_of_tree` outliers in
+either run.
+
+### Snapshot fetcher fix that unblocked this re-run
+
+Two concurrent fetchers (one per mode) racing on the same cache_key
+produced two distinct failure modes that both blocked the re-run:
+
+1. Process B's `target.exists()` check rmtree'd Process A's in-flight
+   clone, killing A with `[Errno 2] No such file or directory` when
+   the next git subprocess tried to chdir into the vanished dir.
+2. Fallback 1 (`git fetch --depth 500 origin`) sometimes returned
+   non-zero on huge repos (cesium) but actually completed the fetch,
+   leaving the repo in a complete (non-shallow) state. Then fallback 2
+   (`git fetch --unshallow origin`) errored with `--unshallow on a
+   complete repository does not make sense`.
+
+Fix (`5e5fbdb`):
+
+- Per-cache-key `fcntl.flock` around the entire fetch path.
+- Conditional `--unshallow`: only when `.git/shallow` actually exists.
+
+19/19 fetcher unit tests pass; pre-warm of all 14 R12 SHAs succeeds.
+
